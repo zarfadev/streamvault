@@ -431,7 +431,6 @@ async function createSchema(pool) {
     `CREATE INDEX IF NOT EXISTS idx_videos_title_search ON videos USING gin(to_tsvector('simple', coalesce(title, '')))`,
     `CREATE INDEX IF NOT EXISTS idx_videos_ws_status    ON videos(workspace_id, status, created_at DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_videos_publish_at   ON videos(publish_at) WHERE publish_at IS NOT NULL`,
-    `CREATE INDEX IF NOT EXISTS idx_videos_expires_at   ON videos(expires_at) WHERE expires_at IS NOT NULL`,
   ];
   for (const idx of indexes) await pool.query(idx);
 
