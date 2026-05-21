@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Página no encontrada</title>
+<link rel="stylesheet" href="/css/sv-theme.css">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--sans); background: var(--bg); color: var(--text);
+  min-height: 100vh; display: flex; flex-direction: column;
+  overflow-x: hidden;
+}
+
+/* ─── AMBIENT GLOW ─── */
+.sv-bg-glow {
+  position: fixed; top: -300px; left: 50%; transform: translateX(-50%);
+  width: 1200px; height: 800px;
+  background: radial-gradient(ellipse 60% 50% at 50% 0%, rgba(124,108,250,.18) 0%, rgba(124,108,250,.05) 50%, transparent 80%);
+  pointer-events: none; z-index: 0;
+}
+.sv-bg-glow2 {
+  position: fixed; bottom: -200px; right: -200px;
+  width: 600px; height: 600px;
+  background: radial-gradient(circle, rgba(34,211,165,.05) 0%, transparent 70%);
+  pointer-events: none; z-index: 0;
+}
+
+/* ─── NOISE ─── */
+body::after {
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0; opacity: .03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 200px;
+}
+
+/* ─── NAV ─── */
+nav {
+  position: sticky; top: 0; z-index: 100;
+  height: 56px; padding: 0 40px;
+  display: flex; align-items: center; justify-content: space-between;
+  background: rgba(10,10,15,.94);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+}
+.nav-logo {
+  font-family: var(--mono); font-size: 16px; font-weight: 700;
+  color: var(--accent2); letter-spacing: -0.5px; text-decoration: none;
+}
+.nav-logo span { color: var(--muted); font-weight: 400; }
+.nav-links { display: flex; gap: 8px; }
+.nav-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 16px; border-radius: 10px;
+  border: 1px solid var(--border2); background: var(--surface2);
+  color: var(--text); font-size: 13px; font-weight: 600;
+  text-decoration: none; transition: border-color .14s, background .14s;
+  font-family: var(--sans); cursor: pointer;
+}
+.nav-btn:hover { border-color: var(--accent); background: rgba(124,108,250,.08); }
+.nav-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* ─── MAIN ─── */
+main {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  padding: 80px 24px; position: relative; z-index: 1;
+}
+
+.card { text-align: center; max-width: 480px; width: 100%; }
+
+/* ─── 404 CODE ─── */
+.code {
+  font-family: var(--mono);
+  font-size: clamp(5rem, 18vw, 9rem);
+  font-weight: 700; line-height: 1;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 24px; display: block;
+  opacity: 0; transform: translateY(-30px);
+}
+
+.glitch { position: relative; display: inline-block; }
+.glitch::before, .glitch::after {
+  content: '404'; position: absolute; top: 0; left: 0; right: 0;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text; animation: glitch 3.5s infinite;
+}
+.glitch::before { clip-path: polygon(0 0, 100% 0, 100% 40%, 0 40%); animation-delay: 0s; }
+.glitch::after  { clip-path: polygon(0 60%, 100% 60%, 100% 100%, 0 100%); animation-delay: 0.08s; }
+
+@keyframes glitch {
+  0%, 92%, 100% { transform: translate(0); opacity: 0; }
+  93%            { transform: translate(-3px, 1px); opacity: 0.7; }
+  95%            { transform: translate(3px, -1px); opacity: 0.7; }
+  97%            { transform: translate(-2px, 0); opacity: 0.7; }
+  99%            { transform: translate(0); opacity: 0; }
+}
+
+/* ─── TEXT ─── */
+.card h1 {
+  font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em;
+  margin-bottom: 12px; color: var(--text);
+  opacity: 0; transform: translateY(20px);
+}
+.card > p {
+  font-size: 15px; color: var(--muted); line-height: 1.7; margin-bottom: 36px;
+  opacity: 0; transform: translateY(20px);
+}
+
+/* ─── ACTIONS ─── */
+.actions {
+  display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;
+  opacity: 0; transform: translateY(20px);
+}
+.act-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--sans); font-size: 14px; font-weight: 600;
+  padding: 11px 22px; border-radius: 10px; text-decoration: none;
+  transition: all 0.2s;
+}
+.act-primary {
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  color: #fff; border: 1px solid rgba(167,139,250,.2);
+  box-shadow: 0 4px 20px rgba(124,108,250,.35);
+}
+.act-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(124,108,250,.5); }
+.act-ghost {
+  background: var(--surface2); color: var(--text2);
+  border: 1px solid var(--border2);
+}
+.act-ghost:hover { border-color: rgba(124,108,250,.35); color: var(--text); transform: translateY(-1px); }
+
+/* ─── SUGGESTIONS ─── */
+.suggestions {
+  margin-top: 56px; border-top: 1px solid var(--border);
+  padding-top: 36px; opacity: 0; transform: translateY(20px);
+}
+.suggestions h2 {
+  font-size: 12px; font-weight: 600; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 16px;
+}
+.links { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.link-pill {
+  font-size: 13px; color: var(--text2); background: var(--surface2);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 7px 14px; text-decoration: none;
+  transition: border-color 0.2s, color 0.2s, transform 0.2s;
+}
+.link-pill:hover { border-color: var(--accent2); color: var(--accent2); transform: translateY(-1px); }
+
+/* ─── FOOTER ─── */
+.sv-footer {
+  border-top: 1px solid var(--border); padding: 36px 48px;
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--muted);
+  margin-top: auto; position: relative; z-index: 1;
+}
+.sv-footer a { color: var(--muted); text-decoration: none; transition: color .14s; }
+.sv-footer a:hover { color: var(--text); }
+
+/* ─── RESPONSIVE ─── */
+@media (max-width: 640px) {
+  nav { padding: 0 16px; }
+  main { padding: 60px 20px; }
+  .sv-footer { padding: 24px 20px; flex-direction: column; align-items: center; text-align: center; }
+}
+</style>
+<script>window._svSiteName='StreamVault';fetch('/api/settings').then(r=>r.json()).then(s=>{if(s.siteName)window._svSiteName=s.siteName;if(s.supportEmail){document.querySelectorAll('[data-contact-email]').forEach(el=>{el.href='mailto:'+s.supportEmail;});}}).catch(()=>{});</script>
+</head>
+<body>
+
+<div class="sv-bg-glow"></div>
+<div class="sv-bg-glow2"></div>
+
+<nav>
+  <a href="/" class="nav-logo">Stream<span>Vault</span></a>
+  <div class="nav-links">
+    <a href="/dashboard" class="nav-btn" id="nav-dash" style="display:none;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
+      Dashboard
+    </a>
+    <a href="/login" class="nav-btn primary" id="nav-login" style="display:none;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      Iniciar sesión
+    </a>
+  </div>
+</nav>
+
+<main class="sv-error-container">
+  <div class="sv-error-card">
+    <div class="sv-error-glitch" id="error-code">404</div>
+    <h1 class="sv-error-title">Página no encontrada</h1>
+    <p class="sv-error-desc">La URL que buscas no existe o fue movida. Comprueba que la dirección sea correcta o intenta buscar de nuevo.</p>
+
+    <div class="sv-error-actions">
+      <a href="/" class="act-btn act-primary">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        Ir al inicio
+      </a>
+      <a href="/dashboard" class="act-btn act-ghost">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        Mi panel
+      </a>
+    </div>
+
+    <div class="suggestions">
+      <h2>Accesos rápidos</h2>
+      <div class="links">
+        <a href="/dashboard/videos" class="link-pill">Mis vídeos</a>
+        <a href="/dashboard/upload" class="link-pill">Subir vídeo</a>
+        <a href="/dashboard/analytics" class="link-pill">Analíticas</a>
+        <a href="/#pricing" class="link-pill">Precios</a>
+        <a href="mailto:hola@streamvault.link" class="link-pill" data-contact-email>Soporte</a>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer class="sv-footer">
+  <a href="/" style="font-family:var(--mono);font-weight:700;color:var(--accent2);font-size:14px;">Stream<span style="color:var(--muted);font-weight:400;">Vault</span></a>
+  <div style="display:flex;gap:16px;flex-wrap:wrap;">
+    <a href="/privacy">Privacidad</a>
+    <a href="/terms">Términos</a>
+    <a href="/cookies">Cookies</a>
+    <a href="/gdpr">GDPR</a>
+    <a href="/status">Estado</a>
+    <a href="/api-docs">API</a>
+  </div>
+  <span id="sv-copy">© 2026 StreamVault</span>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<script>
+document.getElementById('sv-copy').textContent = '© ' + new Date().getFullYear() + ' ' + (window._svSiteName || 'StreamVault');
+(function(){
+  const t = localStorage.getItem('sv_access_token') || localStorage.getItem('sv_token');
+  document.getElementById(t ? 'nav-dash' : 'nav-login').style.display = 'inline-flex';
+})();
+
+document.addEventListener("DOMContentLoaded", () => {
+  if (typeof gsap === 'undefined') {
+    // Fallback: show everything if GSAP fails to load
+    document.querySelectorAll('.code, .card h1, .card > p, .actions, .suggestions').forEach(el => {
+      el.style.opacity = '1';
+      el.style.transform = 'none';
+    });
+    return;
+  }
+
+  const tl = gsap.timeline({ defaults: { ease: "power3.out", duration: 0.8 } });
+
+  tl.to(".code", { y: 0, opacity: 1, duration: 1, ease: "elastic.out(1, 0.6)" })
+    .to(".card h1", { y: 0, opacity: 1 }, "-=0.6")
+    .to(".card > p", { y: 0, opacity: 1 }, "-=0.6")
+    .to(".actions", { y: 0, opacity: 1 }, "-=0.5")
+    .to(".suggestions", { y: 0, opacity: 1 }, "-=0.4")
+    .from(".link-pill", { scale: 0.85, opacity: 0, duration: 0.5, stagger: 0.05, ease: "back.out(1.5)" }, "-=0.3");
+
+  // Mouse parallax on the 404 code
+  document.addEventListener("mousemove", (e) => {
+    const x = (e.clientX / window.innerWidth - 0.5) * 2;
+    const y = (e.clientY / window.innerHeight - 0.5) * 2;
+    gsap.to(".code", { x: x * 12, y: y * 8, rotationY: x * 4, rotationX: y * -3, duration: 1, ease: "power2.out" });
+    gsap.to(".sv-bg-glow", { x: x * 30, y: y * 20, duration: 2, ease: "power2.out" });
+  });
+
+  // Magnetic buttons
+  document.querySelectorAll(".act-btn").forEach(btn => {
+    btn.addEventListener("mousemove", (e) => {
+      const rect = btn.getBoundingClientRect();
+      const x = e.clientX - rect.left - rect.width / 2;
+      const y = e.clientY - rect.top - rect.height / 2;
+      gsap.to(btn, { x: x * 0.25, y: y * 0.25, duration: 0.4, ease: "power2.out" });
+    });
+    btn.addEventListener("mouseleave", () => {
+      gsap.to(btn, { x: 0, y: 0, duration: 0.5, ease: "elastic.out(1, 0.4)" });
+    });
+  });
+});
+</script>
+<script src="/js/cookie-banner.js"></script>
+</body>
+</html>

@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Verificación de Dos Factores</title>
+<meta name="description" content="Verifica tu identidad con autenticación de dos factores.">
+<!-- Biblioteca de sanitización para prevenir XSS -->
+<script src="/js/sanitize.js"
+  integrity="sha384-7Bk0iO9tuoJAR3nX+iXbKFjdt6c3cvGGj65wbk7ZwZHxeLy/wY7CqoGqJkS3IdSZ"
+  crossorigin="anonymous"></script>
+<script src="/js/toast.js"></script>
+<link rel="stylesheet" href="/css/sv-theme.css">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--sans); background: var(--bg); color: var(--text);
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  position: relative; overflow: hidden;
+}
+.bg-glow {
+  position: fixed; pointer-events: none;
+  width: 700px; height: 700px;
+  background: radial-gradient(circle, rgba(124,108,250,0.12) 0%, transparent 70%);
+  top: 50%; left: 50%; transform: translate(-50%, -50%);
+}
+.bg-glow2 {
+  position: fixed; pointer-events: none;
+  width: 400px; height: 400px;
+  background: radial-gradient(circle, rgba(34,211,165,0.07) 0%, transparent 70%);
+  bottom: 0; right: 0;
+}
+
+/* Card */
+.card {
+  background: var(--surface); border: 1px solid var(--border2);
+  border-radius: 20px; width: 100%; max-width: 440px; padding: 40px;
+  position: relative; z-index: 1;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.5);
+}
+
+.card-logo { text-align: center; margin-bottom: 28px; }
+.logo-text {
+  font-family: var(--mono); font-size: 22px; font-weight: 700;
+  color: var(--accent2); letter-spacing: -0.5px; display: block; margin-bottom: 4px;
+  text-decoration: none;
+}
+.logo-text span { color: var(--muted); font-weight: 400; }
+.logo-sub { font-size: 13px; color: var(--muted); }
+
+/* Title Section */
+.twofa-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+.twofa-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.twofa-desc {
+  font-size: 14px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+/* Code Input */
+.code-input-wrapper {
+  margin-bottom: 8px;
+}
+#twofa-code {
+  width: 100%;
+  padding: 18px;
+  border: 2px solid var(--border2);
+  border-radius: 12px;
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 28px;
+  font-family: var(--mono);
+  text-align: center;
+  letter-spacing: 10px;
+  outline: none;
+  transition: all 0.2s;
+  caret-color: var(--accent);
+}
+#twofa-code::placeholder {
+  color: rgba(255,255,255,0.2);
+  letter-spacing: 10px;
+}
+#twofa-code:focus {
+  border-color: var(--accent);
+  background: rgba(124,108,250,0.05);
+}
+
+/* Error & Attempts */
+#twofa-error {
+  font-size: 13px;
+  color: var(--red);
+  margin-bottom: 8px;
+  text-align: center;
+  min-height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+#twofa-attempts {
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+  margin-bottom: 16px;
+  min-height: 16px;
+}
+
+/* Lockout banner */
+.lockout-banner {
+  background: rgba(248,113,113,0.08);
+  border: 1px solid rgba(248,113,113,0.3);
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 18px;
+  text-align: center;
+  display: none;
+}
+.lockout-banner.visible { display: block; }
+.lockout-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--red);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.lockout-timer {
+  font-size: 28px;
+  font-weight: 700;
+  font-family: var(--mono);
+  color: var(--red);
+  letter-spacing: 2px;
+  margin: 8px 0;
+}
+.lockout-hint {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* Warning (few attempts left) */
+.attempts-warning {
+  background: rgba(251,191,36,0.08);
+  border: 1px solid rgba(251,191,36,0.25);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+  color: var(--amber);
+  text-align: center;
+  margin-bottom: 12px;
+  display: none;
+}
+.attempts-warning.visible { display: block; }
+
+/* Backup Link */
+.backup-link {
+  display: block;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+  background: none;
+  border: none;
+  margin-bottom: 24px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-decoration: none;
+  font-family: var(--sans);
+  width: 100%;
+  padding: 8px 0;
+  border-radius: 6px;
+}
+.backup-link:hover {
+  color: var(--text);
+  background: rgba(124,108,250,0.05);
+}
+
+/* Buttons */
+.btn-group {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  flex: 1; padding: 8px 16px; border-radius: 10px; font-size: 13px;
+  font-weight: 600; cursor: pointer; border: none; transition: all 0.2s;
+  font-family: var(--sans); text-decoration: none;
+}
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent), var(--accent2)); color: white;
+  box-shadow: 0 4px 20px rgba(124,108,250,0.3);
+}
+.btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 8px 32px rgba(124,108,250,0.45); }
+.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+.btn-secondary {
+  background: var(--surface2);
+  color: var(--text);
+  border: 1px solid var(--border2);
+}
+.btn-secondary:hover:not(:disabled) {
+  background: var(--surface3);
+}
+
+/* Spinner */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner {
+  width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: white; border-radius: 50%;
+  animation: spin 0.7s linear infinite; display: none;
+}
+.spinner.show { display: block; }
+
+/* Back link */
+.back-link {
+  position: fixed; top: 24px; left: 24px;
+  display: flex; align-items: center; gap: 6px;
+  color: var(--muted); text-decoration: none; font-size: 13px;
+  transition: color 0.2s; z-index: 10;
+}
+.back-link:hover { color: var(--text); }
+
+/* Shake animation for errors */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-8px); }
+  20%, 40%, 60%, 80% { transform: translateX(8px); }
+}
+.shake {
+  animation: shake 0.5s;
+}
+
+/* Divider */
+.divider {
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+  margin: 20px 0;
+}
+@media (max-width: 500px) {
+  body { align-items: flex-start; padding: 64px 12px 40px; overflow-y: auto; }
+  .card { padding: 28px 20px; border-radius: 16px; }
+  .back-link {
+    top: calc(16px + env(safe-area-inset-top, 0px));
+    left: calc(16px + env(safe-area-inset-left, 0px));
+  }
+  #twofa-code { font-size: 22px; letter-spacing: 6px; padding: 16px; }
+  .btn { padding: 14px; min-height: 48px; }
+  .lockout-timer { font-size: 22px; }
+}
+@media (max-width: 360px) {
+  .card { padding: 24px 14px; }
+  .btn-group { flex-direction: column; }
+}
+</style>
+</head>
+<body>
+
+<a href="/login" class="back-link">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+  Volver al inicio
+</a>
+
+<div class="bg-glow"></div>
+<div class="bg-glow2"></div>
+
+<div class="card">
+  <div class="card-logo">
+    <a href="/" class="logo-text">Stream<span>Vault</span></a>
+    <span class="logo-sub">Plataforma de Video Streaming</span>
+  </div>
+
+  <div class="twofa-header">
+    <p class="twofa-desc" id="twofa-desc">
+      Ingresa el código de 6 dígitos de tu aplicación autenticadora
+    </p>
+  </div>
+
+  <div class="code-input-wrapper">
+    <input
+      type="text"
+      id="twofa-code"
+      placeholder="000000"
+      maxlength="6"
+      autocomplete="one-time-code"
+      inputmode="numeric"
+      pattern="[0-9]*"
+      autofocus
+    >
+  </div>
+
+  <!-- Lockout banner (shown when user is locked) -->
+  <div class="lockout-banner" id="lockout-banner">
+    <div class="lockout-title">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+      Cuenta temporalmente bloqueada
+    </div>
+    <div class="lockout-timer" id="lockout-countdown">00:00</div>
+    <div class="lockout-hint">Por tu seguridad, acceso bloqueado tras demasiados intentos fallidos</div>
+  </div>
+
+  <!-- Warning (few attempts left) -->
+  <div class="attempts-warning" id="attempts-warning"></div>
+
+  <div id="twofa-error"></div>
+  <div id="twofa-attempts"></div>
+
+  <button type="button" class="backup-link" id="backup-link">
+    ¿Problemas con tu app? Usar código de respaldo
+  </button>
+
+  <div class="btn-group">
+    <button class="btn btn-secondary" id="btn-cancel">
+      Cancelar
+    </button>
+    <button class="btn btn-primary" id="btn-verify">
+      <div class="spinner" id="spin-verify"></div>
+      <span id="btn-verify-text">Verificar</span>
+    </button>
+  </div>
+
+  <div class="divider">
+    Tu cuenta está protegida con autenticación de dos factores
+  </div>
+</div>
+
+<script>
+// ─── Verificar que tenemos el tempToken ───────────────────────────────────────
+const tempToken = sessionStorage.getItem('sv_temp_2fa_token');
+if (!tempToken) {
+  // Si no hay token temporal, redirigir al login
+  window.location.href = '/login';
+}
+
+// ─── Estado ────────────────────────────────────────────────────────────────────
+let attempts = 0;
+let backupMode = false;
+let lockoutTimerInterval = null;
+const MAX_ATTEMPTS_LOCAL = 10; // Local limit (server has 10 too)
+
+// ─── Elementos DOM ─────────────────────────────────────────────────────────────
+const codeInput    = document.getElementById('twofa-code');
+const errorEl      = document.getElementById('twofa-error');
+const attemptsEl   = document.getElementById('twofa-attempts');
+const backupLink   = document.getElementById('backup-link');
+const descEl       = document.getElementById('twofa-desc');
+const btnCancel    = document.getElementById('btn-cancel');
+const btnVerify    = document.getElementById('btn-verify');
+const card         = document.querySelector('.card');
+const lockoutBanner  = document.getElementById('lockout-banner');
+const lockoutCnt     = document.getElementById('lockout-countdown');
+const attemptsWarn   = document.getElementById('attempts-warning');
+
+// ─── Lockout countdown timer ──────────────────────────────────────────────────
+function startLockoutCountdown(remainingSec) {
+  // Disable input and button
+  codeInput.disabled = true;
+  btnVerify.disabled = true;
+  lockoutBanner.classList.add('visible');
+  errorEl.textContent = '';
+  attemptsEl.textContent = '';
+  attemptsWarn.classList.remove('visible');
+  codeInput.value = '';
+
+  let secs = remainingSec;
+
+  function updateTimer() {
+    const m = Math.floor(secs / 60).toString().padStart(2, '0');
+    const s = (secs % 60).toString().padStart(2, '0');
+    lockoutCnt.textContent = `${m}:${s}`;
+  }
+
+  updateTimer();
+
+  if (lockoutTimerInterval) clearInterval(lockoutTimerInterval);
+  lockoutTimerInterval = setInterval(() => {
+    secs--;
+    if (secs <= 0) {
+      clearInterval(lockoutTimerInterval);
+      lockoutTimerInterval = null;
+      // Unlock UI
+      lockoutBanner.classList.remove('visible');
+      codeInput.disabled = false;
+      btnVerify.disabled = false;
+      codeInput.focus();
+      attemptsEl.textContent = 'Bloqueo expirado. Puedes intentar de nuevo.';
+      attemptsEl.style.color = 'var(--green)';
+    } else {
+      updateTimer();
+    }
+  }, 1000);
+}
+
+// ─── Mostrar advertencia de intentos ─────────────────────────────────────────
+function showAttemptsWarning(attemptsLeft) {
+  if (attemptsLeft <= 0 || attemptsLeft > 3) {
+    attemptsWarn.classList.remove('visible');
+    return;
+  }
+  const icon = '';
+  attemptsWarn.textContent = `Te queda${attemptsLeft === 1 ? '' : 'n'} ${attemptsLeft} intento${attemptsLeft === 1 ? '' : 's'} antes del bloqueo temporal.`;
+  attemptsWarn.classList.add('visible');
+}
+
+// ─── Manejo de input ───────────────────────────────────────────────────────────
+codeInput.addEventListener('input', (e) => {
+  if (backupMode) {
+    e.target.value = e.target.value.replace(/[^0-9A-Fa-f]/g, '').slice(0, 8).toUpperCase();
+  } else {
+    e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6);
+    if (e.target.value.length === 6) {
+      setTimeout(verify2FA, 100);
+    }
+  }
+  errorEl.textContent = '';
+  errorEl.style.color = '';
+});
+
+// Enter para verificar
+codeInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') verify2FA();
+});
+
+// ─── Cambiar a modo backup ─────────────────────────────────────────────────────
+backupLink.addEventListener('click', () => {
+  backupMode = true;
+  codeInput.value = '';
+  codeInput.maxLength = 8;
+  codeInput.placeholder = 'XXXXXXXX';
+  codeInput.inputMode = 'text';
+  codeInput.pattern = '[0-9A-Fa-f]{8}';
+  codeInput.style.letterSpacing = '4px';
+  codeInput.style.fontSize = '20px';
+  codeInput.focus();
+  descEl.textContent = 'Ingresa uno de tus códigos de respaldo (8 caracteres)';
+  backupLink.style.display = 'none';
+  errorEl.textContent = '';
+  attemptsEl.textContent = '';
+});
+
+// ─── Cancelar (volver al login) ───────────────────────────────────────────────
+btnCancel.addEventListener('click', () => {
+  sessionStorage.removeItem('sv_temp_2fa_token');
+  window.location.href = '/login';
+});
+
+// ─── Loading state ─────────────────────────────────────────────────────────────
+function setLoading(loading) {
+  btnVerify.disabled = loading;
+  document.getElementById('spin-verify').classList.toggle('show', loading);
+  document.getElementById('btn-verify-text').textContent = loading ? 'Verificando...' : 'Verificar';
+}
+
+// ─── Verificar código 2FA ──────────────────────────────────────────────────────
+async function verify2FA() {
+  const code = codeInput.value.trim();
+  errorEl.textContent = '';
+  errorEl.style.color = '';
+
+  // Validar formato
+  const isValid = backupMode
+    ? /^[0-9A-Fa-f]{8}$/.test(code)
+    : /^\d{6}$/.test(code);
+
+  if (!isValid) {
+    errorEl.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> ${backupMode ? 'Código de respaldo: 8 caracteres hex' : 'Código debe ser de 6 dígitos'}`;
+    return;
+  }
+
+  setLoading(true);
+
+  try {
+    const response = await fetch('/auth/verify-2fa-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tempToken, code })
+    });
+
+    const data = await response.json();
+
+    if (response.status === 429) {
+      // ─── Cuenta bloqueada (lockout del servidor) ────────────────────
+      const remainingSec = data.remainingSec || data.remainingMin * 60 || 300;
+      startLockoutCountdown(remainingSec);
+      return;
+    }
+
+    if (!response.ok) {
+      // ─── Código inválido ────────────────────────────────────────────
+      attempts++;
+
+      // Animación shake
+      card.classList.add('shake');
+      setTimeout(() => card.classList.remove('shake'), 500);
+      codeInput.value = '';
+      codeInput.focus();
+
+      // Mostrar error del servidor (incluye mensajes de advertencia)
+      errorEl.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg> ${data.error || 'Código inválido o expirado'}`;
+
+      // Mostrar advertencia de intentos restantes (del servidor)
+      if (typeof data.attemptsLeft === 'number') {
+        showAttemptsWarning(data.attemptsLeft);
+        if (data.attemptsLeft > 0) {
+          attemptsEl.textContent = '';
+        }
+      } else {
+        attemptsWarn.classList.remove('visible');
+      }
+
+      // Sugerencia de usar backup después de 3 intentos locales
+      if (attempts >= 3 && !backupMode) {
+        attemptsEl.textContent = '¿Sin acceso a tu app? Usa un código de respaldo ↑';
+        attemptsEl.style.color = 'var(--accent2)';
+      }
+      return;
+    }
+
+    // ─── <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><polyline points="20 6 9 17 4 12"/></svg> Verificación exitosa ────────────────────────────────────────
+    if (lockoutTimerInterval) clearInterval(lockoutTimerInterval);
+    sessionStorage.removeItem('sv_temp_2fa_token');
+
+    // Guardar tokens y usuario
+    localStorage.setItem('sv_access_token', data.accessToken);
+    localStorage.setItem('sv_refresh_token', data.refreshToken);
+    localStorage.setItem('sv_user', JSON.stringify(data.user));
+    if (data.workspaces?.length) {
+      localStorage.setItem('sv_workspace', JSON.stringify(data.workspaces[0]));
+    }
+
+    errorEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> ¡Verificado!';
+    errorEl.style.color = 'var(--green)';
+
+    // Redirigir según rol
+    const urlParams = new URLSearchParams(window.location.search);
+    const redirectTo = urlParams.get('redirect');
+    const role = data.user?.platform_role;
+
+    setTimeout(() => {
+      if (role === 'super_admin') {
+        window.location.href = '/admin';
+      } else if (redirectTo && redirectTo.startsWith('/')) {
+        window.location.href = redirectTo;
+      } else {
+        window.location.href = '/dashboard';
+      }
+    }, 500);
+
+  } catch (err) {
+    errorEl.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg> Error de conexión';
+    console.error('Verification error:', err);
+  } finally {
+    setLoading(false);
+  }
+}
+
+// ─── Agregar event listener al botón verificar ────────────────────────────────
+btnVerify.addEventListener('click', verify2FA);
+
+// ─── Focus automático ──────────────────────────────────────────────────────────
+codeInput.focus();
+</script>
+<script src="/js/cookie-banner.js"></script>
+</body>
+</html>

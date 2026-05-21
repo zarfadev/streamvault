@@ -1,0 +1,56 @@
+# ── Control de versiones ──────────────────────────────────────────────────────
+.git
+.gitignore
+.gitattributes
+
+# ── Sistema operativo ─────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# ── Node.js ───────────────────────────────────────────────────────────────────
+node_modules
+npm-debug.log
+yarn-error.log
+.npm
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Datos locales — NUNCA en la imagen ───────────────────────────────────────
+uploads/
+videos/
+data.db/
+*.db
+
+# ── Variables de entorno — NUNCA en la imagen ────────────────────────────────
+.env
+.env.*
+*.env
+*.env.*
+
+# ── Documentación y configs de desarrollo ────────────────────────────────────
+README.md
+CLAUDE.md
+docs/
+*.md
+
+# ── Docker (la imagen no necesita saber cómo construirse a sí misma) ─────────
+docker-compose.yml
+docker-compose.prod.yml
+Dockerfile*
+
+# ── Infraestructura ───────────────────────────────────────────────────────────
+nginx.conf
+ecosystem.config.js
+
+# ── CI/CD ─────────────────────────────────────────────────────────────────────
+.github/
+
+# ── Tests y herramientas de desarrollo ───────────────────────────────────────
+*.test.js
+*.spec.js
+coverage/
+.nyc_output/

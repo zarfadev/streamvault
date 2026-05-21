@@ -1,0 +1,266 @@
+const express = require('express');
+const router = express.Router();
+const fs = require('fs');
+const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
+const db = require('../db');
+const { processVideo } = require('../transcoder');
+const { addTranscodeJob } = require('../services/queue');
+const s3 = require('../services/s3Storage');
+const { optionalAuth } = require('../middleware/auth');
+const { resolveWorkspace, checkLimit } = require('../middleware/workspace');
+const logger = require('../services/logger').child({ module: 'upload' });
+
+// Magic byte signatures for allowed video/audio formats
+const MAGIC_SIGS = [
+  { offset: 4,  bytes: [0x66, 0x74, 0x79, 0x70] }, // MP4/MOV/M4V (ftyp box)
+  { offset: 0,  bytes: [0x1A, 0x45, 0xDF, 0xA3] }, // MKV / WebM
+  { offset: 0,  bytes: [0x52, 0x49, 0x46, 0x46] }, // AVI / WAV (RIFF)
+  { offset: 0,  bytes: [0x46, 0x4C, 0x56, 0x01] }, // FLV
+  { offset: 0,  bytes: [0x00, 0x00, 0x01, 0xBA] }, // MPEG-PS
+  { offset: 0,  bytes: [0x00, 0x00, 0x01, 0xB3] }, // MPEG video
+  { offset: 0,  bytes: [0x4F, 0x67, 0x67, 0x53] }, // OGG
+  { offset: 0,  bytes: [0x66, 0x4C, 0x61, 0x43] }, // FLAC
+  { offset: 0,  bytes: [0xFF, 0xFB]               }, // MP3
+  { offset: 0,  bytes: [0xFF, 0xF3]               }, // MP3
+  { offset: 0,  bytes: [0xFF, 0xF2]               }, // MP3
+  { offset: 0,  bytes: [0x49, 0x44, 0x33]         }, // MP3 (ID3 tag)
+  { offset: 0,  bytes: [0xFF, 0xF1]               }, // AAC ADTS
+  { offset: 0,  bytes: [0xFF, 0xF9]               }, // AAC ADTS
+  { offset: 0,  bytes: [0x30, 0x26, 0xB2, 0x75]  }, // WMV / ASF
+];
+
+function validateMagicBytes(filePath) {
+  try {
+    const needed = Math.max(...MAGIC_SIGS.map(s => s.offset + s.bytes.length));
+    const buf = Buffer.alloc(needed);
+    const fd = fs.openSync(filePath, 'r');
+    const bytesRead = fs.readSync(fd, buf, 0, needed, 0);
+    fs.closeSync(fd);
+    return MAGIC_SIGS.some(sig => {
+      const end = sig.offset + sig.bytes.length;
+      if (bytesRead < end) return false;
+      return sig.bytes.every((b, i) => buf[sig.offset + i] === b);
+    });
+  } catch {
+    return false;
+  }
+}
+
+// Secondary validation with FFprobe — catches malformed files that pass magic byte check.
+// Returns { valid: true } on success, { valid: false, reason } on rejection.
+// Falls back gracefully (valid: true) if ffprobe is not installed.
+async function validateWithFFprobe(filePath) {
+  const { execFile } = require('child_process');
+  return new Promise((resolve) => {
+    execFile('ffprobe', [
+      '-v', 'quiet',
+      '-print_format', 'json',
+      '-show_streams',
+      filePath,
+    ], { timeout: 15_000 }, (err, stdout) => {
+      if (err) {
+        // ffprobe not available — skip check (graceful degradation)
+        if (err.code === 'ENOENT') return resolve({ valid: true });
+        // ffprobe exited with error — file is corrupt or unsupported
+        return resolve({ valid: false, reason: 'El archivo de video parece estar corrupto o dañado.' });
+      }
+      try {
+        const data = JSON.parse(stdout);
+        const streams = Array.isArray(data.streams) ? data.streams : [];
+        if (streams.length === 0) {
+          return resolve({ valid: false, reason: 'El archivo no contiene streams de video o audio reconocibles.' });
+        }
+        resolve({ valid: true });
+      } catch {
+        resolve({ valid: true }); // parse error = ffprobe gave unexpected output, allow it
+      }
+    });
+  });
+}
+
+// Lee la configuración guest desde system_config (con defaults seguros)
+async function getGuestConfig() {
+  try {
+    const row = await db.prepare(`SELECT value FROM system_config WHERE key = 'guest_config'`).get();
+    const cfg = row?.value ? JSON.parse(row.value) : {};
+    return {
+      enabled:       cfg.enabled       ?? true,
+      maxFileSizeMB: cfg.maxFileSizeMB ?? 2048,
+      expiryHours:   cfg.expiryHours   ?? 24,
+      maxVideos:     cfg.maxVideos     ?? 3,
+    };
+  } catch {
+    return { enabled: true, maxFileSizeMB: 2048, expiryHours: 24, maxVideos: 3 };
+  }
+}
+
+router.post('/', optionalAuth, (req, res, next) => {
+  // ── Authenticated users MUST provide a workspace ──────────────────────────
+  // This prevents bypassing plan limits by uploading without a workspace context.
+  // Unauthenticated uploads (public API without token) are still allowed without
+  // a workspace — they create orphan videos with no quota enforcement.
+  if (req.user && !req.headers['x-workspace-id']) {
+    return res.status(400).json({
+      error: 'X-Workspace-Id header is required for authenticated uploads.',
+      code: 'WORKSPACE_REQUIRED',
+    });
+  }
+
+  if (req.user && req.headers['x-workspace-id']) {
+    // Wrap res.status so we can clean up the temp file if a quota check rejects
+    const cleanupOnReject = (origStatus) => function (code) {
+      if (code >= 400 && req.file?.path) {
+        const fs = require('fs');
+        fs.unlink(req.file.path, () => {});
+      }
+      return origStatus.call(res, code);
+    };
+    res.status = cleanupOnReject(res.status.bind(res));
+
+    return resolveWorkspace(req, res, () => {
+      checkLimit('video_count')(req, res, () => {
+        checkLimit('storage')(req, res, next);
+      });
+    });
+  }
+  req.workspace = null;
+  next();
+}, async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+  // Magic byte validation — rejects files where the binary signature doesn't
+  // match any known video/audio format, regardless of declared MIME type.
+  if (!validateMagicBytes(req.file.path)) {
+    fs.unlink(req.file.path, () => {});
+    return res.status(422).json({ error: 'El archivo no es un formato de video/audio válido.', code: 'INVALID_MAGIC_BYTES' });
+  }
+
+  // Secondary deep validation with FFprobe — catches corrupt files that pass magic bytes.
+  const ffprobeCheck = await validateWithFFprobe(req.file.path);
+  if (!ffprobeCheck.valid) {
+    fs.unlink(req.file.path, () => {});
+    return res.status(422).json({ error: ffprobeCheck.reason, code: 'INVALID_FILE_STRUCTURE' });
+  }
+
+  try {
+    const id = uuidv4();
+    const title = req.body.title || req.file.originalname.replace(/\.[^.]+$/, '');
+    const workspaceId = req.workspace?.id || null;
+
+    // ── Validaciones para uploads anónimos (guest) ─────────────────────────
+    const guestSessionId = req.headers['x-guest-id'] || null;
+    if (!req.user && guestSessionId) {
+      const guestCfg = await getGuestConfig();
+
+      // ¿Uploads anónimos habilitados?
+      if (!guestCfg.enabled) {
+        return res.status(403).json({
+          error: 'Los uploads sin cuenta están temporalmente deshabilitados.',
+          code: 'GUEST_UPLOAD_DISABLED',
+        });
+      }
+
+      // ¿Tamaño del archivo dentro del límite?
+      const maxBytes = guestCfg.maxFileSizeMB * 1024 * 1024;
+      if (req.file.size > maxBytes) {
+        const label = guestCfg.maxFileSizeMB >= 1024
+          ? `${(guestCfg.maxFileSizeMB / 1024).toFixed(1)} GB`
+          : `${guestCfg.maxFileSizeMB} MB`;
+        return res.status(413).json({
+          error: `El archivo supera el límite de ${label} para subidas sin cuenta. Regístrate para subir archivos más grandes.`,
+          code: 'GUEST_FILE_TOO_LARGE',
+          maxFileSizeMB: guestCfg.maxFileSizeMB,
+        });
+      }
+
+      // ¿Número de videos guest dentro del límite?
+      if (guestCfg.maxVideos > 0) {
+        const count = await db.prepare(
+          `SELECT COUNT(*) as cnt FROM videos WHERE guest_session_id = ? AND workspace_id IS NULL`
+        ).get(guestSessionId);
+        if ((count?.cnt ?? 0) >= guestCfg.maxVideos) {
+          return res.status(429).json({
+            error: `Has alcanzado el límite de ${guestCfg.maxVideos} video${guestCfg.maxVideos !== 1 ? 's' : ''} sin cuenta. Regístrate para subir más.`,
+            code: 'GUEST_VIDEO_LIMIT',
+            maxVideos: guestCfg.maxVideos,
+          });
+        }
+      }
+    }
+
+    // Optional folder assignment — validate it belongs to the workspace if provided
+    let folderId = req.body.folder_id || null;
+    if (folderId && workspaceId) {
+      const folder = await db.prepare(
+        `SELECT id FROM folders WHERE id = ? AND workspace_id = ?`
+      ).get(folderId, workspaceId);
+      if (!folder) folderId = null;
+    } else if (folderId && !workspaceId) {
+      folderId = null;
+    }
+
+    // Generate unique 8-char hex short code with collision retry
+    let shortCode = null;
+    for (let i = 0; i < 5; i++) {
+      const candidate = crypto.randomBytes(4).toString('hex');
+      const clash = await db.prepare(`SELECT id FROM videos WHERE short_code = ?`).get(candidate);
+      if (!clash) { shortCode = candidate; break; }
+    }
+
+    await db.prepare(
+      `INSERT INTO videos (id, title, description, original_filename, status, workspace_id, folder_id, short_code, guest_session_id)
+       VALUES (?, ?, ?, ?, 'queued', ?, ?, ?, ?)`
+    ).run(id, title, req.body.description || '', req.file.originalname, workspaceId, folderId, shortCode, guestSessionId);
+
+    if (workspaceId && req.file.size) {
+      await db.prepare(`UPDATE workspaces SET storage_used_bytes = storage_used_bytes + ? WHERE id = ?`)
+        .run(req.file.size, workspaceId);
+    }
+
+    // If S3 is configured, upload the raw source file so workers on any server can access it.
+    // On S3 upload success the local temp file is deleted; on failure we keep it as fallback.
+    let s3SourceKey = null;
+    if (s3.isS3Enabled()) {
+      try {
+        s3SourceKey = await s3.uploadSourceFile(req.file.path, workspaceId, id);
+        fs.unlink(req.file.path, () => {});
+        logger.info({ videoId: id, s3SourceKey }, 'Source file uploaded to S3');
+      } catch (s3Err) {
+        logger.warn({ err: s3Err.message, videoId: id }, 'S3 source upload failed — falling back to local path');
+        s3SourceKey = null;
+      }
+    }
+
+    const payload = { videoId: id, inputPath: req.file.path, s3SourceKey, title, workspaceId, plan: req.workspace?.plan || 'starter' };
+    const { inline } = await addTranscodeJob(payload);
+    if (inline) {
+      processVideo(id, req.file.path, title, {
+        workspaceId,
+        s3SourceKey,
+        onProgress: async (pct) => {
+          await db.prepare(`UPDATE videos SET transcoding_pct = ? WHERE id = ?`).run(pct, id).catch(() => {});
+        },
+      }).then(() => {
+        db.prepare(`UPDATE videos SET transcoding_pct = NULL WHERE id = ?`).run(id).catch(() => {});
+      }).catch(err => {
+        logger.error({ err }, 'Transcoding error');
+      });
+    }
+
+    res.json({
+      id,
+      shortCode,
+      shortUrl: shortCode ? `/v/${shortCode}` : null,
+      message: inline ? 'Upload received, transcoding started' : 'Upload received, transcode job queued',
+      watchUrl: `/watch/${id}`,
+      m3u8Url: `/videos/${id}/master.m3u8`,
+    });
+  } catch (err) {
+    logger.error({ err }, 'Upload handler error');
+    if (req.file?.path) fs.unlink(req.file.path, () => {});
+    res.status(500).json({ error: 'Upload failed' });
+  }
+});
+
+module.exports = router;

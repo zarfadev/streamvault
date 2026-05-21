@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Política de Cookies</title>
+<link rel="stylesheet" href="/css/sv-theme.css">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--sans); background: var(--bg); color: var(--text); line-height: 1.7; min-height: 100vh; display: flex; flex-direction: column; }
+
+nav {
+  position: sticky; top: 0; z-index: 100;
+  height: 56px; padding: 0 40px; display: flex; align-items: center; justify-content: space-between;
+  background: rgba(10,10,15,.94); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+}
+.nav-logo { font-family: var(--mono); font-size: 16px; font-weight: 700; color: var(--accent2); letter-spacing: -0.5px; text-decoration: none; }
+.nav-logo span { color: var(--muted); font-weight: 400; }
+.nav-right { display: flex; align-items: center; gap: 10px; }
+.nav-back { font-size: 13px; color: var(--muted); text-decoration: none; display: flex; align-items: center; gap: 8px; transition: color 0.2s; }
+.nav-back:hover { color: var(--text); text-decoration: none; }
+.nav-btn { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 10px; border: 1px solid var(--border2); background: var(--surface2); color: var(--text); font-size: 13px; font-weight: 600; text-decoration: none; transition: border-color .14s, background .14s; font-family: var(--sans); cursor: pointer; }
+.nav-btn:hover { border-color: var(--accent); background: rgba(124,108,250,.08); text-decoration: none; }
+.nav-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.nav-btn.primary:hover { background: #6a5be8; }
+
+.container { max-width: 760px; margin: 0 auto; padding: 56px 40px 80px; flex: 1; }
+
+h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.03em; margin-bottom: 8px; }
+.updated { font-size: 13px; color: var(--muted); margin-bottom: 48px; }
+
+h2 { font-size: 1.15rem; font-weight: 700; margin: 36px 0 12px; color: var(--text); }
+p { font-size: 15px; color: var(--muted); margin-bottom: 16px; line-height: 1.75; }
+ul { padding-left: 20px; margin-bottom: 16px; }
+ul li { font-size: 15px; color: var(--muted); margin-bottom: 8px; line-height: 1.6; }
+a { color: var(--accent2); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.cookie-table { width: 100%; border-collapse: collapse; margin: 16px 0 24px; font-size: 14px; }
+.cookie-table th { text-align: left; padding: 10px 14px; background: var(--surface2); color: var(--text); font-weight: 600; border-bottom: 1px solid var(--border2); }
+.cookie-table td { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--muted); vertical-align: top; }
+.cookie-table tr:last-child td { border-bottom: none; }
+
+.divider { height: 1px; background: var(--border); margin: 48px 0; }
+
+footer { text-align: center; padding: 40px; font-size: 13px; color: var(--muted); border-top: 1px solid var(--border); margin-top: auto; }
+
+@media (max-width: 640px) {
+  nav { padding: 0 20px; }
+  .container { padding: 40px 20px 60px; }
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="/" class="nav-logo">Stream<span>Vault</span></a>
+  <div class="nav-right">
+    <a href="/" class="nav-back">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+      Volver al inicio
+    </a>
+    <a href="/dashboard" class="nav-btn" id="nav-dash" style="display:none;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      Dashboard
+    </a>
+    <a href="/login" class="nav-btn primary" id="nav-login" style="display:none;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      Iniciar sesión
+    </a>
+  </div>
+</nav>
+
+<div class="container">
+  <h1>Política de Cookies</h1>
+  <p class="updated">Última actualización: Junio 2026</p>
+
+  <p>En <span data-brand-name>StreamVault</span> utilizamos cookies y tecnologías similares para garantizar el correcto funcionamiento del servicio, recordar tus preferencias y mejorar tu experiencia. Esta política explica qué cookies usamos y cómo puedes gestionarlas.</p>
+
+  <h2>1. ¿Qué son las cookies?</h2>
+  <p>Las cookies son pequeños archivos de texto que se almacenan en tu dispositivo cuando visitas un sitio web. Nos ayudan a reconocer tu dispositivo en visitas posteriores y a personalizar tu experiencia.</p>
+
+  <h2>2. Tipos de cookies que usamos</h2>
+
+  <h2 style="font-size:1rem;margin-top:20px;">2.1 Cookies estrictamente necesarias</h2>
+  <p>Son imprescindibles para que el servicio funcione. Sin ellas, no podrías iniciar sesión ni usar las funciones básicas de la plataforma.</p>
+  <table class="cookie-table">
+    <tr>
+      <th>Nombre</th>
+      <th>Propósito</th>
+      <th>Duración</th>
+    </tr>
+    <tr>
+      <td><code>sv_access_token</code></td>
+      <td>Token de autenticación de sesión (almacenado en localStorage)</td>
+      <td>Sesión / 7 días</td>
+    </tr>
+    <tr>
+      <td><code>sv_refresh_token</code></td>
+      <td>Token de renovación de sesión</td>
+      <td>30 días</td>
+    </tr>
+    <tr>
+      <td><code>sv_workspace</code></td>
+      <td>Workspace activo seleccionado por el usuario</td>
+      <td>Persistente</td>
+    </tr>
+  </table>
+
+  <h2 style="font-size:1rem;margin-top:20px;">2.2 Cookies de preferencias</h2>
+  <p>Guardan tus preferencias de interfaz para que no tengas que configurarlas cada vez.</p>
+  <table class="cookie-table">
+    <tr>
+      <th>Nombre</th>
+      <th>Propósito</th>
+      <th>Duración</th>
+    </tr>
+    <tr>
+      <td><code>sv_lib_view</code></td>
+      <td>Vista de biblioteca (grid o lista)</td>
+      <td>Persistente</td>
+    </tr>
+    <tr>
+      <td><code>sv_onboarding_*</code></td>
+      <td>Estado del asistente de bienvenida</td>
+      <td>Persistente</td>
+    </tr>
+  </table>
+
+  <h2 style="font-size:1rem;margin-top:20px;">2.3 Cookies analíticas (opcionales)</h2>
+  <p>Actualmente <span data-brand-name>StreamVault</span> <strong>no utiliza cookies de análisis de terceros</strong> (como Google Analytics). Los analytics de reproducción son propios y no se comparten con terceros.</p>
+
+  <h2 style="font-size:1rem;margin-top:20px;">2.4 Cookies publicitarias</h2>
+  <p><span data-brand-name>StreamVault</span> <strong>no usa cookies publicitarias</strong>. No mostramos anuncios ni compartimos datos con redes publicitarias.</p>
+
+  <h2>3. Cookies de terceros</h2>
+  <p>Al usar funciones de pago, Stripe puede establecer cookies propias sujetas a su <a href="https://stripe.com/es/privacy" target="_blank" rel="noopener">política de privacidad</a>. No tenemos control sobre esas cookies.</p>
+
+  <h2>4. Cómo gestionar las cookies</h2>
+  <p>Puedes controlar y eliminar las cookies desde la configuración de tu navegador:</p>
+  <ul>
+    <li><a href="https://support.google.com/chrome/answer/95647" target="_blank" rel="noopener">Google Chrome</a></li>
+    <li><a href="https://support.mozilla.org/es/kb/habilitar-y-deshabilitar-cookies-sitios-web-rastrear-preferencias" target="_blank" rel="noopener">Mozilla Firefox</a></li>
+    <li><a href="https://support.apple.com/es-es/guide/safari/sfri11471/mac" target="_blank" rel="noopener">Safari</a></li>
+    <li><a href="https://support.microsoft.com/es-es/microsoft-edge/eliminar-las-cookies-en-microsoft-edge-63947406-40ac-c3b8-57b9-2a946a29ae09" target="_blank" rel="noopener">Microsoft Edge</a></li>
+  </ul>
+  <p>Ten en cuenta que deshabilitar las cookies estrictamente necesarias puede impedir el uso correcto de <span data-brand-name>StreamVault</span>.</p>
+
+  <h2>5. Cambios en esta política</h2>
+  <p>Podemos actualizar esta política ocasionalmente. Te notificaremos por correo ante cambios materiales con al menos 15 días de anticipación.</p>
+
+  <h2>6. Contacto</h2>
+  <p>Si tienes preguntas sobre el uso de cookies, escríbenos a <a href="mailto:privacy@streamvault.link" data-contact-email>privacy@streamvault.link</a>.</p>
+
+  <div class="divider"></div>
+  <p style="font-size:13px;"><a href="/privacy">Política de Privacidad</a> · <a href="/terms">Términos de Uso</a> · <a href="/gdpr">GDPR</a> · <a href="mailto:privacy@streamvault.link" data-contact-email>privacy@streamvault.link</a></p>
+</div>
+
+<footer id="sv-copy">© 2026 StreamVault. Todos los derechos reservados.</footer>
+
+<script src="/js/cookie-banner.js"></script>
+<script>
+fetch('/api/settings').then(r=>r.json()).then(s=>{const n=s.siteName||'StreamVault';document.title='Política de Cookies — '+n;document.getElementById('sv-copy').textContent='© '+new Date().getFullYear()+' '+n+'. Todos los derechos reservados.';document.querySelectorAll('[data-brand-name]').forEach(el=>{el.textContent=n;});if(s.supportEmail){document.querySelectorAll('[data-contact-email]').forEach(el=>{el.href='mailto:'+s.supportEmail;el.textContent=s.supportEmail;});}}).catch(()=>{document.getElementById('sv-copy').textContent='© '+new Date().getFullYear()+' StreamVault. Todos los derechos reservados.';});
+(function(){const t=localStorage.getItem('sv_access_token')||localStorage.getItem('sv_token');document.getElementById(t?'nav-dash':'nav-login').style.display='inline-flex';})();
+</script>
+</body>
+</html>

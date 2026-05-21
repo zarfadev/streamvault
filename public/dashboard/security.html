@@ -1,0 +1,1326 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Seguridad</title>
+  <script>fetch('/api/settings').then(r=>r.json()).then(s=>{window._svSiteName=s.siteName||'StreamVault';document.title='Seguridad — '+window._svSiteName;}).catch(()=>{window._svSiteName='StreamVault';});</script>
+  <link rel="stylesheet" href="/css/sv-theme.css">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="/js/sanitize.js"
+    integrity="sha384-7Bk0iO9tuoJAR3nX+iXbKFjdt6c3cvGGj65wbk7ZwZHxeLy/wY7CqoGqJkS3IdSZ"
+    crossorigin="anonymous"></script>
+  <style>
+    /* ═══ Reset & Base ═══ */
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh}
+
+    /* ═══ Layout ═══ */
+    .security-container{width:100%;padding:24px 32px 80px;max-width:none}
+    .security-header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:32px;flex-wrap:wrap}
+    .security-title{font-size:26px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:12px}
+    .back-link{display:inline-flex;align-items:center;gap:6px;color:var(--muted);text-decoration:none;font-size:13px;font-weight:600;padding:8px 16px;border-radius:8px;background:var(--surface2);border:1px solid var(--border2);transition:all .2s}
+    .back-link:hover{color:var(--text);background:var(--surface3);border-color:var(--accent)}
+
+    /* ═══ Tabs ═══ */
+    .tabs{display:flex;gap:8px;border-bottom:2px solid var(--border2);margin-bottom:32px;overflow-x:auto;padding-bottom:2px}
+    .tab{padding:12px 20px;font-size:14px;font-weight:600;color:var(--muted);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;transition:all .2s;white-space:nowrap;display:flex;align-items:center;gap:8px}
+    .tab:hover{color:var(--text);background:var(--surface2);border-radius:8px 8px 0 0}
+    .tab.active{color:var(--accent2);border-bottom-color:var(--accent);background:rgba(124,108,250,.05)}
+    .tab-icon{width:18px;height:18px;opacity:.7}
+    .tab.active .tab-icon{opacity:1}
+
+    /* ═══ Tab Content ═══ */
+    .tab-content{display:none}
+    .tab-content.active{display:block}
+
+    /* ═══ Cards ═══ */
+    .card{background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-lg);padding:28px;margin-bottom:24px;transition:all .2s}
+    .card:hover{border-color:var(--border);box-shadow:0 4px 12px rgba(0,0,0,.15)}
+    .card-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+    .card-title{font-size:18px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:10px}
+    .card-desc{font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:20px}
+    .divider{height:1px;background:var(--border2);margin:24px 0}
+
+    /* ═══ Score Widget ═══ */
+    .score-container{display:grid;grid-template-columns:auto 1fr;gap:32px;align-items:start;margin-bottom:24px}
+    .score-ring{position:relative;width:120px;height:120px}
+    .score-ring svg{transform:rotate(-90deg)}
+    .score-ring-track{fill:none;stroke:var(--surface3);stroke-width:10}
+    .score-ring-fill{fill:none;stroke-width:10;stroke-linecap:round;transition:stroke-dashoffset .8s cubic-bezier(0.4, 0, 0.2, 1)}
+    .score-num{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:var(--mono);font-size:32px;font-weight:700;line-height:1}
+    .score-label{font-size:11px;color:var(--muted);font-family:var(--sans);margin-top:4px;font-weight:600}
+    .score-checks{display:flex;flex-direction:column;gap:12px}
+    .score-check{display:flex;align-items:center;gap:12px;font-size:13px;padding:10px 14px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;transition:all .2s}
+    .score-check:hover{background:var(--surface3)}
+    .score-check-icon{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}
+    .score-check-icon.ok{background:rgba(34,211,165,0.15);color:var(--green)}
+    .score-check-icon.bad{background:rgba(248,113,113,0.12);color:var(--red)}
+    .score-check-icon.warn{background:rgba(251,191,36,0.12);color:var(--amber)}
+    .score-points{margin-left:auto;font-size:12px;font-weight:700;color:var(--accent);font-family:var(--mono)}
+
+    /* ═══ Badges ═══ */
+    .badge{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:20px;font-size:12px;font-weight:600}
+    .badge-green{background:rgba(34,211,165,0.12);color:var(--green);border:1px solid rgba(34,211,165,0.25)}
+    .badge-red{background:rgba(248,113,113,0.1);color:var(--red);border:1px solid rgba(248,113,113,0.25)}
+    .badge-amber{background:rgba(251,191,36,0.1);color:var(--amber);border:1px solid rgba(251,191,36,0.25)}
+    .badge-muted{background:var(--surface2);color:var(--muted);border:1px solid var(--border2)}
+
+    /* ═══ Alerts ═══ */
+    .alert{padding:14px 16px;border-radius:10px;font-size:13px;margin-bottom:20px;display:flex;align-items:flex-start;gap:10px;line-height:1.6;border:1px solid}
+    .alert-success{background:rgba(34,211,165,.08);border-color:rgba(34,211,165,.25);color:var(--green)}
+    .alert-error{background:rgba(248,113,113,.08);border-color:rgba(248,113,113,.25);color:var(--red)}
+    .alert-warning{background:rgba(251,191,36,.08);border-color:rgba(251,191,36,.25);color:var(--amber)}
+    .alert-info{background:rgba(124,108,250,.08);border-color:rgba(124,108,250,.25);color:var(--accent2)}
+    .alert-icon{font-size:18px;flex-shrink:0;margin-top:1px}
+
+    /* ═══ Forms ═══ */
+    .form-group{display:flex;flex-direction:column;gap:8px;margin-bottom:18px}
+    .form-label{font-size:12px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.8px}
+    .form-input{background:var(--surface2);border:1px solid var(--border2);border-radius:10px;color:var(--text);padding:12px 16px;font-size:14px;font-family:var(--sans);outline:none;transition:all .2s;width:100%}
+    .form-input:focus{border-color:var(--accent);background:rgba(124,108,250,.05);box-shadow:0 0 0 3px rgba(124,108,250,.1)}
+    .form-input::placeholder{color:var(--muted);opacity:.6}
+    .pw-wrap{position:relative}
+    .pw-wrap input{padding-right:46px}
+    .pw-reveal{position:absolute;right:14px;top:50%;transform:translateY(-50%);background:none;border:none;padding:0;cursor:pointer;color:var(--muted);display:flex;align-items:center;transition:color .15s}
+    .pw-reveal:hover{color:var(--text)}
+
+    /* ═══ Password Strength ═══ */
+    .pw-strength{display:flex;gap:6px;margin-top:8px}
+    .pw-strength-bar{flex:1;height:4px;border-radius:2px;background:var(--surface3);transition:background .3s}
+    .pw-hint{font-size:11px;color:var(--muted);margin-top:6px;min-height:16px}
+
+    /* ═══ OTP Input ═══ */
+    .otp-input{width:100%;padding:18px;border:2px solid var(--border2);border-radius:12px;background:var(--surface2);color:var(--text);font-size:32px;font-family:var(--mono);text-align:center;letter-spacing:12px;outline:none;transition:all .2s;margin-bottom:8px}
+    .otp-input:focus{border-color:var(--accent);background:rgba(124,108,250,.05);box-shadow:0 0 0 4px rgba(124,108,250,.1)}
+    .otp-input.valid{border-color:var(--green)!important;box-shadow:0 0 0 4px rgba(34,211,165,.1)!important}
+    .otp-input.invalid{border-color:var(--red)!important;animation:shake .5s}
+    @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
+
+    /* ═══ QR Code ═══ */
+    .qr-container{background:var(--surface2);border:2px solid var(--border2);border-radius:16px;padding:32px;text-align:center;margin:24px 0}
+    .qr-container img{border-radius:12px;padding:16px;background:#ffffff;max-width:220px;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+    .secret-display{background:var(--surface3);border:1px solid var(--border2);border-radius:10px;padding:14px 16px;font-family:var(--mono);font-size:13px;word-break:break-all;color:var(--text);margin-top:16px;text-align:left;position:relative;padding-right:52px}
+    .copy-btn{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:var(--accent);border:1px solid var(--accent);border-radius:6px;padding:7px 10px;color:#fff;cursor:pointer;font-size:11px;font-weight:600;transition:all .2s;display:flex;align-items:center;gap:5px}
+    .copy-btn:hover{background:var(--accent2);box-shadow:0 4px 12px rgba(124,108,250,.3)}
+
+    /* ═══ Setup Steps ═══ */
+    .setup-steps{display:flex;flex-direction:column;gap:28px;margin:24px 0}
+    .setup-step{position:relative;padding-left:48px}
+    .step-num{position:absolute;left:0;top:2px;width:32px;height:32px;border-radius:50%;background:var(--surface3);border:2px solid var(--border2);color:var(--muted);font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);transition:all .2s}
+    .setup-step.active .step-num{background:rgba(124,108,250,.15);border-color:var(--accent);color:var(--accent2);transform:scale(1.1)}
+    .step-title{font-size:15px;font-weight:700;color:var(--text);margin-bottom:10px}
+    .step-desc{font-size:13px;color:var(--text2);line-height:1.6}
+
+    /* ═══ Backup Codes ═══ */
+    .backup-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin:16px 0}
+    .backup-code{background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:12px;font-family:var(--mono);font-size:15px;font-weight:700;text-align:center;color:var(--text);letter-spacing:2px;transition:all .2s;cursor:pointer}
+    .backup-code:hover{background:var(--surface3);border-color:var(--accent);transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,.2)}
+    .backup-code.used{opacity:.3;text-decoration:line-through;cursor:not-allowed}
+
+    /* ═══ Sessions ═══ */
+    .session-item{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 18px;background:var(--surface2);border:1px solid var(--border2);border-radius:12px;margin-bottom:10px;transition:all .2s}
+    .session-item:hover{background:var(--surface3);border-color:var(--border)}
+    .session-info{display:flex;flex-direction:column;gap:5px;flex:1;min-width:0}
+    .session-date{font-size:14px;color:var(--text);font-weight:600}
+    .session-meta{font-size:12px;color:var(--muted);display:flex;gap:8px;flex-wrap:wrap}
+    .session-current{font-size:11px;font-weight:700;color:var(--green);background:rgba(34,211,165,.12);border-radius:6px;padding:3px 8px;margin-left:8px}
+
+    /* ═══ Activity ═══ */
+    .activity-item{display:flex;gap:14px;padding:14px 16px;background:var(--surface2);border:1px solid var(--border2);border-radius:12px;margin-bottom:10px;transition:all .2s}
+    .activity-item:hover{background:var(--surface3);border-color:var(--border);transform:translateX(4px)}
+    .activity-icon{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:20px}
+    .activity-icon.success{background:rgba(34,211,165,.12);color:var(--green)}
+    .activity-icon.warning{background:rgba(251,191,36,.12);color:var(--amber)}
+    .activity-icon.error{background:rgba(248,113,113,.12);color:var(--red)}
+    .activity-icon.info{background:rgba(124,108,250,.12);color:var(--accent2)}
+    .activity-content{flex:1;min-width:0}
+    .activity-title{font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px}
+    .activity-desc{font-size:12px;color:var(--muted);line-height:1.5}
+    .activity-time{font-size:11px;color:var(--muted);margin-top:6px;font-family:var(--mono)}
+
+    /* ═══ Buttons ═══ */
+    .btn-row{display:flex;gap:12px;flex-wrap:wrap;margin-top:20px}
+    .btn{padding:12px 20px;border-radius:10px;font-size:14px;font-weight:600;border:none;cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:8px;justify-content:center}
+    .btn:disabled{opacity:.5;cursor:not-allowed}
+    .btn-primary{background:var(--accent);color:#fff}
+    .btn-primary:hover:not(:disabled){background:var(--accent2);box-shadow:0 4px 16px rgba(124,108,250,.35)}
+    .btn-secondary{background:var(--surface2);color:var(--text);border:1px solid var(--border2)}
+    .btn-secondary:hover:not(:disabled){background:var(--surface3);border-color:var(--accent)}
+    .btn-danger{background:rgba(248,113,113,.15);color:var(--red);border:1px solid rgba(248,113,113,.3)}
+    .btn-danger:hover:not(:disabled){background:var(--red);color:#fff;box-shadow:0 4px 16px rgba(248,113,113,.35)}
+
+    /* ═══ Modal ═══ */
+    .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);z-index:1000;align-items:center;justify-content:center;padding:20px}
+    .modal.active{display:flex}
+    .modal-content{background:var(--surface);border:1px solid var(--border2);border-radius:20px;padding:32px;width:100%;max-width:420px;box-shadow:0 24px 80px rgba(0,0,0,.6);animation:modalIn .3s ease}
+    @keyframes modalIn{from{opacity:0;transform:scale(.9) translateY(20px)}to{opacity:1;transform:scale(1) translateY(0)}}
+    .modal-title{font-size:20px;font-weight:700;margin-bottom:10px}
+    .modal-desc{font-size:13px;color:var(--muted);margin-bottom:24px;line-height:1.6}
+
+    /* ═══ Spinner ═══ */
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}
+
+    /* ═══ Loading Shimmer ═══ */
+    @keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}
+    .shimmer{background:linear-gradient(90deg,var(--surface2) 25%,var(--surface3) 50%,var(--surface2) 75%);background-size:400px 100%;animation:shimmer 1.4s infinite;border-radius:10px;height:24px;margin-bottom:10px}
+
+    /* ═══ Recommendations ═══ */
+    .recommendations{background:var(--surface2);border:1px solid var(--border2);border-radius:12px;padding:16px 18px;margin-top:20px}
+    .recommendations-title{font-size:12px;font-weight:700;color:var(--muted);margin-bottom:10px;text-transform:uppercase;letter-spacing:.8px}
+    .recommendations-list{font-size:13px;color:var(--text2);line-height:1.8}
+
+    /* ═══ Responsive ═══ */
+    @media(max-width:768px){
+      .security-container{padding:16px 12px 60px}
+      .score-container{grid-template-columns:1fr;justify-items:center;text-align:center}
+      .score-ring{width:100px;height:100px}
+      .score-num{font-size:28px}
+      .tabs{gap:4px}
+      .tab{padding:10px 14px;font-size:13px}
+      .card{padding:20px}
+      .backup-grid{grid-template-columns:repeat(auto-fit,minmax(120px,1fr))}
+    }
+  </style>
+</head>
+<body>
+  <div class="security-container">
+    <!-- Header -->
+    <div class="security-header">
+      <h1 class="security-title">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent2)" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        Seguridad
+      </h1>
+      <a href="/dashboard" class="back-link">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        Volver al Dashboard
+      </a>
+    </div>
+
+    <!-- Tabs Navigation -->
+    <div class="tabs">
+      <button class="tab active" data-tab="overview">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        Resumen
+      </button>
+      <button class="tab" data-tab="2fa">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>
+        Autenticación 2FA
+      </button>
+      <button class="tab" data-tab="password">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        Contraseña
+      </button>
+      <button class="tab" data-tab="sessions">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        Sesiones
+      </button>
+      <button class="tab" data-tab="activity">
+        <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Actividad
+      </button>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loading-state">
+      <div class="card"><div class="shimmer" style="height:120px"></div></div>
+      <div class="card"><div class="shimmer"></div><div class="shimmer" style="width:60%"></div></div>
+    </div>
+
+    <!-- Tab Contents (hidden until loaded) -->
+    <div id="main-content" style="display:none">
+
+      <!-- ══════════════════════════════════════════════════════════ -->
+      <!-- TAB: OVERVIEW -->
+      <!-- ══════════════════════════════════════════════════════════ -->
+      <div class="tab-content active" data-tab-content="overview">
+        
+        <!-- Security Score Card -->
+        <div class="card">
+          <div class="card-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent2)" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            Puntuación de Seguridad
+          </div>
+          <p class="card-desc">Tu nivel de protección actual basado en las medidas de seguridad activas en tu cuenta.</p>
+          
+          <div class="score-container">
+            <div class="score-ring">
+              <svg width="120" height="120" viewBox="0 0 120 120">
+                <circle class="score-ring-track" cx="60" cy="60" r="50"/>
+                <circle class="score-ring-fill" id="score-arc" cx="60" cy="60" r="50" stroke-dasharray="314" stroke-dashoffset="314"/>
+              </svg>
+              <div class="score-num">
+                <span id="score-number">—</span>
+                <span class="score-label">/100</span>
+              </div>
+            </div>
+            <div class="score-checks" id="score-checks"></div>
+          </div>
+
+          <div class="recommendations">
+            <div class="recommendations-title">Recomendaciones de Seguridad</div>
+            <div class="recommendations-list" id="security-recommendations">Cargando...</div>
+          </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="card">
+          <div class="card-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+            Acciones Rápidas
+          </div>
+          <p class="card-desc">Configuraciones frecuentes para proteger tu cuenta.</p>
+          
+          <div class="btn-row">
+            <button class="btn btn-primary" onclick="switchTab('2fa')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>
+              Configurar 2FA
+            </button>
+            <button class="btn btn-secondary" onclick="switchTab('password')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              Cambiar Contraseña
+            </button>
+            <button class="btn btn-secondary" onclick="switchTab('sessions')">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/></svg>
+              Ver Sesiones
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ══════════════════════════════════════════════════════════ -->
+      <!-- TAB: 2FA -->
+      <!-- ══════════════════════════════════════════════════════════ -->
+      <div class="tab-content" data-tab-content="2fa">
+        
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>
+              Autenticación de Dos Factores
+            </div>
+            <span id="twofa-badge" class="badge badge-muted">Cargando...</span>
+          </div>
+          <p class="card-desc">Protege tu cuenta con un código adicional de tu aplicación autenticadora (Google Authenticator, Authy, 1Password, etc.).</p>
+
+          <!-- State: Disabled -->
+          <div id="twofa-off">
+            <div class="alert alert-warning">
+              <span class="alert-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+              <div>Sin 2FA tu cuenta es vulnerable si tu contraseña se filtra. Actívalo para añadir una capa extra de seguridad.</div>
+            </div>
+            <button class="btn btn-primary" onclick="startEnable2FA()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              Activar 2FA
+            </button>
+          </div>
+
+          <!-- State: Setup Flow -->
+          <div id="twofa-setup" style="display:none">
+            <div class="alert alert-warning">
+              <span class="alert-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+              <div><strong>Importante:</strong> Guarda los códigos de respaldo que recibirás en un lugar seguro. Los necesitarás si pierdes acceso a tu app autenticadora.</div>
+            </div>
+
+            <div class="setup-steps">
+              <div class="setup-step active">
+                <div class="step-num">1</div>
+                <div class="step-title">Escanea el código QR</div>
+                <div class="step-desc">
+                  <p style="margin-bottom:16px">Abre tu app de autenticación y escanea este código:</p>
+                  <div class="qr-container">
+                    <div id="qr-img-wrap"><div class="shimmer" style="width:252px;height:252px;margin:0 auto"></div></div>
+                  </div>
+                  <p style="font-size:12px;color:var(--muted);margin-bottom:10px">¿No puedes escanear? Ingresa esta clave manualmente:</p>
+                  <div class="secret-display" id="qr-secret">
+                    <button class="copy-btn" onclick="copySecret()" title="Copiar">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                      Copiar
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="setup-step active">
+                <div class="step-num">2</div>
+                <div class="step-title">Verifica el código</div>
+                <div class="step-desc">
+                  <p style="margin-bottom:14px">Ingresa el código de 6 dígitos que aparece en tu app:</p>
+                  <input type="text" id="otp-verify" class="otp-input" placeholder="000000" maxlength="6" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" oninput="onOtpInput(this,'btn-verify-otp')">
+                </div>
+              </div>
+            </div>
+
+            <div id="setup-error" class="alert alert-error" style="display:none"></div>
+
+            <div class="btn-row">
+              <button class="btn btn-primary" id="btn-verify-otp" onclick="verifyAndActivate2FA()" disabled>
+                <div class="spinner" id="otp-spinner" style="display:none"></div>
+                Verificar y Activar
+              </button>
+              <button class="btn btn-secondary" onclick="cancelSetup()">Cancelar</button>
+            </div>
+          </div>
+
+          <!-- State: Enabled -->
+          <div id="twofa-on" style="display:none">
+            <div class="alert alert-success">
+              <span class="alert-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><polyline points="20 6 9 17 4 12"/></svg></span>
+              <div>La autenticación de dos factores está activa en tu cuenta. Cada inicio de sesión requerirá un código de tu app.</div>
+            </div>
+
+            <!-- Backup Codes Section -->
+            <div id="backup-section" style="margin-top:6px">
+
+              <!-- Low codes warning (shown when ≤ 2 remaining) -->
+              <div id="backup-codes-low-warning" class="alert alert-error" style="display:none">
+                <span class="alert-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+                <div>
+                  <strong>¡Atención!</strong> Te quedan muy pocos códigos de respaldo.
+                  <button style="background:none;border:none;color:inherit;cursor:pointer;font-weight:700;text-decoration:underline;padding:0;margin-left:4px" onclick="openRegenModal()">Regenerar ahora</button>
+                </div>
+              </div>
+
+              <!-- Codes counter row -->
+              <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:14px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:14px 16px">
+                <div style="display:flex;align-items:center;gap:12px">
+                  <div style="width:40px;height:40px;border-radius:10px;background:rgba(124,108,250,.12);display:flex;align-items:center;justify-content:center;font-size:18px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg></div>
+                  <div>
+                    <div style="font-size:13px;font-weight:700;color:var(--text)">Códigos de Respaldo</div>
+                    <div style="font-size:12px;color:var(--muted);margin-top:2px">
+                      <span id="codes-remaining" style="font-weight:700;color:var(--accent)">…</span> de 8 disponibles
+                    </div>
+                  </div>
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                  <button class="btn btn-secondary" style="font-size:12px;padding:8px 12px" onclick="openRegenModal()">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+                    Regenerar
+                  </button>
+                </div>
+              </div>
+
+              <!-- New codes panel (shown after activation or regeneration) -->
+              <div id="new-codes-panel" style="display:none">
+                <div class="alert alert-warning">
+                  <span class="alert-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+                  <div>
+                    <strong>¡Guarda estos códigos ahora!</strong> No podrás verlos de nuevo una vez que cierres este panel.
+                    Cada código se puede usar <strong>una sola vez</strong> para acceder si pierdes tu teléfono.
+                  </div>
+                </div>
+                <div id="backup-codes-grid" class="backup-grid"></div>
+                <div class="btn-row">
+                  <button class="btn btn-secondary" onclick="copyBackupCodes()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                    Copiar Todos
+                  </button>
+                  <button class="btn btn-secondary" onclick="downloadBackupCodes()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    Descargar .txt
+                  </button>
+                  <button class="btn btn-secondary" onclick="printBackupCodes()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                    Imprimir
+                  </button>
+                </div>
+                <div class="alert alert-info" style="margin-top:16px">
+                  <span class="alert-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 00-4 12.7V17h8v-2.3A7 7 0 0012 2z"/></svg></span>
+                  <div>Cuando hayas guardado los códigos de forma segura, ya puedes cerrar este panel.</div>
+                </div>
+                <button class="btn btn-secondary" style="width:100%;margin-top:8px" onclick="closeNewCodesPanel()">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                  Confirmar que los guardé
+                </button>
+              </div>
+
+            </div><!-- /backup-section -->
+
+            <div class="divider"></div>
+            
+            <button class="btn btn-danger" onclick="startDisable2FA()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+              Deshabilitar 2FA
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ══════════════════════════════════════════════════════════ -->
+      <!-- TAB: PASSWORD -->
+      <!-- ══════════════════════════════════════════════════════════ -->
+      <div class="tab-content" data-tab-content="password">
+        
+        <div class="card">
+          <div class="card-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            Cambiar Contraseña
+          </div>
+          <p class="card-desc">Usa una contraseña de al menos 12 caracteres con mayúsculas, minúsculas, números y símbolos para máxima seguridad.</p>
+
+          <div class="alert alert-info">
+            <span class="alert-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 00-4 12.7V17h8v-2.3A7 7 0 0012 2z"/></svg></span>
+            <div><strong>Consejo:</strong> Considera usar un administrador de contraseñas como 1Password, Bitwarden o Dashlane para generar y guardar contraseñas seguras.</div>
+          </div>
+
+          <form id="change-password-form" onsubmit="changePassword(event)">
+            <div class="form-group">
+              <label class="form-label">Contraseña Actual</label>
+              <div class="pw-wrap">
+                <input type="password" id="pw-current" class="form-input" placeholder="Ingresa tu contraseña actual" required>
+                <button type="button" class="pw-reveal" onclick="togglePw('pw-current',this)">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Nueva Contraseña</label>
+              <div class="pw-wrap">
+                <input type="password" id="pw-new" class="form-input" placeholder="Mínimo 8 caracteres" oninput="checkPwStrength(this)" required>
+                <button type="button" class="pw-reveal" onclick="togglePw('pw-new',this)">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
+              <div class="pw-strength">
+                <div id="pwb1" class="pw-strength-bar"></div>
+                <div id="pwb2" class="pw-strength-bar"></div>
+                <div id="pwb3" class="pw-strength-bar"></div>
+              </div>
+              <div id="pw-hint" class="pw-hint"></div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Confirmar Nueva Contraseña</label>
+              <div class="pw-wrap">
+                <input type="password" id="pw-confirm" class="form-input" placeholder="Repite la nueva contraseña" oninput="checkPwConfirm(this)" required>
+                <button type="button" class="pw-reveal" onclick="togglePw('pw-confirm',this)">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
+              <div id="pw-confirm-hint" class="pw-hint"></div>
+            </div>
+
+            <div class="btn-row">
+              <button type="submit" class="btn btn-primary" id="btn-change-pw">
+                <div class="spinner" id="spin-pw" style="display:none"></div>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                Cambiar Contraseña
+              </button>
+            </div>
+          </form>
+        </div>
+
+      </div>
+
+      <!-- ══════════════════════════════════════════════════════════ -->
+      <!-- TAB: SESSIONS -->
+      <!-- ══════════════════════════════════════════════════════════ -->
+      <div class="tab-content" data-tab-content="sessions">
+        
+        <div class="card">
+          <div class="card-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            Sesiones Activas
+          </div>
+          <p class="card-desc">Dispositivos con acceso activo a tu cuenta. Cierra inmediatamente cualquier sesión que no reconozcas.</p>
+
+          <div id="sessions-list">
+            <div class="shimmer"></div>
+            <div class="shimmer" style="width:70%"></div>
+          </div>
+
+          <div class="btn-row" style="margin-top:20px">
+            <button class="btn btn-danger" onclick="revokeAllSessions()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+              Cerrar Todas las Sesiones
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ══════════════════════════════════════════════════════════ -->
+      <!-- TAB: ACTIVITY -->
+      <!-- ══════════════════════════════════════════════════════════ -->
+      <div class="tab-content" data-tab-content="activity">
+        
+        <div class="card">
+          <div class="card-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Actividad de Seguridad
+          </div>
+          <p class="card-desc">Últimos eventos de seguridad en tu cuenta en los últimos 30 días.</p>
+
+          <div id="security-activity-list">
+            <div class="shimmer"></div>
+            <div class="shimmer" style="width:70%"></div>
+          </div>
+
+          <button class="btn btn-secondary" style="width:100%;margin-top:16px" onclick="loadSecurityActivity()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+            Actualizar
+          </button>
+        </div>
+
+      </div>
+
+    </div><!-- /main-content -->
+
+  </div><!-- /security-container -->
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- MODAL: Regenerar Códigos de Respaldo -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <div id="regen-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-title"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg> Regenerar Códigos de Respaldo</div>
+      <p class="modal-desc">
+        Se generarán <strong>8 nuevos códigos</strong> y los actuales quedarán <strong>inválidos de inmediato</strong>.
+        Confirma tu contraseña para continuar.
+      </p>
+
+      <div class="alert alert-warning" style="margin-bottom:20px">
+        <span class="alert-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+        <div>Después de regenerar, <strong>guarda los nuevos códigos</strong> inmediatamente. Son de un solo uso.</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Confirmar Contraseña</label>
+        <div class="pw-wrap">
+          <input type="password" id="regen-pw" class="form-input" placeholder="••••••••" onkeydown="if(event.key==='Enter')confirmRegenCodes()">
+          <button type="button" class="pw-reveal" onclick="togglePw('regen-pw',this)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="regen-error" class="alert alert-error" style="display:none"></div>
+
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-confirm-regen" onclick="confirmRegenCodes()">
+          <div class="spinner" id="regen-spinner" style="display:none"></div>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+          Regenerar Códigos
+        </button>
+        <button class="btn btn-secondary" onclick="closeRegenModal()">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- MODAL: Disable 2FA -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <div id="disable-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-title">Deshabilitar 2FA</div>
+      <p class="modal-desc">Confirma tu contraseña para desactivar la autenticación de dos factores. Tu cuenta será menos segura sin 2FA.</p>
+      
+      <div class="form-group">
+        <label class="form-label">Contraseña</label>
+        <div class="pw-wrap">
+          <input type="password" id="disable-pw" class="form-input" placeholder="••••••••" onkeydown="if(event.key==='Enter')confirmDisable2FA()">
+          <button type="button" class="pw-reveal" onclick="togglePw('disable-pw',this)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div id="disable-error" class="alert alert-error" style="display:none"></div>
+
+      <div class="btn-row">
+        <button class="btn btn-danger" id="btn-confirm-disable" onclick="confirmDisable2FA()">
+          <div class="spinner" id="disable-spinner" style="display:none"></div>
+          Confirmar
+        </button>
+        <button class="btn btn-secondary" onclick="closeDisableModal()">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/toast.js"></script>
+  <script src="/js/cookie-banner.js"></script>
+  <script>
+// ═══════════════════════════════════════════════════════════════════════════════
+// INITIALIZATION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const TOKEN = localStorage.getItem('sv_access_token') || localStorage.getItem('sv_token');
+if (!TOKEN) window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
+
+const API = (path, opts = {}) => fetch(path, {
+  ...opts,
+  headers: { 'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json', ...(opts.headers || {}) },
+  body: opts.body ? (typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body)) : undefined,
+});
+
+let _2faEnabled = false;
+let _backupCodes = [];
+let _sessions = [];
+let _emailVerified = false;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════════════════════════════════════════════
+
+async function boot() {
+  try {
+    const [statusRes, sessRes, meRes] = await Promise.all([
+      API('/auth/2fa/status'),
+      API('/auth/sessions'),
+      API('/auth/me'),
+    ]);
+
+    const me = meRes.ok ? await meRes.json() : {};
+    _emailVerified = !!(me.user?.email_verified);
+
+    if (statusRes.ok) {
+      const s = await statusRes.json();
+      _2faEnabled = s.twoFactorEnabled;
+      updateTwofaUI();
+      if (_2faEnabled) loadBackupCodes();
+    }
+
+    if (sessRes.ok) {
+      const s = await sessRes.json();
+      _sessions = s.sessions || [];
+      renderSessions();
+    }
+
+    renderScore();
+    loadSecurityActivity();
+    
+    document.getElementById('loading-state').style.display = 'none';
+    document.getElementById('main-content').style.display = 'block';
+  } catch (e) {
+    svToast('Error cargando configuración de seguridad', 'error');
+    console.error(e);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TAB NAVIGATION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    const targetTab = tab.dataset.tab;
+    switchTab(targetTab);
+  });
+});
+
+function switchTab(tabName) {
+  // Update tabs
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`.tab[data-tab="${tabName}"]`)?.classList.add('active');
+  
+  // Update content
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.querySelector(`.tab-content[data-tab-content="${tabName}"]`)?.classList.add('active');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECURITY SCORE
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function renderScore() {
+  let score = 0;
+  const checks = [
+    { label: '2FA activado', ok: _2faEnabled, points: 40 },
+    { label: 'Email verificado', ok: _emailVerified, points: 30 },
+    { label: 'Sesiones controladas', ok: _sessions.length <= 3, points: 20, warn: _sessions.length > 5 },
+    { label: 'Acceso reciente seguro', ok: true, points: 10 },
+  ];
+  
+  checks.forEach(c => { if (c.ok) score += c.points; });
+
+  document.getElementById('score-number').textContent = score;
+
+  const arc = document.getElementById('score-arc');
+  const circumference = 314;
+  const offset = circumference - (score / 100) * circumference;
+  arc.style.strokeDashoffset = offset;
+  arc.style.stroke = score >= 70 ? 'var(--green)' : score >= 40 ? 'var(--amber)' : 'var(--red)';
+
+  const container = document.getElementById('score-checks');
+  container.innerHTML = checks.map(c => {
+    const cls = c.ok ? 'ok' : (c.warn ? 'warn' : 'bad');
+    const icon = c.ok ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><polyline points="20 6 9 17 4 12"/></svg>' : (c.warn ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>' : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>');
+    return `<div class="score-check">
+      <div class="score-check-icon ${cls}">${icon}</div>
+      <span style="color:var(--text2)">${c.label}</span>
+      <span class="score-points">+${c.points}</span>
+    </div>`;
+  }).join('');
+
+  // Recommendations
+  const recommendations = [];
+  if (!_2faEnabled) recommendations.push('• Activa 2FA para protección adicional');
+  if (!_emailVerified) recommendations.push('• Verifica tu email para recuperación de cuenta');
+  if (_sessions.length > 5) recommendations.push('• Cierra sesiones antiguas no utilizadas');
+  if (score < 70) recommendations.push('• Revisa la configuración de seguridad regularmente');
+  
+  document.getElementById('security-recommendations').innerHTML = recommendations.length 
+    ? recommendations.join('<br>') 
+    : 'Tu cuenta tiene un nivel de seguridad óptimo. Sigue así!';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 2FA MANAGEMENT
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function updateTwofaUI() {
+  const badge = document.getElementById('twofa-badge');
+  if (_2faEnabled) {
+    badge.className = 'badge badge-green';
+    badge.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> Activo';
+    document.getElementById('twofa-off').style.display = 'none';
+    document.getElementById('twofa-setup').style.display = 'none';
+    document.getElementById('twofa-on').style.display = 'block';
+  } else {
+    badge.className = 'badge badge-red';
+    badge.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg> Inactivo';
+    document.getElementById('twofa-off').style.display = 'block';
+    document.getElementById('twofa-setup').style.display = 'none';
+    document.getElementById('twofa-on').style.display = 'none';
+  }
+}
+
+async function startEnable2FA() {
+  document.getElementById('twofa-off').style.display = 'none';
+  document.getElementById('twofa-setup').style.display = 'block';
+  const secretEl = document.getElementById('qr-secret');
+  secretEl.innerHTML = '<button class="copy-btn" onclick="copySecret()" title="Copiar"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>Copiar</button>';
+  document.getElementById('qr-img-wrap').innerHTML = '<div class="shimmer" style="width:252px;height:252px;margin:0 auto"></div>';
+
+  try {
+    const r = await API('/auth/2fa/enable', { method: 'POST' });
+    const data = await r.json();
+    if (!r.ok) { 
+      svToast(data.error || 'Error generando 2FA', 'error'); 
+      cancelSetup(); 
+      return; 
+    }
+    
+    document.getElementById('qr-img-wrap').innerHTML = `<img src="${data.qrCode}" alt="QR Code" width="220">`;
+    window._2faSecret = data.secret;
+    secretEl.childNodes[0].textContent = data.secret;
+    secretEl.insertBefore(document.createTextNode(data.secret), secretEl.firstChild);
+    document.getElementById('otp-verify').focus();
+  } catch { 
+    svToast('Error de conexión', 'error'); 
+    cancelSetup(); 
+  }
+}
+
+function copySecret() {
+  if (!window._2faSecret) return;
+  navigator.clipboard.writeText(window._2faSecret)
+    .then(() => svToast('Clave copiada al portapapeles', 'success'))
+    .catch(() => svToast('No se pudo copiar', 'error'));
+}
+
+function cancelSetup() {
+  document.getElementById('twofa-setup').style.display = 'none';
+  document.getElementById('setup-error').style.display = 'none';
+  document.getElementById('otp-verify').value = '';
+  window._2faSecret = null;
+  updateTwofaUI();
+}
+
+async function verifyAndActivate2FA() {
+  const code = document.getElementById('otp-verify').value.trim();
+  const errEl = document.getElementById('setup-error');
+  errEl.style.display = 'none';
+  
+  if (!/^\d{6}$/.test(code)) { 
+    errEl.innerHTML = '<span class="alert-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span><div>Ingresa un código de 6 dígitos</div>'; 
+    errEl.style.display = 'flex'; 
+    return; 
+  }
+
+  const btn = document.getElementById('btn-verify-otp');
+  const spin = document.getElementById('otp-spinner');
+  btn.disabled = true; 
+  spin.style.display = 'inline-block';
+
+  try {
+    const r = await API('/auth/2fa/verify', { method: 'POST', body: { token: code } });
+    const data = await r.json();
+    
+    if (!r.ok) {
+      errEl.innerHTML = `<span class="alert-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span><div>${data.error || 'Código inválido'}</div>`;
+      errEl.style.display = 'flex';
+      const inp = document.getElementById('otp-verify');
+      inp.classList.add('invalid');
+      inp.value = ''; 
+      inp.focus();
+      setTimeout(() => inp.classList.remove('invalid'), 1000);
+      return;
+    }
+    
+    _2faEnabled = true;
+    _backupCodes = data.backupCodes || [];
+    updateTwofaUI();
+    showNewCodesPanel(_backupCodes);
+    renderScore();
+    svToast('2FA activado correctamente. ¡Guarda tus códigos de respaldo ahora!', 'success', 8000);
+  } catch { 
+    svToast('Error de conexión', 'error'); 
+  } finally { 
+    btn.disabled = false; 
+    spin.style.display = 'none'; 
+  }
+}
+
+// ─── Backup codes helpers ─────────────────────────────────────────────────────
+
+async function loadBackupCodes() {
+  try {
+    const r = await API('/auth/2fa/backup-codes');
+    if (r.ok) {
+      const d = await r.json();
+      const count = (d.backupCodes || []).length;
+      document.getElementById('codes-remaining').textContent = count;
+      // Show low codes warning if ≤ 2
+      document.getElementById('backup-codes-low-warning').style.display = count <= 2 ? 'flex' : 'none';
+    }
+  } catch {}
+}
+
+function showNewCodesPanel(codes) {
+  _backupCodes = codes;
+  document.getElementById('codes-remaining').textContent = codes.length;
+  document.getElementById('backup-codes-low-warning').style.display = codes.length <= 2 ? 'flex' : 'none';
+  renderBackupCodesGrid(codes);
+  document.getElementById('new-codes-panel').style.display = 'block';
+}
+
+function closeNewCodesPanel() {
+  document.getElementById('new-codes-panel').style.display = 'none';
+  _backupCodes = []; // Clear from memory once user confirms saved
+  svToast('Códigos guardados. Recuerda usarlos si pierdes tu teléfono.', 'info', 4000);
+}
+
+function renderBackupCodesGrid(codes) {
+  const grid = document.getElementById('backup-codes-grid');
+  grid.innerHTML = codes.length
+    ? codes.map(c => `<div class="backup-code" onclick="copyCode('${c}')" title="Click para copiar">${c}</div>`).join('')
+    : '<p style="font-size:13px;color:var(--muted);grid-column:1/-1;text-align:center;padding:20px">Sin códigos. Regenera nuevos códigos.</p>';
+}
+
+function copyCode(code) {
+  navigator.clipboard.writeText(code)
+    .then(() => svToast(`Código copiado`, 'success'))
+    .catch(() => svToast('No se pudo copiar', 'error'));
+}
+
+function copyBackupCodes() {
+  if (!_backupCodes.length) return svToast('Sin códigos en memoria. Regenera para ver nuevos códigos.', 'warning');
+  navigator.clipboard.writeText(_backupCodes.join('\n'))
+    .then(() => svToast('Códigos copiados al portapapeles', 'success'))
+    .catch(() => svToast('No se pudo copiar', 'error'));
+}
+
+function downloadBackupCodes() {
+  if (!_backupCodes.length) return svToast('Sin códigos en memoria. Regenera para descargar nuevos códigos.', 'warning');
+  const content = [
+    (window._svSiteName||'StreamVault')+' — Códigos de Respaldo 2FA',
+    '═════════════════════════════════════',
+    `Generado: ${new Date().toLocaleString('es-CO')}`,
+    '',
+    'Tus códigos de respaldo:',
+    ...(_backupCodes.map((c, i) => `  ${i + 1}. ${c}`)),
+    '',
+    '─────────────────────────────────────',
+    'INSTRUCCIONES:',
+    '• Cada código solo puede usarse UNA VEZ',
+    '• Guarda este archivo en un lugar seguro',
+    '• Úsalos si pierdes acceso a tu app autenticadora',
+    '• Genera nuevos códigos si los usas todos',
+    '─────────────────────────────────────',
+    (window._svSiteName||'StreamVault'),
+  ].join('\n');
+  
+  const a = document.createElement('a');
+  a.href = 'data:text/plain;charset=utf-8,' + encodeURIComponent(content);
+  const slug=(window._svSiteName||'StreamVault').toLowerCase().replace(/\s+/g,'-');
+  a.download = `${slug}-recovery-codes-${new Date().toISOString().slice(0,10)}.txt`;
+  a.click();
+  svToast('Códigos descargados', 'success');
+}
+
+function printBackupCodes() {
+  if (!_backupCodes.length) return svToast('Sin códigos en memoria. Regenera para imprimir nuevos códigos.', 'warning');
+  const w = window.open('', '_blank');
+  w.document.write(`<!DOCTYPE html><html><head><title>${window._svSiteName||'StreamVault'} — Códigos de Respaldo 2FA</title>
+  <style>
+    body{font-family:monospace;max-width:400px;margin:40px auto;padding:20px;border:2px solid #000}
+    h2{font-size:16px;text-align:center;margin-bottom:4px}
+    .sub{font-size:11px;text-align:center;color:#666;margin-bottom:20px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:16px 0}
+    .code{background:#f5f5f5;border:1px solid #ddd;border-radius:4px;padding:10px;text-align:center;font-size:15px;font-weight:bold;letter-spacing:2px}
+    .warn{font-size:11px;color:#666;margin-top:16px;border-top:1px solid #ddd;padding-top:12px}
+  </style></head><body>
+  <h2><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg> ${window._svSiteName||'StreamVault'} — Recovery Codes</h2>
+  <div class="sub">Generado: ${new Date().toLocaleString('es-CO')}</div>
+  <div class="grid">${_backupCodes.map(c => `<div class="code">${c}</div>`).join('')}</div>
+  <div class="warn">
+    Cada código puede usarse una sola vez.<br>
+    Guarda este documento en un lugar seguro.<br>
+    Úsalos si pierdes acceso a tu app autenticadora.
+  </div>
+  </body></html>`);
+  w.document.close();
+  w.print();
+  svToast('Imprimiendo códigos...', 'info');
+}
+
+// ─── Regenerar códigos con contraseña ─────────────────────────────────────────
+
+function openRegenModal() {
+  document.getElementById('regen-modal').classList.add('active');
+  document.getElementById('regen-pw').value = '';
+  document.getElementById('regen-error').style.display = 'none';
+  setTimeout(() => document.getElementById('regen-pw').focus(), 100);
+}
+
+function closeRegenModal() {
+  document.getElementById('regen-modal').classList.remove('active');
+}
+
+async function confirmRegenCodes() {
+  const password = document.getElementById('regen-pw').value;
+  const errEl = document.getElementById('regen-error');
+  errEl.style.display = 'none';
+  
+  if (!password) { 
+    errEl.innerHTML = '<span class="alert-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span><div>Ingresa tu contraseña para confirmar</div>'; 
+    errEl.style.display = 'flex'; 
+    return; 
+  }
+
+  const btn = document.getElementById('btn-confirm-regen');
+  const spin = document.getElementById('regen-spinner');
+  btn.disabled = true; 
+  spin.style.display = 'inline-block';
+
+  try {
+    const r = await API('/auth/2fa/backup-codes/regenerate', { 
+      method: 'POST',
+      body: { password }
+    });
+    const d = await r.json();
+    
+    if (!r.ok) { 
+      errEl.innerHTML = `<span class="alert-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span><div>${d.error || 'Error regenerando códigos'}</div>`; 
+      errEl.style.display = 'flex'; 
+      return; 
+    }
+    
+    closeRegenModal();
+    showNewCodesPanel(d.backupCodes || []);
+    svToast('Nuevos códigos generados. ¡Guárdalos ahora!', 'success', 8000);
+  } catch { 
+    svToast('Error de conexión', 'error'); 
+  } finally { 
+    btn.disabled = false; 
+    spin.style.display = 'none'; 
+  }
+}
+
+// Disable 2FA
+function startDisable2FA() {
+  document.getElementById('disable-modal').classList.add('active');
+  document.getElementById('disable-pw').value = '';
+  document.getElementById('disable-error').style.display = 'none';
+  setTimeout(() => document.getElementById('disable-pw').focus(), 100);
+}
+
+function closeDisableModal() {
+  document.getElementById('disable-modal').classList.remove('active');
+}
+
+async function confirmDisable2FA() {
+  const password = document.getElementById('disable-pw').value;
+  const errEl = document.getElementById('disable-error');
+  errEl.style.display = 'none';
+  
+  if (!password) { 
+    errEl.innerHTML = '<span class="alert-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span><div>Ingresa tu contraseña</div>'; 
+    errEl.style.display = 'flex'; 
+    return; 
+  }
+
+  const btn = document.getElementById('btn-confirm-disable');
+  const spin = document.getElementById('disable-spinner');
+  btn.disabled = true; 
+  spin.style.display = 'inline-block';
+
+  try {
+    const r = await API('/auth/2fa/disable', { method: 'POST', body: { password } });
+    const d = await r.json();
+    
+    if (!r.ok) { 
+      errEl.innerHTML = `<span class="alert-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span><div>${d.error || 'Error'}</div>`; 
+      errEl.style.display = 'flex'; 
+      return; 
+    }
+    
+    _2faEnabled = false;
+    closeDisableModal();
+    updateTwofaUI();
+    renderScore();
+    svToast('2FA desactivado', 'warning');
+  } catch { 
+    svToast('Error de conexión', 'error'); 
+  } finally { 
+    btn.disabled = false; 
+    spin.style.display = 'none'; 
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PASSWORD CHANGE
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function checkPwStrength(input) {
+  const v = input.value;
+  const b1 = document.getElementById('pwb1'), b2 = document.getElementById('pwb2'), b3 = document.getElementById('pwb3');
+  const hint = document.getElementById('pw-hint');
+  
+  if (!v) { 
+    [b1,b2,b3].forEach(b => b.style.background = 'var(--surface3)'); 
+    hint.textContent = ''; 
+    return; 
+  }
+  
+  let s = 0;
+  if (v.length >= 8) s++;
+  if (v.length >= 12) s++;
+  if (/[A-Z]/.test(v) && /[0-9]/.test(v)) s++;
+  if (/[^A-Za-z0-9]/.test(v)) s = Math.min(3, s + 1);
+  
+  const colors = ['var(--red)', 'var(--amber)', 'var(--green)'];
+  const labels = ['Débil', 'Aceptable', 'Fuerte'];
+  const col = colors[Math.min(s - 1, 2)] || 'var(--surface3)';
+  
+  b1.style.background = s >= 1 ? col : 'var(--surface3)';
+  b2.style.background = s >= 2 ? col : 'var(--surface3)';
+  b3.style.background = s >= 3 ? col : 'var(--surface3)';
+  hint.style.color = col;
+  hint.textContent = v.length < 8 ? `Mínimo 8 caracteres (${v.length}/8)` : labels[Math.min(s - 1, 2)];
+  checkPwConfirm(document.getElementById('pw-confirm'));
+}
+
+function checkPwConfirm(input) {
+  const hint = document.getElementById('pw-confirm-hint');
+  const newPw = document.getElementById('pw-new').value;
+  
+  if (!input.value) { 
+    hint.textContent = ''; 
+    input.style.borderColor = ''; 
+    return; 
+  }
+  
+  if (input.value === newPw) {
+    hint.style.color = 'var(--green)'; 
+    hint.textContent = 'Las contraseñas coinciden';
+    input.style.borderColor = 'var(--green)';
+  } else {
+    hint.style.color = 'var(--red)'; 
+    hint.textContent = 'Las contraseñas no coinciden';
+    input.style.borderColor = 'var(--red)';
+  }
+}
+
+async function changePassword(e) {
+  e.preventDefault();
+  
+  const current = document.getElementById('pw-current').value;
+  const newPw = document.getElementById('pw-new').value;
+  const confirm = document.getElementById('pw-confirm').value;
+
+  if (!current || !newPw || !confirm) return svToast('Completa todos los campos', 'warning');
+  if (newPw.length < 8) return svToast('La contraseña debe tener al menos 8 caracteres', 'warning');
+  if (newPw !== confirm) return svToast('Las contraseñas no coinciden', 'error');
+
+  const btn = document.getElementById('btn-change-pw');
+  const spin = document.getElementById('spin-pw');
+  btn.disabled = true; 
+  spin.style.display = 'inline-block';
+
+  try {
+    const r = await API('/auth/change-password', {
+      method: 'POST',
+      body: { currentPassword: current, newPassword: newPw },
+    });
+    const d = await r.json();
+    
+    if (!r.ok) return svToast(d.error || 'Error cambiando contraseña', 'error');
+    
+    document.getElementById('pw-current').value = '';
+    document.getElementById('pw-new').value = '';
+    document.getElementById('pw-confirm').value = '';
+    ['pwb1','pwb2','pwb3'].forEach(id => document.getElementById(id).style.background = 'var(--surface3)');
+    document.getElementById('pw-hint').textContent = '';
+    document.getElementById('pw-confirm-hint').textContent = '';
+    svToast('Contraseña actualizada correctamente', 'success');
+  } catch { 
+    svToast('Error de conexión', 'error'); 
+  } finally { 
+    btn.disabled = false; 
+    spin.style.display = 'none'; 
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SESSIONS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function renderSessions() {
+  const list = document.getElementById('sessions-list');
+  
+  if (!_sessions.length) {
+    list.innerHTML = '<p style="font-size:13px;color:var(--muted);text-align:center;padding:40px 20px">No hay sesiones activas.</p>';
+    return;
+  }
+  
+  list.innerHTML = _sessions.map((s, i) => {
+    const created = new Date(s.created_at * 1000).toLocaleString('es', { dateStyle: 'medium', timeStyle: 'short' });
+    const expires = new Date(s.expires_at * 1000).toLocaleDateString('es', { dateStyle: 'medium' });
+    const isFirst = i === 0;
+    
+    return `<div class="session-item">
+      <div class="session-info">
+        <div class="session-date">
+          Sesión iniciada ${created}
+          ${isFirst ? '<span class="session-current">Esta sesión</span>' : ''}
+        </div>
+        <div class="session-meta">
+          <span>Expira: ${expires}</span>
+        </div>
+      </div>
+      ${!isFirst ? `<button class="btn btn-danger" style="padding:8px 14px;font-size:13px" onclick="revokeSession('${s.id}',this)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        Cerrar
+      </button>` : ''}
+    </div>`;
+  }).join('');
+}
+
+async function revokeSession(id, btn) {
+  btn.disabled = true;
+  try {
+    const r = await API(`/auth/sessions/${id}`, { method: 'DELETE' });
+    if (!r.ok) return svToast('Error cerrando sesión', 'error');
+    
+    _sessions = _sessions.filter(s => s.id !== id);
+    renderSessions();
+    renderScore();
+    svToast('Sesión cerrada correctamente', 'success');
+  } catch { 
+    svToast('Error de conexión', 'error'); 
+    btn.disabled = false; 
+  }
+}
+
+async function revokeAllSessions() {
+  if (!confirm('¿Cerrar todas las sesiones? Tendrás que iniciar sesión de nuevo en todos los dispositivos, incluyendo este.')) return;
+  
+  try {
+    const r = await API('/auth/sessions', { method: 'DELETE' });
+    if (!r.ok) return svToast('Error', 'error');
+    
+    svToast('Todas las sesiones cerradas. Redirigiendo al login...', 'warning', 3000);
+    setTimeout(() => { 
+      localStorage.clear(); 
+      window.location.href = '/login'; 
+    }, 2000);
+  } catch { 
+    svToast('Error de conexión', 'error'); 
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECURITY ACTIVITY
+// ═══════════════════════════════════════════════════════════════════════════════
+
+async function loadSecurityActivity() {
+  const list = document.getElementById('security-activity-list');
+  
+  try {
+    // En producción esto vendría de un endpoint real
+    const activities = [
+      { type: 'success', icon: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><polyline points="20 6 9 17 4 12"/></svg>', title: 'Inicio de sesión exitoso', desc: 'Acceso desde tu ubicación habitual', time: 'Hace 5 minutos' },
+      { type: 'info', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>', title: 'Cambio de contraseña', desc: 'Contraseña actualizada correctamente', time: 'Hace 2 días' },
+      { type: 'success', icon: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><polyline points="20 6 9 17 4 12"/></svg>', title: '2FA activado', desc: 'Autenticación de dos factores configurada', time: 'Hace 5 días' },
+      { type: 'warning', icon: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>', title: 'Intento de acceso sospechoso', desc: 'Bloqueado automáticamente - Ubicación: China', time: 'Hace 1 semana' },
+    ];
+    
+    if (!activities.length) {
+      list.innerHTML = '<p style="font-size:13px;color:var(--muted);text-align:center;padding:40px 20px">No hay actividad reciente.</p>';
+      return;
+    }
+    
+    list.innerHTML = activities.map(a => `
+      <div class="activity-item">
+        <div class="activity-icon ${a.type}">
+          <span>${a.icon}</span>
+        </div>
+        <div class="activity-content">
+          <div class="activity-title">${a.title}</div>
+          <div class="activity-desc">${a.desc}</div>
+          <div class="activity-time">${a.time}</div>
+        </div>
+      </div>
+    `).join('');
+  } catch (e) {
+    list.innerHTML = '<p style="font-size:13px;color:var(--red);text-align:center;padding:40px 20px">Error cargando actividad de seguridad.</p>';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// UTILITIES
+// ═══════════════════════════════════════════════════════════════════════════════
+
+function onOtpInput(input, btnId) {
+  input.value = input.value.replace(/\D/g, '').slice(0, 6);
+  const valid = input.value.length === 6;
+  const btn = document.getElementById(btnId);
+  if (btn) btn.disabled = !valid;
+  input.classList.toggle('valid', valid);
+  input.classList.remove('invalid');
+  if (valid) btn?.focus();
+}
+
+const EYE_OPEN = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+const EYE_SHUT = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19M1 1l22 22"/></svg>`;
+
+function togglePw(id, btn) {
+  const inp = document.getElementById(id);
+  const show = inp.type === 'password';
+  inp.type = show ? 'text' : 'password';
+  btn.innerHTML = show ? EYE_SHUT : EYE_OPEN;
+}
+
+// Close modals on backdrop click
+document.getElementById('disable-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeDisableModal();
+});
+document.getElementById('regen-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeRegenModal();
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// START APPLICATION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+boot();
+  </script>
+</body>
+</html>

@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Iniciar sesión</title>
+<meta name="description" content="Accede a tu cuenta o crea una nueva.">
+<!-- Biblioteca de sanitización para prevenir XSS -->
+<script src="/js/sanitize.js"
+  integrity="sha384-7Bk0iO9tuoJAR3nX+iXbKFjdt6c3cvGGj65wbk7ZwZHxeLy/wY7CqoGqJkS3IdSZ"
+  crossorigin="anonymous"></script>
+<script src="/js/toast.js"></script>
+<link rel="stylesheet" href="/css/sv-theme.css">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--sans); background: var(--bg); color: var(--text);
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  position: relative; overflow: hidden;
+}
+.bg-glow {
+  position: fixed; pointer-events: none;
+  width: 700px; height: 700px;
+  background: radial-gradient(circle, rgba(124,108,250,0.12) 0%, transparent 70%);
+  top: 50%; left: 50%; transform: translate(-50%, -50%);
+}
+.bg-glow2 {
+  position: fixed; pointer-events: none;
+  width: 400px; height: 400px;
+  background: radial-gradient(circle, rgba(34,211,165,0.07) 0%, transparent 70%);
+  bottom: 0; right: 0;
+}
+
+/* Card */
+.card {
+  background: var(--surface); border: 1px solid var(--border2);
+  border-radius: 20px; width: 100%; max-width: 440px; padding: 40px;
+  position: relative; z-index: 1;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.5);
+
+}
+
+.card-logo { text-align: center; margin-bottom: 28px; }
+.logo-text {
+  font-family: var(--mono); font-size: 22px; font-weight: 700;
+  color: var(--accent2); letter-spacing: -0.5px; display: block; margin-bottom: 4px;
+  text-decoration: none;
+}
+.logo-text span { color: var(--muted); font-weight: 400; }
+.logo-sub { font-size: 13px; color: var(--muted); }
+
+/* Tabs */
+.tabs { display: flex; background: var(--surface2); border-radius: 10px; padding: 4px; margin-bottom: 28px; }
+.tab {
+  flex: 1; padding: 9px; border-radius: 8px; border: none; background: transparent;
+  font-size: 14px; font-weight: 600; color: var(--muted); cursor: pointer;
+  transition: all 0.2s; font-family: var(--sans);
+}
+.tab.active { background: var(--accent); color: #fff; box-shadow: 0 2px 12px rgba(124,108,250,.35); }
+
+/* Form */
+.form-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+.form-group label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; }
+.form-group input {
+  background: var(--surface2); border: 1px solid var(--border2); border-radius: 10px;
+  color: var(--text); padding: 12px 14px; font-size: 14px; font-family: var(--sans);
+  outline: none; transition: all 0.2s; width: 100%;
+}
+.form-group input:focus { border-color: var(--accent); background: rgba(124,108,250,0.04); box-shadow: 0 0 0 3px rgba(124,108,250,.12); }
+.form-group input::placeholder { color: var(--muted); }
+
+.btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; padding: 13px; border-radius: 10px; font-size: 15px;
+  font-weight: 600; cursor: pointer; border: none; transition: all 0.2s;
+  font-family: var(--sans); text-decoration: none;
+}
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent), var(--accent2)); color: white;
+  box-shadow: 0 4px 20px rgba(124,108,250,0.3);
+}
+.btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 8px 32px rgba(124,108,250,0.45); }
+.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.divider { display: flex; align-items: center; gap: 12px; margin: 20px 0; }
+.divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border2); }
+.divider span { font-size: 12px; color: var(--muted); }
+
+.link-btn {
+  background: none; border: none; color: var(--accent2); font-size: 13px;
+  cursor: pointer; font-family: var(--sans); text-decoration: none; padding: 0;
+  transition: color 0.15s;
+}
+.link-btn:hover {
+  color: var(--accent);
+}
+.forgot-row { display: flex; justify-content: flex-end; margin-top: -8px; margin-bottom: 16px; }
+
+/* Password field with reveal toggle */
+.pw-wrap { position: relative; }
+.pw-wrap input { padding-right: 42px; }
+.pw-reveal {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: var(--muted); display: flex; align-items: center;
+  transition: color 0.15s;
+}
+.pw-reveal:hover { color: var(--text); }
+
+/* Alert */
+.alert {
+  padding: 12px 14px; border-radius: 8px; font-size: 13px;
+  margin-bottom: 16px; display: none; align-items: center; gap: 8px;
+}
+.alert.error { background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.2); color: var(--red); display: flex; }
+.alert.success { background: rgba(34,211,165,0.1); border: 1px solid rgba(34,211,165,0.2); color: var(--green); display: flex; }
+.alert.hidden { display: none !important; }
+
+/* Spinner */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner {
+  width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: white; border-radius: 50%;
+  animation: spin 0.7s linear infinite; display: none;
+}
+.spinner.show { display: block; }
+
+/* Back link */
+.back-link {
+  position: fixed; top: 24px; left: 24px;
+  display: flex; align-items: center; gap: 6px;
+  color: var(--muted); text-decoration: none; font-size: 13px;
+  transition: color 0.2s; z-index: 10;
+}
+.back-link:hover { color: var(--text); }
+
+/* Password reveal: larger touch target */
+.pw-reveal {
+  padding: 8px;
+  right: 4px;
+  min-width: 40px; min-height: 40px;
+  justify-content: center;
+}
+.pw-wrap input { padding-right: 48px; }
+
+/* Forgot password: better touch target */
+.link-btn { padding: 8px 4px; min-height: 36px; display: inline-flex; align-items: center; }
+
+/* ── Mobile responsive ─────────────────────────────────────── */
+@media (max-width: 500px) {
+  body { align-items: flex-start; padding-top: 64px; overflow-y: auto; }
+  .card {
+    padding: 28px 20px;
+    border-radius: 16px;
+    margin: 0 12px 32px;
+  }
+  .back-link {
+    top: calc(16px + env(safe-area-inset-top, 0px));
+    left: calc(16px + env(safe-area-inset-left, 0px));
+  }
+  .form-group input { padding: 13px 14px; font-size: 15px; min-height: 48px; }
+  .btn { padding: 14px; min-height: 48px; font-size: 15px; }
+  .tab { padding: 10px; min-height: 44px; }
+}
+@media (max-width: 360px) {
+  body { padding-top: 56px; }
+  .card { padding: 24px 16px; margin: 0 8px 24px; }
+}
+</style>
+</head>
+<body>
+
+<a href="/" class="back-link">
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+  Volver al inicio
+</a>
+
+<div class="bg-glow"></div>
+<div class="bg-glow2"></div>
+
+<div class="card">
+  <div class="card-logo">
+    <a href="/" class="logo-text">Stream<span>Vault</span></a>
+    <span class="logo-sub">Plataforma de Video Streaming</span>
+  </div>
+
+  <div class="tabs" id="tabs-switcher">
+    <button class="tab active" id="tab-login" onclick="switchTab('login')">Iniciar sesión</button>
+    <button class="tab" id="tab-register" onclick="switchTab('register')">Crear cuenta</button>
+  </div>
+
+  <!-- ALERT -->
+  <div class="alert hidden" id="alert-msg"></div>
+
+  <!-- LOGIN FORM -->
+  <div id="form-login">
+    <div class="form-group">
+      <label for="login-email">Correo electrónico</label>
+      <input type="email" id="login-email" placeholder="tu@empresa.com" autocomplete="email">
+    </div>
+    <div class="form-group">
+      <label for="login-pass">Contraseña</label>
+      <div class="pw-wrap">
+        <input type="password" id="login-pass" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+        <button type="button" class="pw-reveal" aria-label="Mostrar contraseña" onclick="togglePw('login-pass',this)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:-4px;margin-bottom:16px;">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;">
+        <input type="checkbox" id="remember-me" style="
+          width:16px;height:16px;cursor:pointer;accent-color:var(--accent);
+          border-radius:4px;flex-shrink:0;">
+        <span style="font-size:13px;color:var(--muted);">Recordar sesión</span>
+      </label>
+      <button class="link-btn" onclick="switchTab('forgot')">¿Olvidaste tu contraseña?</button>
+    </div>
+    <button class="btn btn-primary" id="btn-login" onclick="doLogin()">
+      <div class="spinner" id="spin-login"></div>
+      <span id="btn-login-text">Iniciar sesión</span>
+    </button>
+  </div>
+
+  <!-- REGISTER FORM -->
+  <div id="form-register" style="display:none;">
+    <div class="form-group">
+      <label for="reg-name">Nombre completo</label>
+      <input type="text" id="reg-name" placeholder="Tu nombre" autocomplete="name">
+    </div>
+    <div class="form-group">
+      <label for="reg-email">Correo electrónico</label>
+      <input type="email" id="reg-email" placeholder="tu@empresa.com" autocomplete="email"
+        oninput="validateRegEmail(this)">
+      <div id="reg-email-hint" style="font-size:11px;margin-top:4px;min-height:14px;"></div>
+    </div>
+    <div class="form-group">
+      <label for="reg-pass">Contraseña</label>
+      <div class="pw-wrap">
+      <input type="password" id="reg-pass" placeholder="Mínimo 8 caracteres" autocomplete="new-password"
+        oninput="validateRegPass(this)" onkeydown="if(event.key==='Enter')doRegister()">
+      <button type="button" class="pw-reveal" aria-label="Mostrar contraseña" onclick="togglePw('reg-pass',this)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
+      </div>
+      <!-- Password strength bar -->
+      <div style="margin-top:6px;">
+        <div style="display:flex;gap:4px;margin-bottom:4px;">
+          <div id="str-bar-1" style="flex:1;height:3px;border-radius:2px;background:var(--border2);transition:background .2s;"></div>
+          <div id="str-bar-2" style="flex:1;height:3px;border-radius:2px;background:var(--border2);transition:background .2s;"></div>
+          <div id="str-bar-3" style="flex:1;height:3px;border-radius:2px;background:var(--border2);transition:background .2s;"></div>
+        </div>
+        <div id="reg-pass-hint" style="font-size:11px;min-height:14px;color:var(--muted);"></div>
+      </div>
+    </div>
+    <button class="btn btn-primary" id="btn-register" onclick="doRegister()">
+      <div class="spinner" id="spin-register"></div>
+      <span id="btn-register-text">Crear cuenta gratis</span>
+    </button>
+    <p style="font-size:12px;color:var(--muted);text-align:center;margin-top:16px;">
+      Al registrarte aceptas nuestros <a href="/terms" style="color:var(--accent2);">Términos de uso</a>
+    </p>
+  </div>
+
+  <!-- CHECK EMAIL PANEL (shown after register) -->
+  <div id="form-check-email" style="display:none; text-align:center;">
+    <div style="margin-bottom:16px;display:flex;justify-content:center;"><div style="width:64px;height:64px;border-radius:16px;background:rgba(124,108,250,0.12);border:1px solid rgba(124,108,250,0.2);display:flex;align-items:center;justify-content:center;"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--accent2)" stroke-width="1.6"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></div></div>
+    <h3 style="color:var(--text); margin-bottom:12px;">Revisa tu correo</h3>
+    <p style="color:var(--muted); font-size:14px; line-height:1.6; margin-bottom:20px;">
+      Te enviamos un enlace de verificación a <strong id="reg-email-display"></strong>.
+      Haz clic en él para activar tu cuenta.
+    </p>
+    <p style="color:var(--muted); font-size:13px; margin-bottom:20px;">
+      ¿No lo recibiste? Revisa la carpeta de spam.
+    </p>
+    <button class="btn btn-primary" onclick="switchTab('login')">
+      Volver al inicio de sesión
+    </button>
+  </div>
+
+  <!-- FORGOT PASSWORD FORM -->
+  <div id="form-forgot" style="display:none;">
+    <p style="font-size:14px;color:var(--muted);margin-bottom:20px;">Ingresa tu correo y te enviaremos un enlace para restablecer tu contraseña.</p>
+    <div class="form-group">
+      <label for="forgot-email">Correo electrónico</label>
+      <input type="email" id="forgot-email" placeholder="tu@empresa.com">
+    </div>
+    <button class="btn btn-primary" id="btn-forgot" onclick="doForgot()">
+      <div class="spinner" id="spin-forgot"></div>
+      <span id="btn-forgot-text">Enviar enlace</span>
+    </button>
+    <div class="divider"><span>o</span></div>
+    <button class="link-btn" style="display:block;text-align:center;width:100%;" onclick="switchTab('login')">Volver al inicio de sesión</button>
+  </div>
+</div>
+
+<script src="/js/app-login.js" defer></script>
+<script src="/js/cookie-banner.js"></script>
+</body>
+</html>

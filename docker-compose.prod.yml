@@ -1,0 +1,158 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Docker Compose — PRODUCCIÓN
+#
+# Diferencias vs docker-compose.yml (desarrollo):
+#   • Sin contenedores de Postgres ni Redis — usa servicios gestionados externos
+#   • Sin volúmenes de código fuente — imagen inmutable
+#   • S3 obligatorio para storage (DELETE_LOCAL_AFTER_S3=1)
+#   • Workers escalables sin compartir disco con la API
+#
+# REQUISITOS PREVIOS:
+#   • PostgreSQL gestionado (Neon, Supabase, RDS, etc.)
+#   • Redis gestionado (Upstash, ElastiCache, Railway, etc.)
+#   • Bucket S3 + distribución CloudFront configurada
+#   • Archivo .env con todas las variables (ver .env.production.template)
+#
+# USO:
+#   # Primera vez
+#   docker compose -f docker-compose.prod.yml up -d
+#
+#   # Escalar workers según la carga (100 uploads/min → 4-6 workers)
+#   docker compose -f docker-compose.prod.yml up -d --scale worker=3
+#
+#   # Deploy sin downtime (API)
+#   docker compose -f docker-compose.prod.yml build api
+#   docker compose -f docker-compose.prod.yml up -d --no-deps api
+#
+#   # Ver logs
+#   docker compose -f docker-compose.prod.yml logs -f api
+#   docker compose -f docker-compose.prod.yml logs -f worker
+# ─────────────────────────────────────────────────────────────────────────────
+
+x-common-env: &common-env
+  env_file: .env   # Carga DATABASE_URL, REDIS_URL, JWT_SECRET, S3_BUCKET, etc.
+  environment:
+    NODE_ENV: production
+    # S3 obligatorio en producción — sin disco compartido entre contenedores
+    DELETE_LOCAL_AFTER_S3: "1"
+
+x-resource-defaults: &resource-defaults
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "50m"
+      max-file: "5"
+
+services:
+
+  # ── API Server ──────────────────────────────────────────────────────────────
+  # Escala horizontalmente con: --scale api=N + load balancer delante
+  # En este compose, Nginx (externo) distribuye entre todas las réplicas.
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production   # usa la stage 'production' del Dockerfile multi-stage
+    image: streamvault-api:${IMAGE_TAG:-latest}
+    command: node server.js
+    <<: [*common-env, *resource-defaults]
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      # logs persistentes — sin volúmenes de video ni upload (van a S3)
+      - api_logs:/app/logs
+      # Directorio temporal de uploads — solo existe mientras se sube a S3
+      # En multi-servidor cada instancia tiene su propio /tmp, está bien.
+      - /tmp/sv-uploads:/app/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  # ── Worker (FFmpeg + Whisper) ────────────────────────────────────────────────
+  # Escala con: docker compose -f docker-compose.prod.yml up --scale worker=N
+  # Cada instancia consume jobs de Redis de forma independiente.
+  # No comparte disco con la API — lee fuente de S3, escribe resultado a S3.
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: streamvault-api:${IMAGE_TAG:-latest}
+    command: node worker.js
+    <<: [*common-env, *resource-defaults]
+    volumes:
+      - worker_logs:/app/logs
+      # Espacio temporal para transcode — FFmpeg necesita disco rápido
+      # Usar un volumen nombrado o un disco SSD local si el rendimiento importa
+      - worker_tmp:/tmp
+    healthcheck:
+      # Verifica que el worker puede conectarse a la DB (mismo check que usa el heartbeat interno)
+      test: ["CMD-SHELL", "node -e \"require('./db').ping().then(ok=>process.exit(ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+    deploy:
+      resources:
+        limits:
+          # FFmpeg en 4K puede usar 4+ cores — ajustar según el servidor
+          cpus: '4'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 512M
+
+volumes:
+  api_logs:
+    name: sv_prod_api_logs
+  worker_logs:
+    name: sv_prod_worker_logs
+  worker_tmp:
+    name: sv_prod_worker_tmp
+
+# ─────────────────────────────────────────────────────────────────────────────
+# REFERENCIA DE VARIABLES EN .env
+#
+# Obligatorias en producción:
+#   DATABASE_URL=postgres://user:pass@host:5432/dbname?sslmode=require
+#   REDIS_URL=rediss://default:token@host:6379          # rediss:// = TLS
+#   JWT_SECRET=<64 chars aleatorios>
+#   JWT_REFRESH_SECRET=<64 chars aleatorios distintos>
+#   S3_BUCKET=mi-bucket
+#   AWS_REGION=us-east-1
+#   CLOUDFRONT_BASE_URL=https://xxxxx.cloudfront.net
+#   APP_URL=https://tu-dominio.com
+#   ALLOWED_ORIGINS=https://tu-dominio.com
+#   SUPER_ADMIN_EMAIL=tu@email.com
+#
+# Workers — ajustar según CPUs del servidor worker:
+#   WORKER_CONCURRENCY=3        # jobs FFmpeg en paralelo por instancia
+#   TRANSCRIPTION_CONCURRENCY=2 # jobs Whisper en paralelo por instancia
+#
+# Opcional:
+#   CLOUDFRONT_DISTRIBUTION_ID=EXXXXXXXXXX # necesario para invalidar CDN al borrar videos
+#   CLOUDFRONT_BASE_URL=https://xxxxx.cloudfront.net  # si usas CloudFront como CDN
+#   DELETE_LOCAL_AFTER_S3=1          # ya incluido en este compose; borra disco local tras upload a S3
+#   TRUST_PROXY=1                    # necesario detrás de Nginx/ALB para leer IP real del cliente
+#   DB_POOL_MAX=10                   # conexiones PG por proceso (total = DB_POOL_MAX × api_instances)
+#   WORKER_CONCURRENCY=3             # jobs FFmpeg en paralelo por instancia de worker
+#   TRANSCRIPTION_CONCURRENCY=2      # jobs Whisper en paralelo
+#   QUEUE_ALERT_THRESHOLD=20         # alerta cuando hay más de N jobs esperando
+#   STRIPE_SECRET_KEY=sk_live_...
+#   STRIPE_WEBHOOK_SECRET=whsec_...
+#   SMTP_HOST=smtp.sendgrid.net
+#   RECAPTCHA_SITE_KEY=...
+#   RECAPTCHA_SECRET_KEY=...
+# ─────────────────────────────────────────────────────────────────────────────

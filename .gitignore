@@ -1,0 +1,41 @@
+# ── Dependencies ──────────────────────────────────────────────────────────────
+node_modules/
+
+# ── Environment & Secrets ─────────────────────────────────────────────────────
+.env
+.env.local
+.env.production
+.env.staging
+
+# ── Runtime data (media files — use S3 in production) ────────────────────────
+uploads/
+videos/
+logs/
+
+# ── SQLite artifact (migrated to PostgreSQL) ──────────────────────────────────
+data.db
+
+# ── OS & Editor ───────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── Backups ───────────────────────────────────────────────────────────────────
+backups/*.tar.gz
+backups/*.sql
+backups/*.dump
+
+# ── Archivos de backup de código (no deben commitearse) ───────────────────────
+*.bak
+*.bak2
+*.bak3
+*.orig
+*.backup
+
+# ── Base de datos SQLite local ────────────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3

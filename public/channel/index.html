@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Canal</title>
+<link rel="stylesheet" href="/css/sv-theme.css">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+/* ── Glows ── */
+.sv-bg-glow {
+  position: fixed; top: -300px; left: 50%; transform: translateX(-50%);
+  width: 1200px; height: 800px;
+  background: radial-gradient(ellipse 60% 50% at 50% 0%, rgba(124,108,250,.18) 0%, rgba(124,108,250,.05) 50%, transparent 80%);
+  pointer-events: none; z-index: 0;
+}
+.sv-bg-glow2 {
+  position: fixed; bottom: -200px; right: -200px;
+  width: 600px; height: 600px;
+  background: radial-gradient(circle, rgba(34,211,165,.05) 0%, transparent 70%);
+  pointer-events: none; z-index: 0;
+}
+
+body{font-family:var(--sans,'DM Sans',sans-serif);background:var(--bg,#0a0a0f);color:var(--text,#f0f0f8);min-height:100vh;display:flex;flex-direction:column;-webkit-font-smoothing:antialiased;}
+
+/* ── Error Page Design V2 (Card focused) ── */
+.error-main-v2 { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 70vh; padding: 40px 24px; position: relative; z-index: 1; }
+.error-card-v2 { 
+  background: #0f0f15; 
+  border: 1px solid rgba(255,255,255,0.06); 
+  border-radius: 40px; 
+  padding: 64px 48px; 
+  max-width: 580px; 
+  width: 100%; 
+  text-align: center; 
+  box-shadow: 0 40px 100px rgba(0,0,0,0.6);
+}
+.icon-box {
+  width: 72px; height: 72px; background: rgba(124,108,250,0.08); border: 1px solid rgba(124,108,250,0.15);
+  border-radius: 20px; display: flex; align-items: center; justify-content: center; margin: 0 auto 32px; color: var(--accent2);
+}
+.error-title-v2 { font-size: 2rem; font-weight: 700; color: #fff; margin-bottom: 16px; letter-spacing: -0.01em; }
+.error-desc-v2 { font-size: 16px; color: rgba(255,255,255,0.5); line-height: 1.6; margin-bottom: 40px; max-width: 400px; margin-left: auto; margin-right: auto; }
+.btn-v2 {
+  display: inline-flex; align-items: center; justify-content: center; 
+  background: #7c6cfa; color: #fff; padding: 14px 32px; border-radius: 14px;
+  font-weight: 600; font-size: 15px; text-decoration: none; transition: all 0.2s;
+  box-shadow: 0 8px 24px rgba(124,108,250,0.3);
+}
+.btn-v2:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(124,108,250,0.5); background: #6d5ce0; }
+
+/* Nav */
+.topbar{position:sticky;top:0;z-index:100;background:rgba(10,10,15,.94);backdrop-filter:blur(16px);border-bottom:1px solid var(--border,#1e1e2e);padding:0 40px;height:56px;display:flex;align-items:center;justify-content:space-between;}
+.brand{font-family:var(--mono);font-size:16px;font-weight:700;color:var(--accent2,#a78bfa);text-decoration:none;letter-spacing:-.5px;}
+.brand span{color:var(--muted,#7a7a9a);font-weight:400;}
+.nav-right{display:flex;gap:8px;align-items:center;}
+.nav-btn{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:10px;border:1px solid var(--border2,rgba(255,255,255,.12));background:var(--surface2,#1a1a24);color:var(--text,#f0f0f8);font-size:13px;font-weight:600;text-decoration:none;transition:border-color .14s,background .14s;font-family:var(--sans,'DM Sans',sans-serif);}
+.nav-btn:hover{border-color:var(--accent,#7c6cfa);background:rgba(124,108,250,.08);}
+.nav-btn.primary{background:var(--accent,#7c6cfa);border-color:var(--accent,#7c6cfa);color:#fff;}
+.nav-btn.primary:hover{background:#6a5be8;}
+
+/* Footer */
+.sv-footer{border-top:1px solid var(--border,#1e1e2e);padding:36px 48px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--muted,#666);margin-top:auto;}
+.sv-footer-logo{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--accent2,#a78bfa);text-decoration:none;}
+.sv-footer-logo span{color:var(--muted,#7a7a9a);font-weight:400;}
+.sv-footer-links{display:flex;gap:16px;flex-wrap:wrap;}
+.sv-footer-links a{color:var(--muted,#666);text-decoration:none;transition:color .14s;}
+.sv-footer-links a:hover{color:var(--text,#f0f0f8);}
+
+/* Channel hero */
+.channel-hero{background:linear-gradient(180deg,rgba(124,108,250,0.08) 0%,transparent 100%);border-bottom:1px solid var(--border,#1e1e2e);padding:40px 0 28px;}
+.channel-hero-inner{width:100%;padding:0 40px;display:flex;align-items:center;gap:24px;flex-wrap:wrap;}
+.channel-avatar{width:80px;height:80px;border-radius:18px;background:linear-gradient(135deg,var(--accent,#7c6cfa),#5b21b6);display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden;}
+.channel-avatar img{width:100%;height:100%;object-fit:cover;}
+.channel-info{flex:1;min-width:0;}
+.channel-name{font-size:1.8rem;font-weight:700;letter-spacing:-.03em;margin-bottom:6px;}
+.channel-meta{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--muted,#666);}
+.channel-meta span{display:flex;align-items:center;gap:5px;}
+.channel-actions{display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;}
+
+/* Unified toolbar with embedded search */
+.channel-toolbar{width:100%;padding:16px 40px 0;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+.channel-search{display:flex;gap:8px;align-items:center;background:var(--surface2,#1a1a24);border:1px solid var(--border2,#2a2a3e);border-radius:8px;padding:7px 12px;transition:border-color .14s,box-shadow .14s;min-width:180px;max-width:260px;}
+.channel-search svg{color:var(--muted,#666);flex-shrink:0;}
+.channel-search input{flex:1;background:none;border:none;color:var(--text,#f0f0f8);font-size:13px;font-family:var(--sans,'DM Sans',sans-serif);outline:none;min-width:0;}
+.channel-search input::placeholder{color:var(--muted,#666);}
+.channel-toolbar-left{display:flex;gap:8px;flex-wrap:wrap;}
+.filter-btn{padding:7px 16px;border-radius:20px;border:1px solid var(--border2,#2a2a3e);background:var(--surface2,#1a1a24);color:var(--muted,#666);font-size:12px;font-weight:600;cursor:pointer;transition:all .14s;font-family:var(--sans,'DM Sans',sans-serif);}
+.filter-btn:hover,.filter-btn.active{background:rgba(124,108,250,.12);border-color:var(--accent,#7c6cfa);color:var(--accent2,#a78bfa);}
+.sort-select{background:var(--surface2,#1a1a24);border:1px solid var(--border2,#2a2a3e);border-radius:8px;color:var(--text,#f0f0f8);padding:7px 32px 7px 12px;font-size:13px;font-family:var(--sans,'DM Sans',sans-serif);outline:none;cursor:pointer;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;transition:border-color .14s,box-shadow .14s;}
+.sort-select:focus{border-color:var(--accent,#7c6cfa);box-shadow:0 0 0 3px rgba(124,108,250,.12);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a78bfa' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");}
+.sort-select:hover{background-color:var(--surface3,#22222f);}
+.video-count-badge{font-size:12px;color:var(--muted,#666);font-family:var(--mono);}
+
+/* Video grid */
+.channel-grid-wrap{width:100%;padding:20px 40px 60px;flex:1;}
+.channel-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;}
+
+/* Video card */
+.vid-card{background:var(--surface,#13131a);border:1px solid var(--border,#1e1e2e);border-radius:12px;overflow:hidden;transition:transform .18s ease,box-shadow .18s,border-color .14s;text-decoration:none;display:block;color:var(--text,#f0f0f8);}
+.vid-card:hover{transform:translateY(-3px);box-shadow:0 12px 40px rgba(0,0,0,.4);border-color:var(--border2,#2a2a3e);}
+.vid-thumb{position:relative;aspect-ratio:16/9;background:var(--surface2,#1a1a24);overflow:hidden;}
+.vid-thumb img{width:100%;height:100%;object-fit:cover;transition:transform .3s;}
+.vid-card:hover .vid-thumb img{transform:scale(1.04);}
+.vid-duration{position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,.82);color:#fff;font-size:11px;font-weight:700;font-family:var(--mono);padding:2px 7px;border-radius:4px;}
+.vid-views{position:absolute;top:8px;left:8px;background:rgba(0,0,0,.7);color:#fff;font-size:10px;padding:2px 7px;border-radius:4px;display:flex;align-items:center;gap:3px;}
+.vid-play-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0);transition:background .2s;}
+.vid-card:hover .vid-play-overlay{background:rgba(0,0,0,.28);}
+.vid-play-circle{width:44px;height:44px;border-radius:50%;background:rgba(124,108,250,.9);display:flex;align-items:center;justify-content:center;opacity:0;transform:scale(.8);transition:opacity .18s,transform .18s;}
+.vid-card:hover .vid-play-circle{opacity:1;transform:scale(1);}
+.vid-body{padding:12px 14px 14px;}
+.vid-title{font-size:13px;font-weight:600;line-height:1.4;margin-bottom:6px;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.vid-meta{font-size:11px;color:var(--muted,#666);display:flex;gap:10px;flex-wrap:wrap;}
+.vid-meta span{display:flex;align-items:center;gap:3px;}
+.vid-visibility{font-size:10px;font-weight:700;padding:1px 6px;border-radius:99px;margin-top:6px;display:inline-block;}
+.vis-public{background:rgba(34,211,165,.12);color:var(--green,#22d3a5);border:1px solid rgba(34,211,165,.2);}
+.vis-private{background:rgba(248,113,113,.1);color:var(--red,#f87171);border:1px solid rgba(248,113,113,.2);}
+
+/* Skeleton */
+.skeleton-card{background:var(--surface,#13131a);border:1px solid var(--border,#1e1e2e);border-radius:12px;overflow:hidden;}
+.skeleton-thumb{aspect-ratio:16/9;background:var(--surface2,#1a1a24);animation:sk-pulse 1.2s ease-in-out infinite;}
+.skeleton-line{height:12px;border-radius:6px;background:var(--surface2,#1a1a24);animation:sk-pulse 1.2s ease-in-out infinite;}
+@keyframes sk-pulse{0%,100%{opacity:1}50%{opacity:.5}}
+
+/* Load more */
+.load-more-wrap{text-align:center;padding:24px 0;}
+.btn-load{padding:10px 28px;border-radius:10px;border:1px solid var(--border2,#2a2a3e);background:var(--surface,#13131a);color:var(--text,#f0f0f8);font-size:13px;font-weight:600;cursor:pointer;transition:all .14s;font-family:var(--sans,'DM Sans',sans-serif);}
+.btn-load:hover{border-color:var(--accent,#7c6cfa);background:rgba(124,108,250,.06);}
+
+@media(max-width:900px){
+  .topbar{padding:0 24px;}
+  .channel-hero-inner{padding:0 24px;}
+  .channel-toolbar{padding:12px 24px 0;}
+  .channel-grid-wrap{padding:16px 24px 48px;}
+}
+@media(max-width:600px){
+  .topbar{padding:0 16px;}
+  .channel-hero-inner{padding:0 16px;gap:16px;}
+  .channel-toolbar{padding:10px 16px 0;flex-wrap:wrap;}
+  .channel-toolbar-left{flex-wrap:wrap;gap:6px;}
+  .channel-search{max-width:100%;min-width:0;flex:1;}
+  .channel-grid-wrap{padding:16px 16px 48px;}
+  .channel-avatar{width:60px;height:60px;font-size:24px;}
+  .channel-name{font-size:1.3rem;}
+  .channel-grid{grid-template-columns:1fr 1fr;}
+  .sv-footer{padding:24px 20px;}
+  .filter-btn{padding:7px 12px;font-size:11px;}
+  .nav-btn{padding:7px 12px;font-size:12px;}
+}
+@media(max-width:400px){
+  .channel-grid{grid-template-columns:1fr;}
+  .channel-name{font-size:1.1rem;}
+}
+</style>
+</head>
+<body>
+<div class="sv-bg-glow"></div>
+<div class="sv-bg-glow2"></div>
+<nav class="topbar">
+  <a href="/" class="brand">Stream<span>Vault</span></a>
+  <div class="nav-right">
+    <a href="/dashboard" class="nav-btn" id="nav-dashboard" style="display:none;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg>
+      Dashboard
+    </a>
+    <a href="/login" class="nav-btn primary" id="nav-login" style="display:none;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      Iniciar sesión
+    </a>
+  </div>
+</nav>
+
+<div id="channel-hero" class="channel-hero" style="display:none;">
+  <div class="channel-hero-inner">
+    <div class="channel-avatar" id="ch-avatar">?</div>
+    <div class="channel-info">
+      <div class="channel-name" id="ch-name">—</div>
+      <div class="channel-meta">
+        <span id="ch-stat-videos">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/></svg>
+          — videos
+        </span>
+        <span id="ch-stat-views">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          — vistas
+        </span>
+        <span id="ch-plan-badge" style="display:none;"></span>
+      </div>
+    </div>
+    <div class="channel-actions">
+      <button onclick="copyChannelLink()" style="padding:9px 18px;border-radius:9px;border:1px solid var(--border2);background:var(--surface);color:var(--text);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:7px;font-family:var(--sans);transition:all .14s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+        Compartir canal
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="channel-toolbar" id="toolbar-wrap" style="display:none;">
+  <div class="channel-toolbar-left">
+    <div class="channel-search">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="search" id="search-input" placeholder="Buscar en este canal…" oninput="filterVideos()" aria-label="Buscar en este canal" autocomplete="off" data-form-type="other">
+    </div>
+    <button class="filter-btn active" data-filter="all" onclick="setFilter('all',this)">Todos</button>
+    <button class="filter-btn" data-filter="public" onclick="setFilter('public',this)">Públicos</button>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <span class="video-count-badge" id="count-badge"></span>
+    <select class="sort-select" onchange="setSortAndRender(this.value)">
+      <option value="recent">Más recientes</option>
+      <option value="views">Más vistos</option>
+      <option value="duration">Duración</option>
+      <option value="title">Título A–Z</option>
+    </select>
+  </div>
+</div>
+
+<div class="channel-grid-wrap">
+  <div id="grid" class="channel-grid">
+    <!-- Skeletons while loading -->
+    <div class="skeleton-card"><div class="skeleton-thumb"></div><div style="padding:12px 14px;"><div class="skeleton-line" style="width:90%;margin-bottom:8px;"></div><div class="skeleton-line" style="width:55%;height:10px;"></div></div></div>
+    <div class="skeleton-card"><div class="skeleton-thumb"></div><div style="padding:12px 14px;"><div class="skeleton-line" style="width:75%;margin-bottom:8px;"></div><div class="skeleton-line" style="width:45%;height:10px;"></div></div></div>
+    <div class="skeleton-card"><div class="skeleton-thumb"></div><div style="padding:12px 14px;"><div class="skeleton-line" style="width:85%;margin-bottom:8px;"></div><div class="skeleton-line" style="width:60%;height:10px;"></div></div></div>
+    <div class="skeleton-card"><div class="skeleton-thumb"></div><div style="padding:12px 14px;"><div class="skeleton-line" style="width:70%;margin-bottom:8px;"></div><div class="skeleton-line" style="width:50%;height:10px;"></div></div></div>
+    <div class="skeleton-card"><div class="skeleton-thumb"></div><div style="padding:12px 14px;"><div class="skeleton-line" style="width:92%;margin-bottom:8px;"></div><div class="skeleton-line" style="width:40%;height:10px;"></div></div></div>
+    <div class="skeleton-card"><div class="skeleton-thumb"></div><div style="padding:12px 14px;"><div class="skeleton-line" style="width:80%;margin-bottom:8px;"></div><div class="skeleton-line" style="width:65%;height:10px;"></div></div></div>
+    <div class="skeleton-card"><div class="skeleton-thumb"></div><div style="padding:12px 14px;"><div class="skeleton-line" style="width:65%;margin-bottom:8px;"></div><div class="skeleton-line" style="width:48%;height:10px;"></div></div></div>
+    <div class="skeleton-card"><div class="skeleton-thumb"></div><div style="padding:12px 14px;"><div class="skeleton-line" style="width:88%;margin-bottom:8px;"></div><div class="skeleton-line" style="width:55%;height:10px;"></div></div></div>
+  </div>
+  <div class="load-more-wrap" id="load-more-wrap" style="display:none;">
+    <button class="btn-load" id="load-more-btn" onclick="loadMore()">Cargar más videos</button>
+  </div>
+</div>
+
+<footer class="sv-footer">
+  <a href="/" class="sv-footer-logo">Stream<span>Vault</span></a>
+  <div class="sv-footer-links">
+    <a href="/privacy">Privacidad</a>
+    <a href="/terms">Términos</a>
+    <a href="/cookies">Cookies</a>
+    <a href="/gdpr">GDPR</a>
+    <a href="/status">Estado</a>
+    <a href="/api-docs">API</a>
+  </div>
+  <span id="ch-footer-year">© 2026 StreamVault</span>
+</footer>
+<script>fetch('/api/settings').then(r=>r.json()).then(s=>{const n=s.siteName||'StreamVault';window._svSiteName=n;document.getElementById('ch-footer-year').textContent='© '+new Date().getFullYear()+' '+n;}).catch(()=>{document.getElementById('ch-footer-year').textContent='© '+new Date().getFullYear()+' StreamVault';});</script>
+
+<div id="toast-el" style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--surface);border:1px solid var(--border2);border-radius:10px;padding:10px 18px;font-size:13px;font-weight:600;box-shadow:0 8px 32px rgba(0,0,0,.4);z-index:9999;opacity:0;transition:opacity .2s;pointer-events:none;"></div>
+
+<script>
+const BASE = location.origin;
+const _slugMatch = location.pathname.match(/\/c\/([^/?#]+)/);
+const channelSlug = _slugMatch ? _slugMatch[1] : null;
+
+let allVideos = [];
+let filteredVideos = [];
+let currentFilter = 'all';
+let currentSort = 'recent';
+let page = 0;
+const PER_PAGE = 24;
+let wsData = null;
+
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function fmtDur(s){if(!s||isNaN(s))return'';const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sec=Math.floor(s%60);if(h>0)return`${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;return`${m}:${String(sec).padStart(2,'0')}`;}
+function fmtViews(n){if(!n)return'0';if(n>=1e6)return(n/1e6).toFixed(1)+'M';if(n>=1e3)return(n/1e3).toFixed(1)+'K';return String(n);}
+function timeAgo(ts){const d=Date.now()/1000-ts;if(d<60)return'ahora';if(d<3600)return`hace ${Math.floor(d/60)}m`;if(d<86400)return`hace ${Math.floor(d/3600)}h`;if(d<2592000)return`hace ${Math.floor(d/86400)}d`;return`hace ${Math.floor(d/2592000)} mes${Math.floor(d/2592000)>1?'es':''}`;} 
+
+function toast(msg){const el=document.getElementById('toast-el');el.textContent=msg;el.style.opacity='1';clearTimeout(el._t);el._t=setTimeout(()=>el.style.opacity='0',2500);}
+
+function copyChannelLink(){navigator.clipboard.writeText(location.href).then(()=>toast('Link del canal copiado'));}
+
+function setFilter(f, btn){
+  currentFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  page = 0;
+  applyFiltersAndRender();
+}
+
+function setSortAndRender(s){currentSort=s;page=0;applyFiltersAndRender();}
+
+function filterVideos(){page=0;applyFiltersAndRender();}
+
+function applyFiltersAndRender(){
+  const q = (document.getElementById('search-input')?.value || '').trim().toLowerCase();
+  let list = [...allVideos];
+  
+  // Filter by visibility
+  if(currentFilter === 'public') list = list.filter(v => (v.visibility||'public') === 'public');
+  
+  // Search
+  if(q) list = list.filter(v => v.title.toLowerCase().includes(q) || (v.description||'').toLowerCase().includes(q));
+  
+  // Sort
+  if(currentSort === 'views') list.sort((a,b) => (b.views||0)-(a.views||0));
+  else if(currentSort === 'duration') list.sort((a,b) => (b.duration||0)-(a.duration||0));
+  else if(currentSort === 'title') list.sort((a,b) => a.title.localeCompare(b.title,'es'));
+  else list.sort((a,b) => (b.created_at||0)-(a.created_at||0));
+  
+  filteredVideos = list;
+  
+  const badge = document.getElementById('count-badge');
+  if(badge) badge.textContent = `${list.length} video${list.length!==1?'s':''}`;
+  
+  renderPage(true);
+}
+
+function renderPage(reset = false){
+  const grid = document.getElementById('grid');
+  const start = reset ? 0 : page * PER_PAGE;
+  const chunk = filteredVideos.slice(start, start + PER_PAGE);
+  
+  if(reset){
+    page = 0;
+    if(!filteredVideos.length){
+      grid.innerHTML = `<div class="state-center" style="grid-column:1/-1;"><div class="state-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></div><div class="state-title">Sin videos</div><p class="state-sub">No hay videos públicos que coincidan con tu búsqueda.</p></div>`;
+      document.getElementById('load-more-wrap').style.display = 'none';
+      return;
+    }
+    grid.innerHTML = chunk.map(videoCard).join('');
+  } else {
+    grid.insertAdjacentHTML('beforeend', chunk.map(videoCard).join(''));
+  }
+  
+  page++;
+  const hasMore = filteredVideos.length > page * PER_PAGE;
+  document.getElementById('load-more-wrap').style.display = hasMore ? 'block' : 'none';
+}
+
+function loadMore(){renderPage(false);}
+
+function videoCard(v){
+  const thumb = v.thumbnailUrl || `${BASE}/videos/${v.id}/thumb.jpg`;
+  const vis = v.visibility || 'public';
+  return `
+    <a href="${BASE}/watch/${esc(v.id)}" class="vid-card" target="_blank" rel="noopener">
+      <div class="vid-thumb">
+        <img src="${esc(thumb)}" alt="${esc(v.title)}" loading="lazy" onerror="this.parentElement.style.background='var(--surface2)'">
+        ${v.duration ? `<div class="vid-duration">${fmtDur(v.duration)}</div>` : ''}
+        <div class="vid-views">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          ${fmtViews(v.views)}
+        </div>
+        <div class="vid-play-overlay">
+          <div class="vid-play-circle">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="white" stroke="none"><polygon points="6 4 20 12 6 20 6 4"/></svg>
+          </div>
+        </div>
+      </div>
+      <div class="vid-body">
+        <div class="vid-title">${esc(v.title)}</div>
+        <div class="vid-meta">
+          ${v.duration ? `<span><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>${fmtDur(v.duration)}</span>` : ''}
+          <span>${timeAgo(v.created_at)}</span>
+          ${(v.qualities||[]).length ? `<span style="font-family:var(--mono);font-size:10px;color:var(--accent2);">${(v.qualities||[]).join(' · ')}</span>` : ''}
+        </div>
+      </div>
+    </a>`;
+}
+
+async function init(){
+  if(!channelSlug){
+    document.getElementById('grid').innerHTML = `
+      <div class="sv-error-container" style="grid-column:1/-1;">
+        <div class="sv-error-card">
+          <div class="sv-error-icon red">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </div>
+          <h2 class="sv-error-title">Canal inválido</h2>
+          <p class="sv-error-desc">La URL no contiene un identificador de canal válido o está incompleta.</p>
+          <div class="sv-error-actions">
+            <a href="/" class="btn btn-primary">Volver al inicio</a>
+          </div>
+        </div>
+      </div>`;
+    return;
+  }
+
+  try {
+    // Load workspace by slug
+    const r = await fetch(`${BASE}/api/workspaces/by-slug/${encodeURIComponent(channelSlug)}`);
+    if(!r.ok){
+      document.getElementById('grid').innerHTML = `
+        <div class="error-main-v2" style="grid-column:1/-1;">
+          <div class="error-card-v2" id="err-card">
+            <div class="icon-box">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            </div>
+            <h1 class="error-title-v2">Canal no encontrado</h1>
+            <p class="error-desc-v2">El canal <strong>@${esc(channelSlug)}</strong> no existe, ha sido desactivado o se ha movido permanentemente.</p>
+            <a href="/" class="btn-v2">Explorar ${window._svSiteName||'StreamVault'}</a>
+          </div>
+        </div>`;
+      if (window.gsap) {
+        gsap.from("#err-card", { y: 40, opacity: 0, duration: 1, ease: "power4.out" });
+        gsap.from(".icon-box", { scale: 0.5, opacity: 0, duration: 0.8, delay: 0.2, ease: "back.out(1.7)" });
+      }
+      return;
+    }
+    wsData = await r.json();
+    
+    // Update page title & OG
+    document.title = `${wsData.name} — ${window._svSiteName||'StreamVault'}`;
+    
+    // Update hero
+    document.getElementById('ch-name').textContent = wsData.name;
+    
+    // Avatar: show photo if available, else first two letters of workspace name
+    const avatarEl = document.getElementById('ch-avatar');
+    if (wsData.avatarUrl) {
+      avatarEl.innerHTML = `<img src="${esc(wsData.avatarUrl)}" alt="${esc(wsData.name)}">`;
+    } else {
+      const initials = wsData.name.slice(0,2).toUpperCase();
+      avatarEl.textContent = initials;
+    }
+
+    // Plan badge
+    if(wsData.plan && wsData.plan !== 'starter'){
+      const badge = document.getElementById('ch-plan-badge');
+      badge.style.display = 'inline-flex';
+      badge.style.cssText += ';padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;';
+      badge.style.background = wsData.plan === 'pro' ? 'rgba(124,108,250,.15)' : 'rgba(34,211,165,.12)';
+      badge.style.color = wsData.plan === 'pro' ? 'var(--accent2)' : 'var(--green)';
+      badge.textContent = wsData.plan.toUpperCase();
+    }
+    
+    document.getElementById('channel-hero').style.display = '';
+    document.getElementById('toolbar-wrap').style.display = '';
+
+    // Load public videos
+    const vr = await fetch(`${BASE}/api/workspaces/${wsData.id}/public-videos?limit=200`);
+    if(!vr.ok) throw new Error('Failed to load videos');
+    const data = await vr.json();
+    allVideos = (data.videos || []).filter(v => v.status === 'ready' && (v.visibility || 'public') === 'public');
+    
+    // Stats
+    const totalViews = allVideos.reduce((s,v) => s+(v.views||0), 0);
+    document.getElementById('ch-stat-videos').innerHTML = `
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/></svg>
+      ${allVideos.length} video${allVideos.length!==1?'s':''}`;
+    document.getElementById('ch-stat-views').innerHTML = `
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+      ${fmtViews(totalViews)} vistas totales`;
+
+    applyFiltersAndRender();
+
+  } catch(e){
+    document.getElementById('grid').innerHTML = `
+      <div class="error-main-v2" style="grid-column:1/-1;">
+        <div class="error-card-v2" id="err-card-gen">
+          <div class="icon-box">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2" ry="2"/></svg>
+          </div>
+          <h1 class="error-title-v2">Error al cargar</h1>
+          <p class="error-desc-v2">Hubo un problema al intentar conectar con los servidores. Por favor, reintenta.</p>
+          <a href="javascript:location.reload()" class="btn-v2">Reintentar conexión</a>
+        </div>
+      </div>`;
+    if (window.gsap) {
+      gsap.from("#err-card-gen", { y: 40, opacity: 0, duration: 1, ease: "power4.out" });
+    }
+  }
+}
+
+init();
+
+// Auth-aware nav
+(function(){
+  const token = localStorage.getItem('sv_access_token') || localStorage.getItem('sv_token');
+  document.getElementById('nav-dashboard').style.display = token ? '' : 'none';
+  document.getElementById('nav-login').style.display = token ? 'none' : '';
+})();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<script src="/js/cookie-banner.js"></script>
+</body>
+</html>

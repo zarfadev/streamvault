@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Playlist Embed</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html,body{width:100%;height:100%;background:#000;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#f0f0f8;overflow:hidden;}
+
+.layout{display:flex;flex-direction:row;width:100%;height:100%;}
+.player-col{flex:1;min-width:0;position:relative;background:#000;}
+.player-col iframe{width:100%;height:100%;border:none;display:block;}
+
+.sidebar{width:220px;flex-shrink:0;background:#0f0f18;border-left:1px solid #1e1e2e;display:flex;flex-direction:column;overflow:hidden;}
+.sidebar-header{padding:10px 12px 8px;border-bottom:1px solid #1e1e2e;flex-shrink:0;}
+.sidebar-title{font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#f0f0f8;}
+.sidebar-meta{font-size:10px;color:#666;margin-top:2px;}
+.pl-list{overflow-y:auto;flex:1;}
+.pl-list::-webkit-scrollbar{width:4px;}
+.pl-list::-webkit-scrollbar-track{background:#0f0f18;}
+.pl-list::-webkit-scrollbar-thumb{background:#2a2a3e;border-radius:2px;}
+
+.pl-item{display:flex;align-items:center;gap:7px;padding:7px 10px;cursor:pointer;transition:background .1s;border-left:2px solid transparent;}
+.pl-item:hover{background:rgba(255,255,255,.05);}
+.pl-item.active{background:rgba(124,108,250,.12);border-left-color:#7c6cfa;}
+.pl-item-num{font-size:10px;color:#555;width:16px;text-align:center;flex-shrink:0;font-family:monospace;}
+.pl-item-thumb{width:52px;height:29px;object-fit:cover;border-radius:3px;background:#1a1a2e;flex-shrink:0;}
+.pl-item-body{flex:1;min-width:0;}
+.pl-item-title{font-size:11px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#f0f0f8;}
+.pl-item-dur{font-size:10px;color:#555;margin-top:1px;}
+
+.error-state{display:flex;align-items:center;justify-content:center;height:100%;color:#666;font-size:13px;text-align:center;padding:20px;}
+
+/* Stacked layout for small embeds */
+@media(max-width:480px){
+  .layout{flex-direction:column;}
+  .sidebar{width:100%;height:160px;border-left:none;border-top:1px solid #1e1e2e;}
+  .pl-list{display:flex;flex-direction:row;overflow-x:auto;overflow-y:hidden;}
+  .pl-item{flex-direction:column;align-items:flex-start;min-width:100px;flex-shrink:0;padding:6px 8px;gap:4px;}
+  .pl-item-thumb{width:100%;height:54px;}
+  .pl-item-num{display:none;}
+}
+</style>
+</head>
+<body>
+<div class="layout" id="layout">
+  <div class="player-col" id="player-col">
+    <div class="error-state" id="loading-state">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite;margin-right:8px;"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+    </div>
+  </div>
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-title" id="pl-title">…</div>
+      <div class="sidebar-meta" id="pl-meta"></div>
+    </div>
+    <div class="pl-list" id="pl-list"></div>
+  </div>
+</div>
+<style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+<script>
+const BASE = location.origin;
+// Robust extraction: handles trailing slashes and any subpaths
+const _plMatch = location.pathname.match(/\/embed\/playlist\/([^/?#]+)/);
+const playlistId = _plMatch ? _plMatch[1] : null;
+const params = new URLSearchParams(location.search);
+const accentHex = params.get('color');
+
+if (accentHex) {
+  const hex = accentHex.startsWith('#') ? accentHex : '#' + accentHex;
+  document.documentElement.style.setProperty('--accent', hex);
+  document.querySelector('style').textContent += `.pl-item.active{border-left-color:${hex} !important;background:rgba(124,108,250,.12) !important;}`;
+}
+
+let videos = [];
+let currentIdx = 0;
+
+function fmtDur(secs) {
+  if (!secs) return '';
+  const h = Math.floor(secs/3600), m = Math.floor((secs%3600)/60), s = Math.floor(secs%60);
+  if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  return `${m}:${String(s).padStart(2,'0')}`;
+}
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+async function init() {
+  if (!playlistId) {
+    document.getElementById('loading-state').textContent = 'ID de playlist inválido';
+    return;
+  }
+  try {
+    const r = await fetch(`${BASE}/api/playlists/${playlistId}/embed`);
+    if (!r.ok) {
+      document.getElementById('loading-state').textContent = 'Playlist no disponible';
+      document.getElementById('sidebar').style.display = 'none';
+      return;
+    }
+    const data = await r.json();
+    document.getElementById('pl-title').textContent = data.title;
+    videos = data.videos || [];
+    document.getElementById('pl-meta').textContent = `${videos.length} video${videos.length !== 1 ? 's' : ''}`;
+    if (!videos.length) {
+      document.getElementById('loading-state').textContent = 'Sin videos en esta playlist';
+      return;
+    }
+    renderList();
+    playVideo(0);
+  } catch {
+    document.getElementById('loading-state').textContent = 'Error de conexión';
+  }
+}
+
+function renderList() {
+  const qs = accentHex ? `?color=${encodeURIComponent(accentHex)}` : '';
+  document.getElementById('pl-list').innerHTML = videos.map((v, i) => `
+    <div class="pl-item${i === 0 ? ' active' : ''}" id="pi-${i}" onclick="playVideo(${i})">
+      <span class="pl-item-num">${i === 0 ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><polygon points="5 3 19 12 5 21 5 3"/></svg>' : i + 1}</span>
+      <img class="pl-item-thumb" src="${BASE}/videos/${esc(v.id)}/thumb.jpg" alt="" loading="lazy" onerror="this.style.opacity='.2'">
+      <div class="pl-item-body">
+        <div class="pl-item-title" title="${esc(v.title)}">${esc(v.title)}</div>
+        ${v.duration ? `<div class="pl-item-dur">${fmtDur(v.duration)}</div>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+function playVideo(idx) {
+  if (idx < 0 || idx >= videos.length) return;
+  currentIdx = idx;
+  const v = videos[idx];
+  const qs = accentHex ? `&color=${encodeURIComponent(accentHex)}` : '';
+  const playerCol = document.getElementById('player-col');
+  playerCol.innerHTML = `<iframe src="${BASE}/embed/${esc(v.id)}?autoplay=1${qs}" allow="autoplay; fullscreen; picture-in-picture"></iframe>`;
+
+  // Update list state
+  document.querySelectorAll('.pl-item').forEach((el, i) => {
+    el.classList.toggle('active', i === idx);
+    const num = el.querySelector('.pl-item-num');
+    if (num) num.innerHTML = i === idx ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><polygon points="5 3 19 12 5 21 5 3"/></svg>' : String(i + 1);
+  });
+  document.getElementById(`pi-${idx}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// Auto-advance: when the embed iframe fires sv:ended, play the next video.
+window.addEventListener('message', (e) => {
+  if (e.data?.type === 'sv:ended') playVideo(currentIdx + 1);
+});
+
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Playlist</title>
+<link rel="stylesheet" href="/css/sv-theme.css">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+body{font-family:var(--sans,'DM Sans',sans-serif);background:var(--bg,#0a0a0f);color:var(--text,#f0f0f8);min-height:100vh;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column;}
+
+/* ── Topbar ── */
+.topbar{position:sticky;top:0;z-index:100;background:rgba(10,10,15,.94);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--border,#1e1e2e);padding:0 40px;height:56px;display:flex;align-items:center;justify-content:space-between;gap:16px;}
+.brand{font-family:var(--mono);font-size:16px;font-weight:700;color:var(--accent2,#a78bfa);text-decoration:none;letter-spacing:-.5px;}
+.brand span{color:var(--muted,#7a7a9a);font-weight:400;}
+.nav-right{display:flex;align-items:center;gap:8px;}
+.nav-btn{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:10px;border:1px solid var(--border2,#2a2a3e);background:var(--surface2,#1a1a24);color:var(--text,#f0f0f8);font-size:13px;font-weight:600;cursor:pointer;text-decoration:none;transition:border-color .14s,background .14s;font-family:var(--sans,'DM Sans',sans-serif);}
+.nav-btn:hover{border-color:var(--accent,#7c6cfa);background:rgba(124,108,250,.08);}
+.nav-btn.primary{background:var(--accent,#7c6cfa);border-color:var(--accent,#7c6cfa);color:#fff;}
+.nav-btn.primary:hover{background:#6a5be8;}
+
+/* ── Layout ── */
+.pl-page{width:100%;padding:24px 40px 48px;flex:1;}
+.pl-layout{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:28px;align-items:start;}
+@media(max-width:960px){.pl-layout{grid-template-columns:1fr;}}
+
+/* ── Player column ── */
+.pl-player-col{display:flex;flex-direction:column;gap:16px;min-width:0;}
+
+/* Player shell */
+.pl-player-shell{border-radius:14px;overflow:hidden;box-shadow:0 8px 48px rgba(0,0,0,.7);background:#000;position:relative;}
+.pl-iframe-wrap{position:relative;width:100%;padding-top:56.25%;background:#000;}
+.pl-iframe-wrap iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:none;display:block;}
+
+/* Loading state inside player */
+.player-loading-state{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:#0a0a0f;color:var(--muted,#666);}
+.player-loading-state p{font-size:13px;}
+
+/* Video info below player */
+.pl-video-info{padding:20px 0 0;}
+.pl-video-title{font-size:1.2rem;font-weight:700;margin-bottom:8px;line-height:1.35;color:var(--text,#f0f0f8);}
+.pl-video-meta{font-size:13px;color:var(--muted,#666);display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:20px;}
+.pl-video-meta span{display:flex;align-items:center;gap:5px;}
+
+/* Navigation buttons */
+.pl-nav-row{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;justify-items:start;gap:10px;}
+.pl-nav-btn{display:inline-flex;align-items:center;gap:6px;padding:10px 20px;border-radius:10px;border:1px solid var(--border2,#2a2a3e);background:var(--surface2,#1a1a24);color:var(--text,#f0f0f8);font-size:13px;font-weight:600;cursor:pointer;transition:border-color .14s,background .14s,transform .1s;font-family:var(--sans,'DM Sans',sans-serif);}
+.pl-nav-btn:hover:not(:disabled){border-color:var(--accent,#7c6cfa);background:rgba(124,108,250,.1);transform:translateY(-1px);}
+.pl-nav-btn:active:not(:disabled){transform:translateY(0);}
+.pl-nav-btn:disabled{opacity:.28;cursor:not-allowed;}
+.pl-nav-btn.accent{background:linear-gradient(135deg,var(--accent,#7c6cfa),var(--accent2,#a78bfa));border-color:transparent;color:#fff;box-shadow:0 4px 16px rgba(124,108,250,.35);}
+.pl-nav-btn.accent:hover:not(:disabled){box-shadow:0 6px 24px rgba(124,108,250,.5);}
+.pl-nav-counter{justify-self:center;font-size:13px;color:var(--muted,#666);font-family:var(--mono);background:var(--surface,#13131a);border:1px solid var(--border,#1e1e2e);padding:7px 16px;border-radius:8px;letter-spacing:.5px;}
+
+/* Autoplay toggle */
+.autoplay-row{display:flex;align-items:center;gap:12px;padding:14px 16px;background:var(--surface,#13131a);border:1px solid var(--border,#1e1e2e);border-radius:10px;margin-top:14px;}
+.autoplay-label{font-size:13px;color:var(--muted,#666);flex:1;}
+.autoplay-label strong{color:var(--text,#f0f0f8);}
+.toggle-switch{position:relative;width:40px;height:22px;flex-shrink:0;}
+.toggle-switch input{opacity:0;width:0;height:0;}
+.toggle-track{position:absolute;inset:0;background:var(--surface2,#1a1a24);border:1px solid var(--border2,#2a2a3e);border-radius:11px;cursor:pointer;transition:background .2s,border-color .2s;}
+.toggle-switch input:checked + .toggle-track{background:var(--accent,#7c6cfa);border-color:var(--accent,#7c6cfa);}
+.toggle-track::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;background:#fff;border-radius:50%;transition:transform .2s;box-shadow:0 1px 4px rgba(0,0,0,.3);}
+.toggle-switch input:checked + .toggle-track::after{transform:translateX(18px);}
+
+/* Playlist progress bar */
+.pl-progress-bar{height:3px;background:var(--surface2,#1a1a24);border-radius:2px;overflow:hidden;margin-top:14px;}
+.pl-progress-fill{height:100%;background:linear-gradient(90deg,var(--accent,#7c6cfa),var(--accent2,#a78bfa));border-radius:2px;transition:width .4s ease;}
+
+/* ── Sidebar ── */
+.pl-sidebar{display:flex;flex-direction:column;background:var(--surface,#13131a);border:1px solid var(--border,#1e1e2e);border-radius:14px;overflow:hidden;max-height:calc(100vh - 80px);position:sticky;top:72px;}
+.pl-sidebar-header{padding:18px 18px 14px;border-bottom:1px solid var(--border,#1e1e2e);flex-shrink:0;}
+.pl-sidebar-badge{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--accent2,#a78bfa);background:rgba(167,139,250,.1);border:1px solid rgba(167,139,250,.2);padding:3px 8px;border-radius:5px;margin-bottom:8px;}
+.pl-sidebar-title{font-size:15px;font-weight:700;margin-bottom:4px;color:var(--text,#f0f0f8);line-height:1.3;}
+.pl-sidebar-meta{font-size:12px;color:var(--muted,#666);display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.pl-sidebar-meta span{display:flex;align-items:center;gap:4px;}
+
+/* Search inside playlist */
+.pl-search{padding:10px 14px;border-bottom:1px solid var(--border,#1e1e2e);flex-shrink:0;}
+.pl-search-input{width:100%;background:var(--surface2,#1a1a24);border:1px solid var(--border2,#2a2a3e);border-radius:8px;padding:8px 12px 8px 32px;font-size:13px;color:var(--text,#f0f0f8);font-family:var(--sans,'DM Sans',sans-serif);outline:none;transition:border-color .14s,box-shadow .14s;}
+.pl-search-input:focus{border-color:var(--accent,#7c6cfa);box-shadow:0 0 0 3px rgba(124,108,250,.12);}
+.pl-search-input::placeholder{color:var(--muted,#666);}
+.pl-search-wrap{position:relative;}
+.pl-search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted,#666);pointer-events:none;}
+
+.pl-list{overflow-y:auto;flex:1;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.1) transparent;}
+.pl-list::-webkit-scrollbar{width:4px;}
+.pl-list::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:2px;}
+
+/* Playlist items */
+.pl-item{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;transition:background .12s;border-left:3px solid transparent;position:relative;}
+.pl-item:hover{background:rgba(255,255,255,.04);}
+.pl-item.active{background:rgba(124,108,250,.1);border-left-color:var(--accent,#7c6cfa);}
+.pl-item-num{font-size:11px;color:var(--muted,#666);width:22px;text-align:center;flex-shrink:0;font-family:var(--mono);}
+.pl-item.active .pl-item-num{color:var(--accent2,#a78bfa);}
+
+.pl-item-thumb-wrap{position:relative;width:80px;min-width:80px;height:45px;flex-shrink:0;border-radius:6px;overflow:hidden;background:var(--surface2,#1a1a24);}
+.pl-item-thumb{width:100%;height:100%;object-fit:cover;display:block;transition:transform .2s;}
+.pl-item:hover .pl-item-thumb{transform:scale(1.05);}
+.pl-item-thumb-dur{position:absolute;bottom:3px;right:3px;background:rgba(0,0,0,.85);color:#fff;font-size:9px;font-weight:700;font-family:var(--mono);padding:1px 4px;border-radius:3px;}
+.pl-item-playing{position:absolute;inset:0;background:rgba(124,108,250,.3);display:flex;align-items:center;justify-content:center;}
+.pl-item-playing svg{filter:drop-shadow(0 0 4px rgba(124,108,250,.8));}
+
+.pl-item-body{flex:1;min-width:0;}
+.pl-item-title{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px;color:var(--text,#f0f0f8);line-height:1.3;}
+.pl-item.active .pl-item-title{color:var(--accent2,#a78bfa);font-weight:600;}
+.pl-item-meta{font-size:11px;color:var(--muted,#666);display:flex;align-items:center;gap:6px;}
+
+/* States */
+.empty{display:flex;flex-direction:column;align-items:center;text-align:center;padding:40px 20px;gap:10px;color:var(--muted,#666);font-size:13px;}
+.empty-ico{width:52px;height:52px;border-radius:14px;background:rgba(124,108,250,.1);border:1px solid rgba(124,108,250,.18);display:flex;align-items:center;justify-content:center;color:var(--accent2,#a78bfa);}
+.empty-ico svg{width:24px;height:24px;}
+.empty p{margin:0;line-height:1.5;}
+.spinner-wrap{display:flex;align-items:center;justify-content:center;padding:60px;color:var(--muted,#666);}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+
+/* Footer */
+.sv-footer{border-top:1px solid var(--border,#1e1e2e);padding:36px 48px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--muted,#666);margin-top:auto;flex-shrink:0;}
+.sv-footer-logo{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--accent2,#a78bfa);text-decoration:none;}
+.sv-footer-logo span{color:var(--muted,#7a7a9a);font-weight:400;}
+.sv-footer-links{display:flex;gap:16px;flex-wrap:wrap;}
+.sv-footer-links a{color:var(--muted,#666);text-decoration:none;transition:color .14s;}
+.sv-footer-links a:hover{color:var(--text,#f0f0f8);}
+
+/* Hidden items (search filter) */
+.pl-item.hidden{display:none;}
+
+@media(max-width:600px){
+  .topbar{padding:0 16px;}
+  .pl-page{padding:12px 12px 48px;}
+  .pl-sidebar{max-height:380px;position:static;border-radius:10px;}
+  .pl-player-shell{border-radius:10px;}
+  .pl-nav-row{flex-wrap:wrap;}
+  .sv-footer{padding:24px 20px;}
+}
+</style>
+<script>window._svSiteName='StreamVault';fetch('/api/settings').then(r=>r.json()).then(s=>{if(s.siteName){window._svSiteName=s.siteName;document.querySelectorAll('[data-brand-name]').forEach(el=>el.textContent=s.siteName);}}).catch(()=>{});</script>
+</head>
+<body>
+
+<!-- Topbar -->
+<nav class="topbar">
+  <a href="/" class="brand">Stream<span>Vault</span></a>
+  <div class="nav-right">
+    <a href="javascript:history.back()" class="nav-btn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+      Volver
+    </a>
+    <a href="/dashboard" class="nav-btn" id="nav-dashboard" style="display:none;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      Dashboard
+    </a>
+    <a href="/login" class="nav-btn primary" id="nav-login" style="display:none;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      Iniciar sesión
+    </a>
+  </div>
+</nav>
+
+<div class="pl-page">
+  <div class="pl-layout">
+    <!-- Player column -->
+    <div class="pl-player-col">
+      <div class="pl-player-shell">
+        <div class="pl-iframe-wrap" id="player-wrap">
+          <div class="player-loading-state" id="player-loading">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="animation:spin 1s linear infinite;opacity:.5;"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+            <p>Cargando playlist…</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Progress bar -->
+      <div class="pl-progress-bar" id="pl-progress-bar" style="display:none;">
+        <div class="pl-progress-fill" id="pl-progress-fill" style="width:0%"></div>
+      </div>
+
+      <div class="pl-video-info" id="video-info" style="display:none;">
+        <div class="pl-video-title" id="video-title">—</div>
+        <div class="pl-video-meta">
+          <span id="video-pos">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <span id="video-pos-text"></span>
+          </span>
+          <span id="video-dur-wrap" style="display:none;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span id="video-dur"></span>
+          </span>
+        </div>
+
+        <!-- Prev / Next navigation -->
+        <div class="pl-nav-row">
+          <button class="pl-nav-btn" id="btn-prev" onclick="playPrev()" disabled>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+            Anterior
+          </button>
+          <span class="pl-nav-counter" id="nav-counter">— / —</span>
+          <button class="pl-nav-btn accent" id="btn-next" onclick="playNext()" disabled style="justify-self:end;">
+            Siguiente
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </div>
+
+        <!-- Autoplay toggle -->
+        <div class="autoplay-row">
+          <div class="autoplay-label">
+            <strong>Reproducción automática</strong> — pasar al siguiente video al terminar
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="autoplay-toggle" checked>
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="pl-sidebar">
+      <div class="pl-sidebar-header">
+        <div class="pl-sidebar-badge">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          Playlist
+        </div>
+        <div class="pl-sidebar-title" id="pl-title">Cargando…</div>
+        <div class="pl-sidebar-meta">
+          <span id="pl-meta-count">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            —
+          </span>
+          <span id="pl-meta-dur" style="display:none;">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span id="pl-total-dur"></span>
+          </span>
+        </div>
+      </div>
+
+      <!-- Search -->
+      <div class="pl-search" id="pl-search-wrap" style="display:none;">
+        <div class="pl-search-wrap">
+          <svg class="pl-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input class="pl-search-input" type="text" id="pl-search" placeholder="Buscar en la playlist…" oninput="filterList(this.value)" aria-label="Buscar en la playlist" autocomplete="off" data-form-type="other">
+        </div>
+      </div>
+
+      <div class="pl-list" id="pl-list">
+        <div class="spinner-wrap">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite;opacity:.5;"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer class="sv-footer">
+  <a href="/" class="sv-footer-logo">Stream<span>Vault</span></a>
+  <div class="sv-footer-links">
+    <a href="/privacy">Privacidad</a>
+    <a href="/terms">Términos</a>
+    <a href="/cookies">Cookies</a>
+    <a href="/gdpr">GDPR</a>
+    <a href="/status">Estado</a>
+    <a href="/api-docs">API</a>
+  </div>
+  <span id="pl-footer-year">© 2026 StreamVault</span>
+</footer>
+<script>document.getElementById('pl-footer-year').textContent='© '+new Date().getFullYear()+' '+(window._svSiteName||'StreamVault');</script>
+
+<script>
+const BASE = location.origin;
+const playlistId = location.pathname.split('/playlist/')[1]?.split('/')[0];
+let videos = [];
+let currentIdx = 0;
+let autoplayEnabled = true;
+
+// Auth-aware nav
+const _token = localStorage.getItem('sv_access_token') || localStorage.getItem('sv_token');
+if (_token) document.getElementById('nav-dashboard').style.display = 'flex';
+else document.getElementById('nav-login').style.display = 'flex';
+
+// Autoplay toggle
+const autoplayToggle = document.getElementById('autoplay-toggle');
+autoplayToggle.addEventListener('change', () => {
+  autoplayEnabled = autoplayToggle.checked;
+});
+
+// Listen for video end from iframe (postMessage)
+window.addEventListener('message', (e) => {
+  if (e.data && e.data.type === 'sv:ended') {
+    if (autoplayEnabled && currentIdx < videos.length - 1) {
+      setTimeout(() => playNext(), 800);
+    }
+  }
+});
+
+function fmtDur(secs) {
+  if (!secs || isNaN(secs)) return '';
+  const h = Math.floor(secs/3600), m = Math.floor((secs%3600)/60), s = Math.floor(secs%60);
+  if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  return `${m}:${String(s).padStart(2,'0')}`;
+}
+function fmtTotalDur(secs) {
+  if (!secs) return '';
+  const h = Math.floor(secs/3600), m = Math.floor((secs%3600)/60);
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m} min`;
+}
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function updateNavButtons() {
+  const prevBtn = document.getElementById('btn-prev');
+  const nextBtn = document.getElementById('btn-next');
+  const counter = document.getElementById('nav-counter');
+  if (prevBtn) prevBtn.disabled = currentIdx <= 0;
+  if (nextBtn) nextBtn.disabled = currentIdx >= videos.length - 1;
+  if (counter) counter.textContent = videos.length ? `${currentIdx + 1} / ${videos.length}` : '— / —';
+
+  // Progress bar
+  const fill = document.getElementById('pl-progress-fill');
+  if (fill && videos.length > 1) {
+    fill.style.width = `${((currentIdx) / (videos.length - 1)) * 100}%`;
+  }
+}
+
+function playPrev() {
+  if (currentIdx > 0) playVideo(currentIdx - 1);
+}
+
+function playNext() {
+  if (currentIdx < videos.length - 1) playVideo(currentIdx + 1);
+}
+
+function filterList(query) {
+  const q = query.toLowerCase().trim();
+  document.querySelectorAll('.pl-item').forEach(el => {
+    const title = el.querySelector('.pl-item-title')?.textContent.toLowerCase() || '';
+    el.classList.toggle('hidden', q.length > 0 && !title.includes(q));
+  });
+}
+
+async function loadPlaylist() {
+  if (!playlistId) {
+    document.getElementById('pl-title').textContent = 'ID de playlist inválido';
+    return;
+  }
+  try {
+    const r = await fetch(`${BASE}/api/playlists/${playlistId}/embed`);
+    if (!r.ok) {
+      document.getElementById('pl-title').textContent = 'Playlist no encontrada';
+      document.getElementById('pl-list').innerHTML = `<div class="empty"><div class="empty-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div><p>Esta playlist no existe o es privada.</p></div>`;
+      document.getElementById('player-loading').innerHTML = '<p style="color:var(--muted,#666);padding:20px;text-align:center;font-size:13px;">Sin contenido</p>';
+      return;
+    }
+    const data = await r.json();
+    document.title = data.title + ' — ' + (window._svSiteName || 'StreamVault');
+    document.getElementById('pl-title').textContent = data.title;
+    videos = data.videos || [];
+
+    // Count & total duration
+    const totalSecs = videos.reduce((acc, v) => acc + (v.duration || 0), 0);
+    document.getElementById('pl-meta-count').innerHTML = `
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      ${videos.length} video${videos.length !== 1 ? 's' : ''}
+    `;
+    if (totalSecs > 0) {
+      document.getElementById('pl-total-dur').textContent = fmtTotalDur(totalSecs);
+      document.getElementById('pl-meta-dur').style.display = 'flex';
+    }
+
+    if (!videos.length) {
+      document.getElementById('pl-list').innerHTML = `<div class="empty"><div class="empty-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div><p>Esta playlist no tiene videos aún.</p></div>`;
+      document.getElementById('player-loading').innerHTML = '<p style="color:var(--muted,#666);padding:20px;text-align:center;font-size:13px;">Sin videos</p>';
+      return;
+    }
+
+    // Show search if enough videos
+    if (videos.length >= 6) {
+      document.getElementById('pl-search-wrap').style.display = 'block';
+    }
+
+    renderList();
+    playVideo(0);
+
+    // Show progress bar
+    document.getElementById('pl-progress-bar').style.display = 'block';
+
+  } catch (e) {
+    document.getElementById('pl-title').textContent = 'Error cargando playlist';
+    document.getElementById('pl-list').innerHTML = `<div class="empty"><div class="empty-ico" style="background:rgba(248,113,113,.1);border-color:rgba(248,113,113,.2);color:var(--red,#f87171);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div><p>Error de conexión. Intenta de nuevo.</p></div>`;
+  }
+}
+
+function renderList() {
+  const list = document.getElementById('pl-list');
+  list.innerHTML = videos.map((v, i) => `
+    <div class="pl-item${i === currentIdx ? ' active' : ''}" id="pl-item-${i}" onclick="playVideo(${i})">
+      <span class="pl-item-num">${i === currentIdx ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><polygon points="5 3 19 12 5 21 5 3"/></svg>' : i + 1}</span>
+      <div class="pl-item-thumb-wrap">
+        <img class="pl-item-thumb" src="/videos/${esc(v.id)}/thumb.jpg" alt="" loading="lazy" onerror="this.style.opacity='.15'">
+        ${v.duration ? `<span class="pl-item-thumb-dur">${fmtDur(v.duration)}</span>` : ''}
+        ${i === currentIdx ? `<div class="pl-item-playing"><svg width="16" height="16" viewBox="0 0 24 24" fill="white" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>` : ''}
+      </div>
+      <div class="pl-item-body">
+        <div class="pl-item-title" title="${esc(v.title)}">${esc(v.title)}</div>
+        <div class="pl-item-meta">
+          ${v.duration ? `<span>${fmtDur(v.duration)}</span>` : ''}
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function playVideo(idx) {
+  if (idx < 0 || idx >= videos.length) return;
+  currentIdx = idx;
+  const v = videos[idx];
+
+  // Update iframe — use /player/ (our OTT player)
+  const wrap = document.getElementById('player-wrap');
+  wrap.innerHTML = `<iframe src="${BASE}/player/${esc(v.id)}?autoplay=1" allow="autoplay; fullscreen; picture-in-picture; encrypted-media" style="position:absolute;top:0;left:0;width:100%;height:100%;border:none;display:block;"></iframe>`;
+
+  // Update info
+  const infoEl = document.getElementById('video-info');
+  infoEl.style.display = 'block';
+  document.getElementById('video-title').textContent = v.title;
+  document.getElementById('video-pos-text').textContent = `${idx + 1} de ${videos.length}`;
+
+  if (v.duration) {
+    document.getElementById('video-dur').textContent = fmtDur(v.duration);
+    document.getElementById('video-dur-wrap').style.display = 'flex';
+  } else {
+    document.getElementById('video-dur-wrap').style.display = 'none';
+  }
+
+  // Update nav buttons
+  updateNavButtons();
+
+  // Update list highlight
+  document.querySelectorAll('.pl-item').forEach((el, i) => {
+    el.classList.toggle('active', i === idx);
+    const numEl = el.querySelector('.pl-item-num');
+    const playingEl = el.querySelector('.pl-item-playing');
+    if (numEl) numEl.innerHTML = i === idx ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><polygon points="5 3 19 12 5 21 5 3"/></svg>' : i + 1;
+    if (i === idx && !playingEl) {
+      const thumbWrap = el.querySelector('.pl-item-thumb-wrap');
+      if (thumbWrap) {
+        const div = document.createElement('div');
+        div.className = 'pl-item-playing';
+        div.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="white" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+        thumbWrap.appendChild(div);
+      }
+    } else if (i !== idx && playingEl) {
+      playingEl.remove();
+    }
+  });
+
+  // Scroll item into view
+  document.getElementById(`pl-item-${idx}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  // Update page title
+  document.title = `${v.title} · ${document.getElementById('pl-title').textContent} — ${window._svSiteName || 'StreamVault'}`;
+}
+
+loadPlaylist();
+</script>
+<script src="/js/cookie-banner.js"></script>
+</body>
+</html>

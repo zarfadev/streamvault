@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" class="sv-sprite-host" style="position:absolute;width:0;height:0;overflow:hidden;clip-path:inset(50%)">
+  <defs>
+    <symbol id="sv-play-fill" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M9 6.75v10.5c0 .62.67 1.01 1.21.72l8.58-5.25a.86.86 0 0 0 0-1.44L10.21 6.03A.86.86 0 0 0 9 6.75z"/>
+    </symbol>
+    <symbol id="sv-pause-fill" viewBox="0 0 24 24">
+      <path fill="currentColor" d="M8 5.25c0-.41.34-.75.75-.75h2.5c.41 0 .75.34.75.75v13.5c0 .41-.34.75-.75.75h-2.5a.75.75 0 0 1-.75-.75V5.25zm8 0c0-.41.34-.75.75-.75h2.5c.41 0 .75.34.75.75v13.5c0 .41-.34.75-.75.75h-2.5a.75.75 0 0 1-.75-.75V5.25z"/>
+    </symbol>
+    <!-- Prime-style: anillo + flecha curva + 10 (retroceder) -->
+    <symbol id="sv-skip-back-48" viewBox="0 0 48 48" fill="none">
+      <circle cx="24" cy="24" r="15.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"
+        stroke-dasharray="72 34" transform="rotate(48 24 24)"/>
+      <path fill="currentColor" stroke="none" d="M33.5 14.5l-1.2 5.8-4.8-3.2z"/>
+      <text x="24" y="25.5" text-anchor="middle" dominant-baseline="central" fill="currentColor" font-family="system-ui,-apple-system,BlinkMacSystemFont,sans-serif" font-size="11.5" font-weight="700">10</text>
+    </symbol>
+    <!-- Prime-style adelantar (anillo espejo + flecha) -->
+    <symbol id="sv-skip-fwd-48" viewBox="0 0 48 48" fill="none">
+      <circle cx="24" cy="24" r="15.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"
+        stroke-dasharray="72 34" transform="rotate(-132 24 24)"/>
+      <path fill="currentColor" stroke="none" d="M14.5 14.5l1.2 5.8 4.8-3.2z"/>
+      <text x="24" y="25.5" text-anchor="middle" dominant-baseline="central" fill="currentColor" font-family="system-ui,-apple-system,BlinkMacSystemFont,sans-serif" font-size="11.5" font-weight="700">10</text>
+    </symbol>
+    <symbol id="sv-skip-back" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round"
+        stroke-dasharray="38 18" transform="rotate(48 12 12)"/>
+      <path fill="currentColor" d="M16.8 5.8l-.7 3.2-2.6-1.8z"/>
+      <text x="12" y="12.5" text-anchor="middle" dominant-baseline="central" fill="currentColor" font-size="6.25" font-weight="700" font-family="system-ui,sans-serif">10</text>
+    </symbol>
+    <symbol id="sv-skip-fwd" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round"
+        stroke-dasharray="38 18" transform="rotate(-132 12 12)"/>
+      <path fill="currentColor" d="M7.2 5.8l.7 3.2 2.6-1.8z"/>
+      <text x="12" y="12.5" text-anchor="middle" dominant-baseline="central" fill="currentColor" font-size="6.25" font-weight="700" font-family="system-ui,sans-serif">10</text>
+    </symbol>
+    <symbol id="sv-volume" viewBox="0 0 24 24" fill="none">
+      <path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M11 5 6 9H3v6h3l5 4V5z"/>
+      <path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M15.5 8.5a5 5 0 0 1 0 7M18 6a8.5 8.5 0 0 1 0 12"/>
+    </symbol>
+    <symbol id="sv-volume-mute" viewBox="0 0 24 24" fill="none">
+      <path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M11 5 6 9H3v6h3l5 4V5z"/>
+      <path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="m17 9 6 6M23 9l-6 6"/>
+    </symbol>
+    <symbol id="sv-fs-enter" viewBox="0 0 24 24" fill="none">
+      <path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M15 3h6v6M9 21H3v-6M21 9v6h-6M3 15V9h6"/>
+      <path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M21 3 14 10M3 21l7-7"/>
+    </symbol>
+    <symbol id="sv-fs-exit" viewBox="0 0 24 24" fill="none">
+      <path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" d="M4 14h6v6M20 10h-6V4"/>
+      <path stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M14 10 21 3M3 21l7-7"/>
+    </symbol>
+    <symbol id="sv-chevron-left" viewBox="0 0 24 24" fill="none">
+      <path stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m14 6-6 6 6 6"/>
+    </symbol>
+    <symbol id="sv-check" viewBox="0 0 24 24" fill="none">
+      <path stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="M20 6 9 17l-5-5"/>
+    </symbol>
+  </defs>
+</svg>

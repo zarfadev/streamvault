@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reproductor</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+
+:root{
+  --bg:#0a0a0f;
+  --surface:#111118;
+  --surface2:#1a1a24;
+  --surface3:#22222f;
+  --surface4:#2d2d3e;
+  --border:rgba(255,255,255,.07);
+  --border2:rgba(255,255,255,.12);
+  --text:#f0f0f8;
+  --text2:#c0c0d4;
+  --muted:#9191a8;
+  --accent:#7c6cfa;
+  --accent2:#a78bfa;
+  --green:#22d3a5;
+  --red:#f87171;
+  --amber:#fbbf24;
+  --mono:var(--sans,'DM Sans',sans-serif);
+  --sans:'DM Sans',system-ui,sans-serif;
+  --radius:10px;
+  --radius-sm:6px;
+  --radius-lg:12px;
+  --ease:cubic-bezier(0.22,1,0.36,1);
+}
+
+/* ── Glows ── */
+.sv-bg-glow {
+  position: fixed; top: -300px; left: 50%; transform: translateX(-50%);
+  width: 1200px; height: 800px;
+  background: radial-gradient(ellipse 60% 50% at 50% 0%, rgba(124,108,250,.18) 0%, rgba(124,108,250,.05) 50%, transparent 80%);
+  pointer-events: none; z-index: 0;
+}
+.sv-bg-glow2 {
+  position: fixed; bottom: -200px; right: -200px;
+  width: 600px; height: 600px;
+  background: radial-gradient(circle, rgba(34,211,165,.05) 0%, transparent 70%);
+  pointer-events: none; z-index: 0;
+}
+
+body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;-webkit-font-smoothing:antialiased;}
+
+/* ── Nav ── */
+.topbar{position:sticky;top:0;z-index:100;background:rgba(10,10,15,.94);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:0 40px;height:56px;display:flex;align-items:center;justify-content:space-between;gap:16px;}
+.brand{font-family:var(--mono);font-size:16px;font-weight:700;color:var(--accent2);text-decoration:none;letter-spacing:-.5px;flex-shrink:0;}
+.brand span{color:var(--muted);font-weight:400;}
+.nav-right{display:flex;align-items:center;gap:8px;}
+.nav-btn{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:10px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-size:13px;font-weight:600;cursor:pointer;text-decoration:none;transition:border-color .14s,background .14s;font-family:var(--sans);}
+.nav-btn:hover{border-color:var(--accent);background:rgba(124,108,250,.08);}
+.nav-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+.nav-btn.primary:hover{background:#6a5be8;}
+
+/* ── Footer ── */
+.sv-footer{border-top:1px solid var(--border);padding:36px 48px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--muted);margin-top:auto;}
+.sv-footer-logo{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--accent2);text-decoration:none;}
+.sv-footer-logo span{color:var(--muted);font-weight:400;}
+.sv-footer-links{display:flex;gap:16px;flex-wrap:wrap;}
+.sv-footer-links a{color:var(--muted);text-decoration:none;transition:color .14s;}
+.sv-footer-links a:hover{color:var(--text);}
+
+/* ── Page wrapper ── */
+.page{width:100%;padding:28px 40px 48px;flex:1;}
+
+/* ── Two-column watch layout ── */
+.watch-grid{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:28px;align-items:start;}
+@media(max-width:1100px){.watch-grid{grid-template-columns:minmax(0,1fr) 320px;gap:20px;}}
+@media(max-width:960px){.watch-grid{grid-template-columns:1fr;}}
+
+/* ── Player ── */
+.player-shell{border-radius:14px;overflow:hidden;box-shadow:0 2px 0 0 rgba(255,255,255,.06),0 24px 80px rgba(0,0,0,.75);}
+.player-wrap{position:relative;width:100%;background:#000;padding-top:56.25%;}
+.player-wrap iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:none;display:block;opacity:0;transition:opacity .25s ease;}
+.player-wrap iframe.loaded{opacity:1;}
+
+/* ── Video info ── */
+.video-info{padding:18px 0 0;}
+.video-title{font-size:1.22rem;font-weight:700;line-height:1.35;color:var(--text);margin-bottom:10px;}
+.video-meta{display:flex;align-items:center;flex-wrap:wrap;gap:10px 16px;font-size:12.5px;color:var(--muted);margin-bottom:16px;}
+.video-meta span{display:flex;align-items:center;gap:5px;}
+.quality-pill{display:inline-block;padding:2px 7px;background:rgba(124,108,250,.12);color:var(--accent2);border-radius:4px;font-size:10px;font-family:var(--mono);font-weight:700;border:1px solid rgba(124,108,250,.18);}
+.vis-badge{padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;letter-spacing:.4px;}
+.vis-private{background:rgba(248,113,113,.1);color:var(--red);border:1px solid rgba(248,113,113,.2);}
+.vis-password{background:rgba(251,191,36,.1);color:var(--amber);border:1px solid rgba(251,191,36,.2);}
+
+/* ── Action buttons ── */
+.action-row{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;}
+.action-btn{display:inline-flex;align-items:center;gap:7px;padding:9px 16px;border-radius:9px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-size:13px;font-weight:600;cursor:pointer;transition:border-color .14s,background .14s,transform .12s;font-family:var(--sans);text-decoration:none;white-space:nowrap;}
+.action-btn:hover{border-color:var(--accent);background:rgba(124,108,250,.08);transform:translateY(-1px);}
+.action-btn.download{background:rgba(34,211,165,.08);border-color:rgba(34,211,165,.22);color:var(--green);}
+.action-btn.download:hover{background:rgba(34,211,165,.16);border-color:var(--green);}
+.action-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+.action-btn.primary:hover{background:#6a5be8;transform:translateY(-1px);}
+
+/* ── Description ── */
+.desc-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;}
+.desc-label{font-size:11px;font-weight:600;color:var(--muted);margin-bottom:8px;letter-spacing:.3px;}
+.desc-text{font-size:13.5px;color:var(--text2);line-height:1.72;white-space:pre-line;max-height:110px;overflow:hidden;transition:max-height .35s var(--ease);}
+.desc-text.expanded{max-height:9999px;}
+.desc-toggle{background:none;border:none;color:var(--accent2);font-size:12px;cursor:pointer;margin-top:8px;padding:0;font-family:var(--sans);font-weight:600;}
+.desc-toggle:hover{color:var(--accent);}
+
+/* ── Sidebar ── */
+.sidebar-label{font-size:12px;font-weight:600;color:var(--muted);margin-bottom:14px;display:flex;align-items:center;gap:8px;letter-spacing:.1px;}
+.sidebar-label::after{content:'';flex:1;height:1px;background:var(--border);}
+
+/* ── Related videos ── */
+.related-list{display:flex;flex-direction:column;gap:6px;}
+.related-card{display:flex;gap:10px;border-radius:10px;padding:8px;transition:background .14s;text-decoration:none;color:var(--text);cursor:pointer;}
+.related-card:hover{background:var(--surface2);}
+.related-thumb{width:118px;min-width:118px;height:66px;border-radius:7px;background:var(--surface3);overflow:hidden;position:relative;flex-shrink:0;}
+.related-thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+.related-dur{position:absolute;bottom:4px;right:4px;background:rgba(0,0,0,.85);color:#fff;font-size:10px;font-weight:700;font-family:var(--mono);padding:2px 5px;border-radius:3px;}
+.related-body{flex:1;min-width:0;padding-top:2px;}
+.related-title{font-size:13px;font-weight:600;line-height:1.4;margin-bottom:4px;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;color:var(--text);}
+.related-meta{font-size:11px;color:var(--muted);}
+.related-empty{font-size:13px;color:var(--muted);padding:12px 8px;opacity:.7;}
+
+/* ── Player link card ── */
+.player-link-card{margin-top:16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;}
+.player-link-label{font-size:11px;font-weight:600;color:var(--muted);margin-bottom:10px;letter-spacing:.3px;}
+.player-link-url{display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border2);border-radius:7px;padding:9px 12px;font-family:var(--mono);font-size:11px;color:var(--text2);overflow:hidden;}
+.player-link-text{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.player-link-copy{flex-shrink:0;background:var(--surface3);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-size:11px;font-weight:600;padding:4px 10px;cursor:pointer;font-family:var(--sans);transition:all .14s;}
+.player-link-copy:hover{border-color:var(--accent);color:var(--accent);}
+
+/* ── Quality thumbnail placeholder ── */
+.thumb-placeholder{width:100%;height:100%;display:flex;align-items:center;justify-content:center;}
+.thumb-placeholder svg{opacity:.2;}
+
+/* ── Sidebar sticky ── */
+.sidebar{position:sticky;top:76px;max-height:calc(100vh - 96px);overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.1) transparent;}
+.sidebar::-webkit-scrollbar{width:4px;}
+.sidebar::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:2px;}
+
+/* ── Password gate input ── */
+#pw-input{transition:border-color .14s,box-shadow .14s !important;}
+#pw-input:focus{border-color:var(--accent) !important;box-shadow:0 0 0 3px rgba(124,108,250,.15) !important;}
+
+/* ── Skeleton ── */
+@keyframes sk-pulse{0%,100%{opacity:1}50%{opacity:.45}}
+.sk{background:var(--surface2);border-radius:6px;animation:sk-pulse 1.4s ease-in-out infinite;}
+
+/* ── Toast ── */
+/* ── Error Page Design V2 (Card focused) ── */
+.error-main-v2 { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 70vh; padding: 40px 24px; position: relative; z-index: 1; }
+.error-card-v2 {
+  background: var(--surface);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 40px;
+  padding: 64px 48px;
+  max-width: 580px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 40px 100px rgba(0,0,0,0.6);
+}
+.icon-box {
+  width: 72px; height: 72px; background: rgba(124,108,250,0.08); border: 1px solid rgba(124,108,250,0.15);
+  border-radius: 20px; display: flex; align-items: center; justify-content: center; margin: 0 auto 32px; color: var(--accent2);
+}
+.error-title-v2 { font-size: 2rem; font-weight: 700; color: var(--text); margin-bottom: 16px; letter-spacing: -0.01em; }
+.error-desc-v2 { font-size: 16px; color: var(--muted); line-height: 1.6; margin-bottom: 40px; max-width: 400px; margin-left: auto; margin-right: auto; }
+.btn-v2 {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--accent); color: #fff; padding: 14px 32px; border-radius: 14px;
+  font-weight: 600; font-size: 15px; text-decoration: none; transition: all 0.2s;
+  box-shadow: 0 8px 24px rgba(124,108,250,0.3);
+}
+.btn-v2:hover { transform: translateY(-2px); box-shadow: 0 12px 32px rgba(124,108,250,0.5); background: #6a5be8; }
+
+#share-toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:var(--surface);border:1px solid var(--border2);border-radius:10px;padding:10px 20px;font-size:13px;font-weight:600;box-shadow:0 8px 40px rgba(0,0,0,.5);z-index:9999;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap;}
+
+@media(max-width:960px){
+  .page{padding:20px 24px 48px;}
+  .topbar{padding:0 24px;}
+}
+@media(max-width:600px){
+  .topbar{padding:0 16px;}
+  .sv-footer{padding:24px 20px;}
+  .page{padding:0 0 48px;}
+  .watch-grid{gap:0;}
+  .player-shell{border-radius:0;}
+  .player-wrap{border-radius:0;}
+  .video-info{padding:16px 16px 0;}
+  .action-row{padding:0 16px 16px;}
+  .desc-card{margin:0 16px 16px;border-radius:10px;}
+  .sidebar{padding:0 16px;position:static;max-height:none;top:auto;}
+  .video-title{font-size:1.05rem;}
+  .action-btn{padding:10px 14px;font-size:12.5px;min-height:44px;}
+}
+</style>
+</head>
+<body>
+
+<div class="sv-bg-glow"></div>
+<div class="sv-bg-glow2"></div>
+
+<nav class="topbar">
+  <a href="/" class="brand">Stream<span>Vault</span></a>
+  <div class="nav-right">
+    <a href="/dashboard" class="nav-btn" id="nav-dashboard" style="display:none;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+      Dashboard
+    </a>
+    <a href="/login" class="nav-btn primary" id="nav-login" style="display:none;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      Iniciar sesión
+    </a>
+  </div>
+</nav>
+
+<div class="page" id="page">
+  <!-- Skeleton -->
+  <div class="watch-grid" id="skeleton">
+    <div>
+      <div class="sk" style="aspect-ratio:16/9;border-radius:14px;"></div>
+      <div style="padding:18px 0 0;">
+        <div class="sk" style="height:22px;width:75%;margin-bottom:12px;border-radius:6px;"></div>
+        <div class="sk" style="height:13px;width:45%;margin-bottom:18px;border-radius:5px;"></div>
+        <div style="display:flex;gap:8px;margin-bottom:18px;">
+          <div class="sk" style="height:38px;width:110px;border-radius:9px;"></div>
+          <div class="sk" style="height:38px;width:110px;border-radius:9px;"></div>
+          <div class="sk" style="height:38px;width:90px;border-radius:9px;"></div>
+        </div>
+      </div>
+    </div>
+    <div style="padding-top:4px;">
+      <div class="sk" style="height:13px;width:55%;margin-bottom:16px;border-radius:5px;"></div>
+      <div style="display:flex;gap:10px;padding:8px;margin-bottom:4px;"><div class="sk" style="width:118px;height:66px;border-radius:7px;flex-shrink:0;"></div><div style="flex:1;"><div class="sk" style="height:13px;width:90%;margin-bottom:7px;border-radius:4px;"></div><div class="sk" style="height:11px;width:55%;border-radius:4px;"></div></div></div>
+      <div style="display:flex;gap:10px;padding:8px;margin-bottom:4px;"><div class="sk" style="width:118px;height:66px;border-radius:7px;flex-shrink:0;"></div><div style="flex:1;"><div class="sk" style="height:13px;width:90%;margin-bottom:7px;border-radius:4px;"></div><div class="sk" style="height:11px;width:55%;border-radius:4px;"></div></div></div>
+      <div style="display:flex;gap:10px;padding:8px;margin-bottom:4px;"><div class="sk" style="width:118px;height:66px;border-radius:7px;flex-shrink:0;"></div><div style="flex:1;"><div class="sk" style="height:13px;width:80%;margin-bottom:7px;border-radius:4px;"></div><div class="sk" style="height:11px;width:45%;border-radius:4px;"></div></div></div>
+      <div style="display:flex;gap:10px;padding:8px;margin-bottom:4px;"><div class="sk" style="width:118px;height:66px;border-radius:7px;flex-shrink:0;"></div><div style="flex:1;"><div class="sk" style="height:13px;width:95%;margin-bottom:7px;border-radius:4px;"></div><div class="sk" style="height:11px;width:60%;border-radius:4px;"></div></div></div>
+      <div style="display:flex;gap:10px;padding:8px;margin-bottom:4px;"><div class="sk" style="width:118px;height:66px;border-radius:7px;flex-shrink:0;"></div><div style="flex:1;"><div class="sk" style="height:13px;width:75%;margin-bottom:7px;border-radius:4px;"></div><div class="sk" style="height:11px;width:50%;border-radius:4px;"></div></div></div>
+    </div>
+  </div>
+</div>
+
+<footer class="sv-footer">
+  <a href="/" class="sv-footer-logo">Stream<span>Vault</span></a>
+  <div class="sv-footer-links">
+    <a href="/privacy">Privacidad</a>
+    <a href="/terms">Términos</a>
+    <a href="/cookies">Cookies</a>
+    <a href="/gdpr">GDPR</a>
+    <a href="/status">Estado</a>
+    <a href="/api-docs">API</a>
+  </div>
+  <span id="footer-year">© 2026 StreamVault</span>
+</footer>
+<script>
+fetch('/api/settings').then(r=>r.json()).then(s=>{
+  const n=s.siteName||'StreamVault';
+  window._svSiteName=n;
+  document.getElementById('footer-year').textContent='© '+new Date().getFullYear()+' '+n;
+}).catch(()=>{document.getElementById('footer-year').textContent='© '+new Date().getFullYear()+' StreamVault';});
+</script>
+
+<div id="share-toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<script src="/js/app-watch.js" defer></script>
+<script src="/js/cookie-banner.js"></script>
+</body>
+</html>
