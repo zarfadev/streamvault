@@ -68,7 +68,7 @@
       _c.clear && _c.clear();
       const elapsed = performance.now() - t0;
       // Getter fired OR console took suspiciously long (>10 ms)
-      if (detected || elapsed > 10) return true;
+      if (detected || elapsed > 100) return true;
     }
 
     // Method 2: window size delta as secondary signal only
