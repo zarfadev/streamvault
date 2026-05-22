@@ -98,6 +98,7 @@ function downloadWithYtDlp(url, destDir, onProgress) {
       '--sleep-requests', '1',
       '--sleep-interval', '2',
       '--max-sleep-interval', '5',
+      '--js-runtimes', 'nodejs',
       ...(hasCookies ? ['--cookies', cookiesFile] : []),
       url,
     ];
