@@ -1,7 +1,7 @@
 # ── Stage base: sistema operativo + FFmpeg ────────────────────────────────────
-FROM node:20-alpine AS base
+FROM node:20-slim AS base
 
-RUN apk add --no-cache \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     python3 \
     make \
@@ -9,13 +9,13 @@ RUN apk add --no-cache \
     wget \
     curl \
     unzip \
-    gcompat \
-    libstdc++ && \
-    DENO_VER=$(curl -s https://api.github.com/repos/denoland/deno/releases/latest | python3 -c "import sys,json; print(json.load(sys.stdin)['tag_name'][1:])") && \
-    curl -fsSL "https://github.com/denoland/deno/releases/download/v${DENO_VER}/deno-x86_64-unknown-linux-gnu.zip" -o /tmp/deno.zip && \
-    unzip /tmp/deno.zip -d /usr/local/bin && \
-    rm /tmp/deno.zip && \
-    deno --version
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && DENO_VER=$(curl -s https://api.github.com/repos/denoland/deno/releases/latest | python3 -c "import sys,json; print(json.load(sys.stdin)['tag_name'][1:])") \
+    && curl -fsSL "https://github.com/denoland/deno/releases/download/v${DENO_VER}/deno-x86_64-unknown-linux-gnu.zip" -o /tmp/deno.zip \
+    && unzip /tmp/deno.zip -d /usr/local/bin \
+    && rm /tmp/deno.zip \
+    && deno --version
 
 WORKDIR /app
 
@@ -54,7 +54,7 @@ EXPOSE 3000
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
     CMD wget -qO- http://localhost:3000/api/health || exit 1
 
-# Run as non-root for security — node user is built into node:alpine
+# Run as non-root for security — node user is built into node:slim
 USER node
 
 CMD ["node", "server.js"]
