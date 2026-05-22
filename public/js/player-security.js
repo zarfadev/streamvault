@@ -125,10 +125,14 @@
            /^172\.(1[6-9]|2\d|3[01])\./.test(h);
   })();
 
+  const _isPreview = new URLSearchParams(location.search).get('preview') === '1';
+
   // Called by the player after loading workspace config.
   // devtoolsBlocker=true  → start anti-devtools polling
   // devtoolsBlocker=false → only install the tab-visibility guard
+  // preview=1 in URL     → skip all security (dashboard preview iframe)
   window.__svSecurityInit = function(devtoolsBlocker) {
+    if (_isPreview) return;
     _initVisibilityGuard();
     if (!_isLocalDev && devtoolsBlocker) {
       setInterval(_checkDevtools, 1200);

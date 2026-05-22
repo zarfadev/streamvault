@@ -2,6 +2,7 @@ const ffmpeg  = require('fluent-ffmpeg');
 const path    = require('path');
 const fs      = require('fs');
 const crypto  = require('crypto');
+const os      = require('os');
 const db      = require('./db');
 const config  = require('./config');
 const s3      = require('./services/s3Storage');
@@ -68,7 +69,7 @@ function probeVideo(inputPath) {
   });
 }
 
-function transcodeQuality(inputPath, outputDir, preset, videoInfo, keyInfoPath, onFrameProgress) {
+function transcodeQuality(inputPath, outputDir, preset, videoInfo, keyInfoPath, onFrameProgress, threadsPerJob = 0) {
   return new Promise((resolve, reject) => {
     const segmentDir = path.join(outputDir, preset.name);
     fs.mkdirSync(segmentDir, { recursive: true });
@@ -88,7 +89,7 @@ function transcodeQuality(inputPath, outputDir, preset, videoInfo, keyInfoPath, 
       `-profile:v ${preset.profile}`,
       `-preset veryfast`,
       `-crf 23`,
-      `-threads 2`,
+      `-threads ${threadsPerJob}`,
       `-movflags +faststart`,
       `-hls_time 4`,
       `-hls_playlist_type vod`,
@@ -463,16 +464,17 @@ async function processVideo(videoId, inputPath, title, options = {}) {
     fs.writeFileSync(keyInfoPath, `${keyUrl}\n${keyBinPath}\n`);
 
     const presets = await resolvePresetsForSource(info);
+    const threadsPerJob = Math.max(1, Math.floor(os.cpus().length / presets.length));
 
     const done = [];
-    logger.info({ videoId, presets: presets.map(p => p.name) }, 'Transcoding all qualities in parallel');
+    logger.info({ videoId, presets: presets.map(p => p.name), threadsPerJob }, 'Transcoding all qualities in parallel');
     await Promise.all(presets.map((preset, i) => {
       const sliceStart = 20 + Math.round((i / presets.length) * 60);
       const sliceEnd   = 20 + Math.round(((i + 1) / presets.length) * 60);
       const onFrameProgress = (ratio) => {
         onProgress(Math.round(sliceStart + ratio * (sliceEnd - sliceStart)));
       };
-      return transcodeQuality(effectiveInputPath, outputDir, preset, info, keyInfoPath, onFrameProgress)
+      return transcodeQuality(effectiveInputPath, outputDir, preset, info, keyInfoPath, onFrameProgress, threadsPerJob)
         .then(async name => {
           done.push(name);
           await db.prepare(`UPDATE videos SET qualities=? WHERE id=?`).run(JSON.stringify(done), videoId);

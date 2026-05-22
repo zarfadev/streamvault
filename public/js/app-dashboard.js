@@ -3331,7 +3331,7 @@ function doLogout() {
       const watchUrl = `${BASE}/watch/${videoId}`;
       const iframeCode = `<iframe src="${BASE}/embed/${videoId}" width="640" height="360" frameborder="0" allow="autoplay; fullscreen; picture-in-picture"></iframe>`;
       document.getElementById('preview-title').textContent = title;
-      document.getElementById('preview-iframe').src = `${BASE}/player/${videoId}`;
+      document.getElementById('preview-iframe').src = `${BASE}/player/${videoId}?preview=1`;
       document.getElementById('preview-iframe-code').value = iframeCode;
       document.getElementById('preview-link-input').value = watchUrl;
       const m3u8Url = v?.m3u8Url || (v?.hls_cdn_url) || `${BASE}/videos/${videoId}/master.m3u8`;
