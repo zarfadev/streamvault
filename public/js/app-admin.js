@@ -1,5 +1,5 @@
 const BASE = location.origin;
-let _token = localStorage.getItem('sv_access_token') || localStorage.getItem('sv_token') || '';
+let _token = localStorage.getItem('sv_access_token') || sessionStorage.getItem('sv_access_token') || localStorage.getItem('sv_token') || '';
 let _user = null;
 let _wsCache = [], _usrCache = [];
 let _planTarget = null;
@@ -38,9 +38,9 @@ function escAttr(str) { return String(str||'').replace(/&/g,'&amp;').replace(/</
 })();
 function rl() { window.location.href = '/login?next=/admin'; }
 function doLogout() {
-  const rt = localStorage.getItem('sv_refresh_token') || localStorage.getItem('sv_refresh');
+  const rt = localStorage.getItem('sv_refresh_token') || sessionStorage.getItem('sv_refresh_token') || localStorage.getItem('sv_refresh');
   if (rt) fetch(`${BASE}/auth/logout`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({refreshToken:rt}) }).catch(()=>{});
-  ['sv_access_token','sv_token','sv_refresh_token','sv_refresh'].forEach(k => localStorage.removeItem(k));
+  ['sv_access_token','sv_token','sv_refresh_token','sv_refresh'].forEach(k => { localStorage.removeItem(k); sessionStorage.removeItem(k); });
   window.location.href = '/login';
 }
 function hdr() { 
