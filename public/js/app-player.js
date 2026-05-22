@@ -205,15 +205,23 @@ async function toggleFullscreen() {
       if (wrap.requestFullscreen) await wrap.requestFullscreen();
       else if (wrap.webkitRequestFullscreen) await wrap.webkitRequestFullscreen();
       else if (video.webkitEnterFullscreen) { video.webkitEnterFullscreen(); return; }
-      if (screen.orientation?.lock) try { await screen.orientation.lock('landscape'); } catch {}
     } else {
       await (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
     }
   } catch {}
   wakeChrome();
 }
-document.addEventListener('fullscreenchange', updateFsIcon);
-document.addEventListener('webkitfullscreenchange', updateFsIcon);
+function _handleFsChange() {
+  updateFsIcon();
+  if (document.fullscreenElement || document.webkitFullscreenElement) {
+    // Lock to landscape once fullscreen is confirmed active
+    if (screen.orientation?.lock) screen.orientation.lock('landscape').catch(() => {});
+  } else {
+    try { screen.orientation?.unlock(); } catch {}
+  }
+}
+document.addEventListener('fullscreenchange', _handleFsChange);
+document.addEventListener('webkitfullscreenchange', _handleFsChange);
 updateFsIcon();
 
 function togglePip() {

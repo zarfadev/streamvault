@@ -1530,15 +1530,17 @@ video::cue {
   /* Desactivar tooltips en touch */
   [data-tooltip]::after { display: none !important; }
 
-  /* Settings menu como bottom-sheet centrado en el player */
+  /* Settings menu centrado y siempre abre hacia arriba en touch */
   .quality-menu, .cc-menu, .speed-menu, .settings-menu {
-    bottom: auto;
-    top: auto;
+    bottom: calc(100% + 8px) !important;
+    top: auto !important;
     left: 50% !important;
     right: auto !important;
     transform: translateX(-50%) translateY(10px) !important;
     min-width: min(320px, 90vw) !important;
     max-width: 90vw !important;
+    max-height: 60vh !important;
+    overflow-y: auto !important;
   }
   .quality-menu.open, .cc-menu.open, .speed-menu.open, .settings-menu.open {
     transform: translateX(-50%) translateY(0) !important;
