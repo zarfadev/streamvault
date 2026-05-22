@@ -63,20 +63,10 @@
     // We suppress the output by using a no-op if console is mocked.
     const _c = window.console;
     if (_c && typeof _c.log === 'function') {
-      const t0 = performance.now();
       _c.log(obj);
       _c.clear && _c.clear();
-      const elapsed = performance.now() - t0;
-      // Getter fired OR console took suspiciously long (>10 ms)
       if (detected) return true;
     }
-
-    // Method 2: window size delta as secondary signal only
-    // Use a much higher threshold (500px) to avoid false positives
-    // from browser side panels, OS scrollbars and HiDPI chrome.
-    const widthDelta  = window.outerWidth  - window.innerWidth;
-    const heightDelta = window.outerHeight - window.innerHeight;
-    if (widthDelta > 500 || heightDelta > 500) return true;
 
     return false;
   }

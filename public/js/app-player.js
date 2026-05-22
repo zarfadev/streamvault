@@ -2253,18 +2253,7 @@ function _initDevToolsBlocker() {
     });
   }
 
-  // Method 1: window/outer size difference (reliable — shows when devtools docked)
-  const _checkSizeDiff = () => {
-    const threshold = 160;
-    if (
-      window.outerWidth - window.innerWidth > threshold ||
-      window.outerHeight - window.innerHeight > threshold
-    ) {
-      _showDevToolsOverlay();
-    }
-  };
-
-  // Method 2: keyboard shortcuts (F12, Ctrl+Shift+I/J/C, Cmd+Option+I)
+  // Keyboard shortcuts (F12, Ctrl+Shift+I/J/C, Cmd+Option+I)
   document.addEventListener('keydown', e => {
     if (
       e.key === 'F12' ||
@@ -2276,7 +2265,7 @@ function _initDevToolsBlocker() {
     }
   }, true);
 
-  // Method 3: right-click on the player only (not the whole page)
+  // Right-click on the player only (not the whole page)
   const playerWrap = document.getElementById('player-wrap') || document.getElementById('player-inner');
   if (playerWrap) {
     playerWrap.addEventListener('contextmenu', e => {
@@ -2284,12 +2273,6 @@ function _initDevToolsBlocker() {
       _showDevToolsOverlay();
     });
   }
-
-  // Poll size check every 2s
-  setInterval(_checkSizeDiff, 2000);
-
-  // Initial check
-  setTimeout(_checkSizeDiff, 500);
 }
 
 // ─── Sistema de Anuncios ─────────────────────────────────────
