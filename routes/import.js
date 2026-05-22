@@ -63,6 +63,11 @@ function isYtDlpUrl(url) {
   try { return YT_VIMEO_RE.test(url); } catch { return false; }
 }
 
+const YT_RE = /^https?:\/\/(www\.)?(youtube\.com\/(watch|shorts)|youtu\.be\/)/i;
+function isYouTube(url) {
+  try { return YT_RE.test(url); } catch { return false; }
+}
+
 async function checkYtDlp() {
   return new Promise(resolve => {
     const proc = spawn('yt-dlp', ['--version'], { stdio: 'ignore' });
@@ -100,6 +105,7 @@ function downloadWithYtDlp(url, destDir, onProgress) {
       '--max-sleep-interval', '5',
       '--extractor-args', 'youtube:player_client=web,ios',
       ...(hasCookies ? ['--cookies', cookiesFile] : []),
+      ...(isYouTube(url) ? ['--username', 'oauth2', '--password', ''] : []),
       url,
     ];
 
