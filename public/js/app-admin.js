@@ -168,6 +168,7 @@ async function loadPlansBrkdown() {
 /* ─── WORKSPACES ─────────────────────────────────────────────── */
 async function loadWorkspaces(page = 1) {
   const r = await api(`/api/admin/workspaces?page=${page}&limit=100`);
+  if (!r.ok) { toast('Error al cargar workspaces', 'error'); return; }
   const data = await r.json();
   // API returns { workspaces, total, page, limit } — handle both formats for compatibility
   _wsCache = Array.isArray(data) ? data : (data.workspaces || []);
@@ -386,6 +387,7 @@ async function resetCustomLimits() {
 /* ─── USERS ──────────────────────────────────────────────────── */
 async function loadUsers(){
   const r=await api('/api/admin/users');
+  if (!r.ok) { toast('Error al cargar usuarios', 'error'); return; }
   const data=await r.json();
   _usrCache=Array.isArray(data)?data:(data.users||[]);
   document.getElementById('usr-count').textContent=_usrCache.length;
@@ -560,6 +562,7 @@ let _videosCache = [];
 
 async function loadAdminVideos(){
   const r=await api('/api/admin/videos');
+  if (!r.ok) { toast('Error al cargar videos', 'error'); return; }
   _videosCache = await r.json();
   _selectedVideos.clear();
   document.getElementById('select-all-videos').checked = false;
@@ -857,6 +860,7 @@ async function deleteVideo(id,title){
 async function loadBilling(){
   if(!_wsCache.length) {
     const r = await api('/api/admin/workspaces');
+    if (!r.ok) { toast('Error al cargar datos de billing', 'error'); return; }
     const d = await r.json();
     // API returns { workspaces, total, ... } or plain array — handle both
     _wsCache = Array.isArray(d) ? d : (d.workspaces || []);
@@ -907,6 +911,7 @@ function recalcMrr(){
 /* ─── QUEUE ──────────────────────────────────────────────────── */
 async function loadQueue(){
   const r=await api('/api/admin/queue');
+  if (!r.ok) { toast('Error al cargar estado del queue', 'error'); return; }
   const q=await r.json();
   document.getElementById('queue-status-rows').innerHTML=`
     <div class="status-row"><span>Modo</span><span class="td-mono">${q.mode||'—'}</span></div>
@@ -934,6 +939,7 @@ async function cleanQueue(){ if(!await confirmModal('¿Limpiar jobs completados 
 async function loadStorage(){
   if(!_wsCache.length){
     const r=await api('/api/admin/workspaces');
+    if (!r.ok) { toast('Error al cargar datos de storage', 'error'); return; }
     const d=await r.json();
     _wsCache=Array.isArray(d)?d:(d.workspaces||[]);
   }
@@ -1001,6 +1007,7 @@ async function loadAudit(page=_audPage){
   if(actor) params.set('actor',actor);
   if(action) params.set('action',action);
   const r=await api(`/api/admin/audit-log?${params}`);
+  if (!r.ok) { toast('Error al cargar audit log', 'error'); return; }
   const d=await r.json();
   const logs=d.logs||[];
   document.getElementById('aud-tbody').innerHTML=logs.map(l=>{
@@ -1030,6 +1037,7 @@ async function loadConfig(){
   
   // Ahora cargar datos del servidor
   const r=await api('/api/admin/config');
+  if (!r.ok) { toast('Error al cargar configuración', 'error'); return; }
   const cfg=await r.json();
   const allQ=['360p','480p','720p','1080p','1440p','4k'];
   const enabled=cfg.transcoding?.qualities||['360p','480p','720p','1080p'];
