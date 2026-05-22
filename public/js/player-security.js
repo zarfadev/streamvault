@@ -118,9 +118,6 @@
     });
   }
 
-  // ── Boot ────────────────────────────────────────────────────────
-  // En desarrollo local (localhost o IP privada) desactivar anti-devtools
-  // para no bloquear el player al depurar.
   const _isLocalDev = (function() {
     const h = location.hostname;
     return h === 'localhost' || h === '127.0.0.1' ||
@@ -128,16 +125,13 @@
            /^172\.(1[6-9]|2\d|3[01])\./.test(h);
   })();
 
-  function _boot() {
+  // Called by the player after loading workspace config.
+  // devtoolsBlocker=true  → start anti-devtools polling
+  // devtoolsBlocker=false → only install the tab-visibility guard
+  window.__svSecurityInit = function(devtoolsBlocker) {
     _initVisibilityGuard();
-    if (!_isLocalDev) {
+    if (!_isLocalDev && devtoolsBlocker) {
       setInterval(_checkDevtools, 1200);
     }
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => setTimeout(_boot, 400));
-  } else {
-    setTimeout(_boot, 400);
-  }
+  };
 })();

@@ -2051,6 +2051,9 @@ async function init() {
     }
 
     // ── Bloqueo de DevTools ────────────────────────────────────────
+    if (typeof window.__svSecurityInit === 'function') {
+      window.__svSecurityInit(!!cfg.devtoolsBlocker);
+    }
     if (cfg.devtoolsBlocker) {
       _initDevToolsBlocker();
     }
