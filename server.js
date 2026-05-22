@@ -79,9 +79,8 @@ app.use((req, res, next) => {
   // Content Security Policy — strict, no unsafe-inline in production.
   // Inline scripts have been extracted to /js/app-*.js external files.
   // worker-src blob: required for HLS.js transmuxing worker.
-  const cdnOrigins = process.env.CDN_BASE_URL
-    ? new URL(process.env.CDN_BASE_URL).origin
-    : '';
+  const _cdnUrl = process.env.CLOUDFRONT_BASE_URL || process.env.CDN_BASE_URL || '';
+  const cdnOrigins = _cdnUrl ? new URL(_cdnUrl).origin : '';
 
   const cspDirectives = [
     "default-src 'self'",
