@@ -3334,6 +3334,8 @@ function doLogout() {
       document.getElementById('preview-iframe').src = `${BASE}/player/${videoId}`;
       document.getElementById('preview-iframe-code').value = iframeCode;
       document.getElementById('preview-link-input').value = watchUrl;
+      const m3u8Url = v?.m3u8Url || (v?.hls_cdn_url) || `${BASE}/videos/${videoId}/master.m3u8`;
+      document.getElementById('preview-m3u8-input').value = m3u8Url;
       const openLink = document.getElementById('preview-open-link');
       if (openLink) openLink.href = watchUrl;
       document.getElementById('preview-modal-overlay').classList.add('visible');
