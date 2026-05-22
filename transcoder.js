@@ -86,8 +86,9 @@ function transcodeQuality(inputPath, outputDir, preset, videoInfo, keyInfoPath, 
       `-b:a ${preset.abr}`,
       `-ar 48000`,
       `-profile:v ${preset.profile}`,
-      `-preset fast`,
-      `-crf 22`,
+      `-preset veryfast`,
+      `-crf 23`,
+      `-threads 2`,
       `-movflags +faststart`,
       `-hls_time 4`,
       `-hls_playlist_type vod`,
@@ -464,27 +465,24 @@ async function processVideo(videoId, inputPath, title, options = {}) {
     const presets = await resolvePresetsForSource(info);
 
     const done = [];
-    for (let i = 0; i < presets.length; i++) {
-      const preset = presets[i];
-      logger.info({ videoId, preset: preset.name }, 'Transcoding quality (AES-128)');
-      // Each preset owns an equal slice of the 20–80% band
+    logger.info({ videoId, presets: presets.map(p => p.name) }, 'Transcoding all qualities in parallel');
+    await Promise.all(presets.map((preset, i) => {
       const sliceStart = 20 + Math.round((i / presets.length) * 60);
       const sliceEnd   = 20 + Math.round(((i + 1) / presets.length) * 60);
       const onFrameProgress = (ratio) => {
-        const pct = Math.round(sliceStart + ratio * (sliceEnd - sliceStart));
-        onProgress(pct);
+        onProgress(Math.round(sliceStart + ratio * (sliceEnd - sliceStart)));
       };
-      try {
-        await transcodeQuality(effectiveInputPath, outputDir, preset, info, keyInfoPath, onFrameProgress);
-        done.push(preset.name);
-        await db.prepare(`UPDATE videos SET qualities=? WHERE id=?`).run(JSON.stringify(done), videoId);
-        // Rebuild master playlist immediately so partial qualities are playable right away
-        await rebuildMasterPlaylist(videoId, done).catch(() => {});
-        await onProgress(sliceEnd);
-      } catch (err) {
-        logger.error({ videoId, preset: preset.name, err: err.message }, 'Quality transcode failed');
-      }
-    }
+      return transcodeQuality(effectiveInputPath, outputDir, preset, info, keyInfoPath, onFrameProgress)
+        .then(async name => {
+          done.push(name);
+          await db.prepare(`UPDATE videos SET qualities=? WHERE id=?`).run(JSON.stringify(done), videoId);
+          await rebuildMasterPlaylist(videoId, done).catch(() => {});
+          await onProgress(sliceEnd);
+        })
+        .catch(err => {
+          logger.error({ videoId, preset: preset.name, err: err.message }, 'Quality transcode failed');
+        });
+    }));
 
     if (done.length === 0) {
       throw new Error('All quality presets failed — no playable output produced');
