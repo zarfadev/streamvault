@@ -15,7 +15,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && curl -fsSL "https://github.com/denoland/deno/releases/download/v${DENO_VER}/deno-x86_64-unknown-linux-gnu.zip" -o /tmp/deno.zip \
     && unzip /tmp/deno.zip -d /usr/local/bin \
     && rm /tmp/deno.zip \
-    && deno --version
+    && deno --version \
+    && curl -fsSL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
+    && chmod +x /usr/local/bin/yt-dlp \
+    && yt-dlp --version
 
 WORKDIR /app
 
