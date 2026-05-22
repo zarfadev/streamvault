@@ -64,7 +64,7 @@ services:
       - api_logs:/app/logs
       - /tmp/sv-uploads:/app/uploads
       - /usr/local/bin/yt-dlp:/usr/local/bin/yt-dlp
-      - /opt/streamvault/cookies.txt:/app/cookies.txt:ro
+      - /opt/streamvault/cookies.txt:/app/cookies.txt
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
       interval: 15s
