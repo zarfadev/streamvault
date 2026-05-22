@@ -82,6 +82,7 @@ function downloadWithYtDlp(url, destDir, onProgress) {
     const hasCookies = fs.existsSync(cookiesFile);
     const args = [
       '--no-playlist',
+      '--format', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best',
       '--merge-output-format', 'mp4',
       '--output', tmplPath,
       '--print', 'after_move:filepath',
