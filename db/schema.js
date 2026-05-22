@@ -424,6 +424,7 @@ async function createSchema(pool) {
     `CREATE INDEX IF NOT EXISTS idx_chapters_video      ON chapters(video_id, start_time ASC)`,
     `CREATE INDEX IF NOT EXISTS idx_transcriptions_video ON transcriptions(video_id)`,
     `CREATE INDEX IF NOT EXISTS idx_ws_members_user     ON workspace_members(user_id)`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_ws_members_ws_user ON workspace_members(workspace_id, user_id)`,
     `CREATE INDEX IF NOT EXISTS idx_video_tracks_video  ON video_tracks(video_id)`,
     `CREATE INDEX IF NOT EXISTS idx_api_keys_workspace  ON api_keys(workspace_id)`,
     `CREATE INDEX IF NOT EXISTS idx_api_keys_prefix     ON api_keys(prefix)`,

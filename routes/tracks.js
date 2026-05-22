@@ -191,6 +191,8 @@ router.patch('/:trackId', async (req, res) => {
         .get(track.workspace_id, req.user.id);
       if (!member) return res.status(403).json({ error: 'Forbidden' });
       if (!['owner', 'admin'].includes(member.role)) return res.status(403).json({ error: 'Se requiere rol owner o admin para modificar pistas' });
+    } else if (req.user.platform_role !== 'super_admin') {
+      return res.status(403).json({ error: 'Access denied' });
     }
 
     const { label, default: makeDefault } = req.body;
@@ -244,6 +246,8 @@ router.delete('/:trackId', async (req, res) => {
         .get(track.workspace_id, req.user.id);
       if (!member) return res.status(403).json({ error: 'Forbidden' });
       if (!['owner', 'admin'].includes(member.role)) return res.status(403).json({ error: 'Se requiere rol owner o admin para eliminar pistas' });
+    } else if (req.user.platform_role !== 'super_admin') {
+      return res.status(403).json({ error: 'Access denied' });
     }
 
     if (track.src_path) {

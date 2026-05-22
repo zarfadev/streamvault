@@ -15,7 +15,7 @@ async function getChapters(videoId) {
   ).all(videoId);
 }
 
-async function assertOwner(videoId, userId) {
+async function assertOwner(videoId, userId, platformRole) {
   const video = await db.prepare(`SELECT id, workspace_id FROM videos WHERE id = ?`).get(videoId);
   if (!video) return null;
   if (video.workspace_id) {
@@ -24,6 +24,8 @@ async function assertOwner(videoId, userId) {
     ).get(video.workspace_id, userId);
     if (!member) return false;
     if (!['owner', 'admin'].includes(member.role)) return false;
+  } else if (platformRole !== 'super_admin') {
+    return false;
   }
   return video;
 }
@@ -93,7 +95,7 @@ router.get('/export.vtt', async (req, res) => {
 
 router.post('/', authenticate, async (req, res) => {
   try {
-    const video = await assertOwner(req.params.videoId, req.user.id);
+    const video = await assertOwner(req.params.videoId, req.user.id, req.user.platform_role);
     if (video === null) return res.status(404).json({ error: 'Video not found' });
     if (video === false) return res.status(403).json({ error: 'Forbidden' });
 
@@ -128,7 +130,7 @@ router.post('/', authenticate, async (req, res) => {
 
 router.put('/:cid', authenticate, async (req, res) => {
   try {
-    const video = await assertOwner(req.params.videoId, req.user.id);
+    const video = await assertOwner(req.params.videoId, req.user.id, req.user.platform_role);
     if (video === null) return res.status(404).json({ error: 'Video not found' });
     if (video === false) return res.status(403).json({ error: 'Forbidden' });
 
@@ -170,7 +172,7 @@ router.patch('/reorder', authenticate, async (req, res) => {
     if (!Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ error: 'ids array required' });
     }
-    const video = await assertOwner(req.params.videoId, req.user.id);
+    const video = await assertOwner(req.params.videoId, req.user.id, req.user.platform_role);
     if (video === null) return res.status(404).json({ error: 'Video not found' });
     if (video === false) return res.status(403).json({ error: 'Forbidden' });
 
@@ -199,7 +201,7 @@ router.patch('/reorder', authenticate, async (req, res) => {
 
 router.delete('/:cid', authenticate, async (req, res) => {
   try {
-    const video = await assertOwner(req.params.videoId, req.user.id);
+    const video = await assertOwner(req.params.videoId, req.user.id, req.user.platform_role);
     if (video === null) return res.status(404).json({ error: 'Video not found' });
     if (video === false) return res.status(403).json({ error: 'Forbidden' });
 
