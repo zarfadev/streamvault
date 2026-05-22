@@ -207,7 +207,12 @@ async function doForgot() {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ email, captchaToken })
     });
-    showAlert('Si existe una cuenta con ese correo, recibirás un enlace en breve.', 'success');
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      showAlert(e.error || 'No se pudo enviar el enlace. Intenta de nuevo.');
+    } else {
+      showAlert('Si existe una cuenta con ese correo, recibirás un enlace en breve.', 'success');
+    }
   } catch (e) {
     showAlert('Error de conexión.');
   } finally {

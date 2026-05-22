@@ -2279,7 +2279,11 @@ function doLogout() {
     async function _pollImport(videoId) {
       try {
         const r = await fetch(`/api/import/${videoId}/status`, { headers: authHeaders() });
-        if (!r.ok) { _activeImports.delete(videoId); return; }
+        if (!r.ok) {
+          _activeImports.delete(videoId);
+          showToast('Error al verificar el estado del import', 'error');
+          return;
+        }
         const d = await r.json();
 
         // Use real pct from API when available, fall back to a minimum floor per status
@@ -2773,6 +2777,7 @@ function doLogout() {
     function renderVideos(videos, opts = {}) {
       const grid = document.getElementById('video-grid');
       grid.className = _libView === 'list' ? 'video-grid list-view' : 'video-grid';
+      const _canManage = authWorkspace?.role === 'owner' || authWorkspace?.role === 'admin';
       if (!videos.length) {
         grid.innerHTML = opts.filteredView && allVideosCache.length
           ? `<div class="empty-state" style="grid-column:1/-1;"><div class="empty-state-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div><h3>Sin coincidencias</h3><p>Prueba otro texto de búsqueda o cambia los filtros.</p></div>`
@@ -2868,12 +2873,13 @@ function doLogout() {
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
                         </button>` : ''}
                       ` : ''}
+                      ${(authWorkspace?.role === 'owner' || authWorkspace?.role === 'admin') ? `
                       <button class="vt-icon-btn" onclick="openEditModal('${v.id}')" title="Editar">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                       </button>
                       <button class="vt-icon-btn danger" onclick="deleteVideo('${v.id}')" title="Eliminar">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
-                      </button>
+                      </button>` : ''}
                       <div class="more-wrap" id="more-lt-${v.id}" style="position:relative;">
                         <button class="vt-icon-btn" onclick="toggleMoreMenu('lt-${v.id}',event)" title="Más opciones">
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
@@ -3013,10 +3019,10 @@ function doLogout() {
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
               ${isPartial ? 'Ver parcial' : 'Preview'}
             </button>
-            <button class="action-btn" onclick="openEditModal('${v.id}')">
+            ${_canManage ? `<button class="action-btn" onclick="openEditModal('${v.id}')">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
               Editar
-            </button>
+            </button>` : ''}
             <div class="more-wrap" id="more-${v.id}">
               <button class="action-btn" onclick="toggleMoreMenu('${v.id}',event)">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>
@@ -3053,26 +3059,26 @@ function doLogout() {
                   Pistas y subtítulos
                 </button>` : ''}
                 <div class="more-menu-divider"></div>
-                <button class="more-menu-danger" onclick="closeMoreMenu('${v.id}');deleteVideo('${v.id}')">
+                ${_canManage ? `<button class="more-menu-danger" onclick="closeMoreMenu('${v.id}');deleteVideo('${v.id}')">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
                   Eliminar video
-                </button>
+                </button>` : ''}
               </div>
             </div>
           ` : isError
-          ? `<button class="action-btn" style="background:rgba(248,113,113,0.08);color:var(--red);border-color:rgba(248,113,113,0.25);" onclick="retryVideo('${v.id}')">
+          ? `${_canManage ? `<button class="action-btn" style="background:rgba(248,113,113,0.08);color:var(--red);border-color:rgba(248,113,113,0.25);" onclick="retryVideo('${v.id}')">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
               Reintentar transcodificación
             </button>
             <button class="action-btn" onclick="openEditModal('${v.id}')">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
               Editar
-            </button>`
+            </button>` : ''}`
           : isScheduled
-          ? `<button class="action-btn" onclick="openEditModal('${v.id}')">
+          ? `${_canManage ? `<button class="action-btn" onclick="openEditModal('${v.id}')">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
               Programado${v.publish_at ? ' · ' + new Date(v.publish_at*1000).toLocaleDateString('es') : ''}
-            </button>`
+            </button>` : ''}`
           : `<span style="font-size:12px;color:var(--muted);padding:6px 0;display:flex;align-items:center;gap:6px;"><span class="spinner"></span> ${isProcessing ? (v.progress_pct != null ? `Transcodificando… ${v.progress_pct}%` : 'Transcodificando…') : 'Procesando…'}</span>`}
         </div>
       </div>
