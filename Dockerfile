@@ -7,7 +7,10 @@ RUN apk add --no-cache \
     make \
     g++ \
     wget \
-    curl
+    curl \
+    unzip && \
+    curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh && \
+    ln -sf /usr/local/bin/deno /usr/bin/deno
 
 WORKDIR /app
 

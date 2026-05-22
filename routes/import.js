@@ -98,7 +98,7 @@ function downloadWithYtDlp(url, destDir, onProgress) {
       '--sleep-requests', '1',
       '--sleep-interval', '2',
       '--max-sleep-interval', '5',
-      '--js-runtimes', 'nodejs',
+      '--extractor-args', 'youtube:player_client=web,ios',
       ...(hasCookies ? ['--cookies', cookiesFile] : []),
       url,
     ];
