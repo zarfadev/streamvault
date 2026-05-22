@@ -488,7 +488,8 @@ router.get('/:id/hlskey/:keyId', async (req, res) => {
       res.setHeader('Content-Type', 'application/octet-stream');
       res.setHeader('Content-Length', keyBytes.length);
       res.setHeader('Cache-Control', 'private, no-store, no-cache');
-      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+      if (req.headers.origin) res.setHeader('Vary', 'Origin');
       return res.send(keyBytes);
     }
 
@@ -503,7 +504,8 @@ router.get('/:id/hlskey/:keyId', async (req, res) => {
         res.setHeader('Content-Type', 'application/octet-stream');
         res.setHeader('Content-Length', keyBytes.length);
         res.setHeader('Cache-Control', 'private, no-store, no-cache');
-        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+        if (req.headers.origin) res.setHeader('Vary', 'Origin');
         return res.send(keyBytes);
       }
       // Priority 2: DB already has the key bytes (disk was cleaned up post-transcode).
@@ -516,7 +518,8 @@ router.get('/:id/hlskey/:keyId', async (req, res) => {
         res.setHeader('Content-Type', 'application/octet-stream');
         res.setHeader('Content-Length', keyBytes.length);
         res.setHeader('Cache-Control', 'private, no-store, no-cache');
-        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+        if (req.headers.origin) res.setHeader('Vary', 'Origin');
         return res.send(keyBytes);
       }
       return res.status(403).end();
@@ -574,7 +577,8 @@ router.get('/:id/hlskey/:keyId', async (req, res) => {
       res.setHeader('Access-Control-Allow-Origin', req.headers.origin);
       res.setHeader('Vary', 'Origin');
     } else {
-      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+      if (req.headers.origin) res.setHeader('Vary', 'Origin');
     }
 
     res.send(keyBytes);

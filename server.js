@@ -37,18 +37,23 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean)
   : [];
 
-app.use(cors({
-  origin: (origin, callback) => {
-    // Allow requests with no origin (curl, Postman, server-to-server)
-    if (!origin) return callback(null, true);
-    // Dev mode with no whitelist: allow everything
-    if (allowedOrigins.length === 0) return callback(null, true);
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-    callback(new Error(`CORS: origin '${origin}' not allowed`));
-  },
-  credentials: true,
-  exposedHeaders: ['Content-Type', 'Cache-Control', 'Connection'],
-}));
+const hlsKeyPath = /^\/api\/videos\/[^/]+\/hlskey\//;
+app.use((req, res, next) => {
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (curl, Postman, server-to-server)
+      if (!origin) return callback(null, true);
+      // HLS key endpoint is open to any origin — the handler enforces embedAllowedDomains itself
+      if (hlsKeyPath.test(req.path)) return callback(null, true);
+      // Dev mode with no whitelist: allow everything
+      if (allowedOrigins.length === 0) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      callback(new Error(`CORS: origin '${origin}' not allowed`));
+    },
+    credentials: true,
+    exposedHeaders: ['Content-Type', 'Cache-Control', 'Connection'],
+  })(req, res, next);
+});
 
 // ─── HTTP Compression ──────────────────────────────────────────
 // Compress all HTTP responses (JSON, HTML, CSS, JS) to reduce bandwidth.
