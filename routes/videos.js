@@ -1080,16 +1080,18 @@ router.get('/:id/download-file', optionalAuth, async (req, res) => {
         const videoRow = await db.prepare(`SELECT hls_key FROM videos WHERE id=?`).get(videoId);
         if (videoRow?.hls_key) {
           const keyBytes = Buffer.from(videoRow.hls_key, 'base64');
-          const m3u8Dir = path.dirname(localM3u8);
-          const tempKeyFile = path.join(m3u8Dir, `.dl_key_${Date.now()}.bin`);
+          // Write temp files to os.tmpdir(), not the HLS directory which is
+          // served by express.static — avoids exposing the key via HTTP.
+          const ts = `${videoId}_${Date.now()}`;
+          const tempKeyFile = path.join(os.tmpdir(), `.sv_dlkey_${ts}.bin`);
           fs.writeFileSync(tempKeyFile, keyBytes);
           tempFiles.push(tempKeyFile);
-          
+
           const rewrittenM3u8 = m3u8Content.replace(
             /#EXT-X-KEY:METHOD=AES-128,URI="[^"]+"/g,
             `#EXT-X-KEY:METHOD=AES-128,URI="${tempKeyFile}"`
           );
-          const tempM3u8 = path.join(m3u8Dir, `.dl_playlist_${Date.now()}.m3u8`);
+          const tempM3u8 = path.join(os.tmpdir(), `.sv_dlpl_${ts}.m3u8`);
           fs.writeFileSync(tempM3u8, rewrittenM3u8);
           tempFiles.push(tempM3u8);
           inputM3u8 = tempM3u8;
