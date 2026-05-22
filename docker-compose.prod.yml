@@ -106,11 +106,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.5'
-          memory: 3G
+          cpus: '6'
+          memory: 8G
         reservations:
-          cpus: '0.5'
-          memory: 512M
+          cpus: '1'
+          memory: 1G
 
 volumes:
   api_logs:
