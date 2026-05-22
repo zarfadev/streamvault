@@ -78,6 +78,8 @@ function downloadWithYtDlp(url, destDir, onProgress) {
     let outputFile = null;
     let title = 'Imported Video';
 
+    const cookiesFile = '/app/cookies.txt';
+    const hasCookies = fs.existsSync(cookiesFile);
     const args = [
       '--no-playlist',
       '--merge-output-format', 'mp4',
@@ -86,6 +88,16 @@ function downloadWithYtDlp(url, destDir, onProgress) {
       '--newline',
       '--progress',
       '--no-warnings',
+      '--extractor-retries', '5',
+      '--fragment-retries', '5',
+      '--retries', '5',
+      '--socket-timeout', '60',
+      '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      '--add-header', 'Accept-Language:en-US,en;q=0.9',
+      '--sleep-requests', '1',
+      '--sleep-interval', '2',
+      '--max-sleep-interval', '5',
+      ...(hasCookies ? ['--cookies', cookiesFile] : []),
       url,
     ];
 

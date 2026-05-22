@@ -62,9 +62,8 @@ services:
     volumes:
       # logs persistentes — sin volúmenes de video ni upload (van a S3)
       - api_logs:/app/logs
-      # Directorio temporal de uploads — solo existe mientras se sube a S3
-      # En multi-servidor cada instancia tiene su propio /tmp, está bien.
       - /tmp/sv-uploads:/app/uploads
+      - /usr/local/bin/yt-dlp:/usr/local/bin/yt-dlp
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
       interval: 15s
@@ -94,9 +93,8 @@ services:
     <<: [*common-env, *resource-defaults]
     volumes:
       - worker_logs:/app/logs
-      # Espacio temporal para transcode — FFmpeg necesita disco rápido
-      # Usar un volumen nombrado o un disco SSD local si el rendimiento importa
       - worker_tmp:/tmp
+      - /usr/local/bin/yt-dlp:/usr/local/bin/yt-dlp
     healthcheck:
       # Verifica que el worker puede conectarse a la DB (mismo check que usa el heartbeat interno)
       test: ["CMD-SHELL", "node -e \"require('./db').ping().then(ok=>process.exit(ok?0:1)).catch(()=>process.exit(1))\""]
