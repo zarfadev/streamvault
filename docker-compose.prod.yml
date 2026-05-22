@@ -64,7 +64,6 @@ services:
       - api_logs:/app/logs
       - /tmp/sv-uploads:/app/uploads
       - /opt/streamvault/cookies.txt:/app/cookies.txt
-      - ytdlp_cache:/home/node/.cache/yt-dlp
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
       interval: 15s
@@ -95,7 +94,6 @@ services:
     volumes:
       - worker_logs:/app/logs
       - worker_tmp:/tmp
-      - ytdlp_cache:/home/node/.cache/yt-dlp
     healthcheck:
       # Verifica que el worker puede conectarse a la DB (mismo check que usa el heartbeat interno)
       test: ["CMD-SHELL", "node -e \"require('./db').ping().then(ok=>process.exit(ok?0:1)).catch(()=>process.exit(1))\""]
@@ -119,8 +117,6 @@ volumes:
     name: sv_prod_worker_logs
   worker_tmp:
     name: sv_prod_worker_tmp
-  ytdlp_cache:
-    name: sv_prod_ytdlp_cache
 
 # ─────────────────────────────────────────────────────────────────────────────
 # REFERENCIA DE VARIABLES EN .env

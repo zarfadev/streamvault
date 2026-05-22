@@ -56,98 +56,34 @@ function isPrivateHost(hostname) {
   return false;
 }
 
-// Detect YouTube/Vimeo URLs that require yt-dlp
-const YT_VIMEO_RE = /^https?:\/\/(www\.)?(youtube\.com\/(watch|shorts)|youtu\.be\/|vimeo\.com\/)/i;
-
-function isYtDlpUrl(url) {
-  try { return YT_VIMEO_RE.test(url); } catch { return false; }
+function isM3u8Url(url) {
+  try { return new URL(url).pathname.toLowerCase().endsWith('.m3u8'); } catch { return false; }
 }
 
-const YT_RE = /^https?:\/\/(www\.)?(youtube\.com\/(watch|shorts)|youtu\.be\/)/i;
-function isYouTube(url) {
-  try { return YT_RE.test(url); } catch { return false; }
-}
-
-async function checkYtDlp() {
-  return new Promise(resolve => {
-    const proc = spawn('yt-dlp', ['--version'], { stdio: 'ignore' });
-    proc.on('error', () => resolve(false));
-    proc.on('close', code => resolve(code === 0));
-  });
-}
-
-function downloadWithYtDlp(url, destDir, onProgress) {
+function downloadM3u8WithFfmpeg(url, destPath, onProgress) {
   return new Promise((resolve, reject) => {
-    // yt-dlp writes the best video+audio merged to a single file
-    const tmplPath = path.join(destDir, '%(id)s.%(ext)s');
-    let outputFile = null;
-    let title = 'Imported Video';
-
-    const cookiesFile = '/app/cookies.txt';
-    const hasCookies = fs.existsSync(cookiesFile);
-    const args = [
-      '--no-playlist',
-      '--format', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best',
-      '--merge-output-format', 'mp4',
-      '--output', tmplPath,
-      '--print', 'after_move:filepath',
-      '--newline',
-      '--progress',
-      '--no-warnings',
-      '--extractor-retries', '5',
-      '--fragment-retries', '5',
-      '--retries', '5',
-      '--socket-timeout', '60',
-      '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      '--add-header', 'Accept-Language:en-US,en;q=0.9',
-      '--sleep-requests', '1',
-      '--sleep-interval', '2',
-      '--max-sleep-interval', '5',
-      '--extractor-args', 'youtube:player_client=web,ios',
-      ...(hasCookies ? ['--cookies', cookiesFile] : []),
-      ...(isYouTube(url) ? ['--username', 'oauth2', '--password', ''] : []),
-      url,
-    ];
-
-    const proc = spawn('yt-dlp', args);
+    const args = ['-y', '-i', url, '-c', 'copy', '-bsf:a', 'aac_adtstoasc', '-movflags', '+faststart', destPath];
+    let durationSec = 0;
     let stderr = '';
-
-    proc.stdout.on('data', chunk => {
-      const line = chunk.toString().trim();
-      // Line printed by --print after_move:filepath is the final output path
-      if (line && !line.startsWith('[') && fs.existsSync(line)) {
-        outputFile = line;
+    const proc = spawn('ffmpeg', args);
+    proc.stderr.on('data', chunk => {
+      const text = chunk.toString();
+      stderr += text;
+      if (!durationSec) {
+        const dm = text.match(/Duration:\s*(\d+):(\d+):(\d+\.?\d*)/);
+        if (dm) durationSec = +dm[1] * 3600 + +dm[2] * 60 + parseFloat(dm[3]);
       }
-      // Parse download progress: [download]  34.2% of 120.00MiB
-      const m = line.match(/\[download\]\s+([\d.]+)%/);
-      if (m) onProgress(Math.floor(parseFloat(m[1])));
+      const tm = text.match(/time=(\d+):(\d+):(\d+\.?\d*)/);
+      if (tm && durationSec > 0) {
+        const elapsed = +tm[1] * 3600 + +tm[2] * 60 + parseFloat(tm[3]);
+        onProgress(Math.min(99, Math.round((elapsed / durationSec) * 100)));
+      }
     });
-
-    proc.stderr.on('data', chunk => { stderr += chunk.toString(); });
-
-    // Also try to get the title via a separate --get-title call that ran before
-    // (we start it in parallel at the call site)
-
     proc.on('close', code => {
-      if (code !== 0) return reject(new Error(`yt-dlp exited with code ${code}: ${stderr.slice(0, 300)}`));
-      if (!outputFile || !fs.existsSync(outputFile)) {
-        return reject(new Error('yt-dlp did not produce an output file'));
-      }
-      const stat = fs.statSync(outputFile);
-      resolve({ filePath: outputFile, size: stat.size, title });
+      if (code !== 0) return reject(new Error(`ffmpeg exited with code ${code}: ${stderr.slice(-300)}`));
+      resolve({ size: fs.statSync(destPath).size });
     });
-
-    proc.on('error', err => reject(new Error(`yt-dlp not found: ${err.message}`)));
-  });
-}
-
-async function getYtDlpTitle(url) {
-  return new Promise(resolve => {
-    const proc = spawn('yt-dlp', ['--no-playlist', '--get-title', url], { timeout: 15000 });
-    let out = '';
-    proc.stdout.on('data', d => { out += d.toString(); });
-    proc.on('close', () => resolve(out.trim().slice(0, 200) || 'Imported Video'));
-    proc.on('error', () => resolve('Imported Video'));
+    proc.on('error', err => reject(new Error(`ffmpeg not found: ${err.message}`)));
   });
 }
 
@@ -268,32 +204,24 @@ router.post(
     }
 
     const workspaceId = req.workspace?.id || null;
-    const useYtDlp    = isYtDlpUrl(url);
+    const useM3u8     = isM3u8Url(url);
 
-    // For yt-dlp URLs, verify yt-dlp is installed before committing to the import
-    if (useYtDlp) {
-      const ytAvailable = await checkYtDlp();
-      if (!ytAvailable) {
-        return res.status(422).json({
-          error: 'yt-dlp no está instalado en el servidor. Soportamos URLs directas a archivos de video (MP4, MKV, etc.). Para importar desde YouTube o Vimeo instala yt-dlp en el servidor.',
-        });
-      }
+    if (/^https?:\/\/(www\.)?(youtube\.com|youtu\.be|vimeo\.com)\//i.test(url)) {
+      return res.status(422).json({
+        error: 'La importación desde YouTube y Vimeo no está disponible. Usa una URL directa a un archivo de video (MP4, MKV, M3U8, etc.).',
+      });
     }
 
     const videoId     = uuidv4();
     const uploadsDir  = path.join(__dirname, '..', 'uploads');
-    const ext         = useYtDlp ? '.mp4' : (path.extname(parsed.pathname) || '.mp4');
+    const ext         = useM3u8 ? '.mp4' : (path.extname(parsed.pathname) || '.mp4');
     const destPath    = path.join(uploadsDir, `${videoId}${ext}`);
-
-    // For yt-dlp, fetch the title in parallel before inserting
-    const videoTitle = useYtDlp
-      ? (title || await getYtDlpTitle(url)).slice(0, 200)
-      : (title || guessTitle(url)).slice(0, 200);
+    const videoTitle  = (title || guessTitle(url)).slice(0, 200);
 
     try {
       await db.prepare(
         `INSERT INTO videos (id, title, original_filename, status, workspace_id) VALUES (?, ?, ?, 'downloading', ?)`
-      ).run(videoId, videoTitle, useYtDlp ? 'yt-dlp' : (path.basename(parsed.pathname) || 'remote'), workspaceId);
+      ).run(videoId, videoTitle, path.basename(parsed.pathname) || 'remote', workspaceId);
     } catch (err) {
       logger.error({ err }, 'Import: failed to create video record');
       return res.status(500).json({ error: 'Failed to create video record' });
@@ -321,10 +249,9 @@ router.post(
           }
         };
 
-        if (useYtDlp) {
-          logger.info({ videoId, url }, 'Importing video via yt-dlp');
-          const result = await downloadWithYtDlp(url, uploadsDir, onDlProgress);
-          finalPath = result.filePath;
+        if (useM3u8) {
+          logger.info({ videoId, url }, 'Importing M3U8 stream via ffmpeg');
+          const result = await downloadM3u8WithFfmpeg(url, destPath, onDlProgress);
           size = result.size;
         } else {
           logger.info({ videoId, url }, 'Downloading imported video');
