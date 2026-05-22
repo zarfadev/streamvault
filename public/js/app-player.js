@@ -2051,11 +2051,14 @@ async function init() {
     }
 
     // ── Bloqueo de DevTools ────────────────────────────────────────
-    if (typeof window.__svSecurityInit === 'function') {
-      window.__svSecurityInit(!!cfg.devtoolsBlocker);
-    }
-    if (cfg.devtoolsBlocker) {
-      _initDevToolsBlocker();
+    const _isPreviewFrame = new URLSearchParams(location.search).get('preview') === '1';
+    if (!_isPreviewFrame) {
+      if (typeof window.__svSecurityInit === 'function') {
+        window.__svSecurityInit(!!cfg.devtoolsBlocker);
+      }
+      if (cfg.devtoolsBlocker) {
+        _initDevToolsBlocker();
+      }
     }
 
     // ── Sistema de anuncios ────────────────────────────────────────
