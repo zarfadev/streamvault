@@ -8,9 +8,14 @@ RUN apk add --no-cache \
     g++ \
     wget \
     curl \
-    unzip && \
-    curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh && \
-    ln -sf /usr/local/bin/deno /usr/bin/deno
+    unzip \
+    gcompat \
+    libstdc++ && \
+    DENO_VER=$(curl -s https://api.github.com/repos/denoland/deno/releases/latest | python3 -c "import sys,json; print(json.load(sys.stdin)['tag_name'][1:])") && \
+    curl -fsSL "https://github.com/denoland/deno/releases/download/v${DENO_VER}/deno-x86_64-unknown-linux-gnu.zip" -o /tmp/deno.zip && \
+    unzip /tmp/deno.zip -d /usr/local/bin && \
+    rm /tmp/deno.zip && \
+    deno --version
 
 WORKDIR /app
 
