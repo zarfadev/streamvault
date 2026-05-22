@@ -291,6 +291,32 @@ async function main() {
   cleanupAuditLog();
   setInterval(cleanupAuditLog, 24 * 60 * 60 * 1000); // every 24 hours
 
+  // ── Stuck video watchdog — runs every 30 min ──────────────────────────────
+  // If a video stays in 'transcoding' or 'downloading' for > 2 hours the
+  // worker likely crashed mid-job without updating the DB. Mark as error so
+  // the dashboard shows a clear failure instead of a spinner forever.
+  async function rescueStuckVideos() {
+    if (_shuttingDown) return;
+    try {
+      const cutoff = Math.floor(Date.now() / 1000) - 2 * 60 * 60; // 2 hours ago
+      const result = await db.pool.query(
+        `UPDATE videos
+         SET status = 'error', updated_at = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT
+         WHERE status IN ('transcoding', 'downloading')
+           AND updated_at < $1
+         RETURNING id, title`,
+        [cutoff]
+      );
+      if (result.rows.length > 0) {
+        logger.warn({ rescued: result.rows.map(r => r.id) }, `Watchdog: marked ${result.rows.length} stuck video(s) as error`);
+      }
+    } catch (e) {
+      logger.error({ err: e.message }, 'Stuck video watchdog failed');
+    }
+  }
+  rescueStuckVideos();
+  setInterval(rescueStuckVideos, 30 * 60 * 1000);
+
   // ── F4.3: Worker heartbeat to status_checks ───────────────────────────────
   // Alert threshold: warn when more than N jobs are waiting (signals need for more workers)
   const QUEUE_ALERT_THRESHOLD = parseInt(process.env.QUEUE_ALERT_THRESHOLD || '20', 10);

@@ -209,9 +209,9 @@ router.post('/', optionalAuth, (req, res, next) => {
     }
 
     await db.prepare(
-      `INSERT INTO videos (id, title, description, original_filename, status, workspace_id, folder_id, short_code, guest_session_id)
-       VALUES (?, ?, ?, ?, 'queued', ?, ?, ?, ?)`
-    ).run(id, title, req.body.description || '', req.file.originalname, workspaceId, folderId, shortCode, guestSessionId);
+      `INSERT INTO videos (id, title, description, original_filename, status, size, workspace_id, folder_id, short_code, guest_session_id)
+       VALUES (?, ?, ?, ?, 'queued', ?, ?, ?, ?, ?)`
+    ).run(id, title, req.body.description || '', req.file.originalname, req.file.size || 0, workspaceId, folderId, shortCode, guestSessionId);
 
     if (workspaceId && req.file.size) {
       await db.prepare(`UPDATE workspaces SET storage_used_bytes = storage_used_bytes + ? WHERE id = ?`)

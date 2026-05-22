@@ -694,9 +694,9 @@ router.delete('/:id', authenticate, requireScope('videos:delete'), async (req, r
     const dir = path.join(__dirname, '..', 'videos', video.id);
     try { fs.rmSync(dir, { recursive: true }); } catch {}
 
-    if (video.workspace_id && video.size) {
+    if (video.workspace_id) {
       await db.prepare(`UPDATE workspaces SET storage_used_bytes = GREATEST(0, storage_used_bytes - ?) WHERE id = ?`)
-        .run(video.size, video.workspace_id);
+        .run(video.size || 0, video.workspace_id);
     }
 
     await db.prepare(`DELETE FROM videos WHERE id=?`).run(req.params.id);
