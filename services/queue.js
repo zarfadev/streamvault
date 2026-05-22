@@ -45,6 +45,15 @@ function makeBullQueue(name) {
   return new Bull(name, {
     redis: cfg.redisUrl,
     createClient: makeRedisClient,
+    settings: {
+      // Default lockDuration is 30s — too short for builds/deploys that take > 30s.
+      // Worker restarts expire the lock, Bull marks job stalled, retries run out fast.
+      // 15 minutes gives plenty of headroom for any deploy window.
+      lockDuration:    900_000,   // 15 min lock per renewal (default: 30s)
+      lockRenewTime:   450_000,   // renew every 7.5 min (half of lockDuration)
+      stalledInterval: 300_000,   // check for stalled jobs every 5 min (default: 30s)
+      maxStalledCount: 2,         // allow 2 stalls before failing (default: 1)
+    },
     defaultJobOptions: {
       attempts:          3,
       timeout:           3_600_000, // 1 hour max per job
