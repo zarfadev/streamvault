@@ -397,7 +397,7 @@ function doLogout() {
     const STAB_MAP = {
       perfil:   ['profile-grid'],
       general:  ['settings-grid-top', 'embed-code-card', 'ads-card', 'custom-domain-section', 'tmdb-settings-card', 'openai-settings-card', 'watermark-card', 'player-security-card', 'settings-save-row'],
-      acceso:   ['access-security-card', 'settings-save-row'],
+      acceso:   ['access-security-card', 'enterprise-transcoding-card', 'settings-save-row'],
       api:      ['apikeys-card', 'webhooks-card'],
       billing:  ['plan-usage-card', 'membership-section-card', 'invoices-section-card', 'referidos-card', 'upgrade-plan-card'],
       equipo:   ['team-card'],
@@ -514,6 +514,12 @@ function doLogout() {
         hotlinkProtection: document.getElementById('cfg-hotlink-protection')?.checked ?? false,
         requireTokensAlways: document.getElementById('cfg-require-tokens')?.checked ?? false,
       };
+      const _isEnt = (authWorkspace?.plan || '').toLowerCase() === 'enterprise';
+      const _etCard = document.getElementById('enterprise-transcoding-card');
+      if (_isEnt && _etCard && _etCard.style.display !== 'none') {
+        const sq = ['360p','480p','720p','1080p','1440p','4k'].filter(q => document.getElementById(`tq-${q}`)?.checked);
+        if (sq.length > 0) settings.transcodingQualities = sq;
+      }
       try {
         const r = await apiFetch(`${BASE}/api/workspaces/${authWorkspace.id}`, {
           method: 'PATCH',
@@ -6207,6 +6213,21 @@ function doLogout() {
         if (abd) abd.checked = !!s.adblock_detection;
         const dtb = document.getElementById('cfg-devtools-blocker');
         if (dtb) dtb.checked = !!s.devtools_blocker;
+        // Enterprise transcoding qualities
+        const etCard = document.getElementById('enterprise-transcoding-card');
+        if (etCard) {
+          const isEnterprise = (ws.plan || '').toLowerCase() === 'enterprise';
+          etCard.style.display = isEnterprise ? 'block' : 'none';
+          if (isEnterprise) {
+            const tqs = Array.isArray(s.transcodingQualities) && s.transcodingQualities.length
+              ? new Set(s.transcodingQualities)
+              : new Set(['360p', '480p', '720p', '1080p']);
+            ['360p', '480p', '720p', '1080p', '1440p', '4k'].forEach(q => {
+              const el = document.getElementById(`tq-${q}`);
+              if (el) el.checked = tqs.has(q);
+            });
+          }
+        }
       } catch {}
       // Embed video selector
       try {
@@ -6261,6 +6282,14 @@ function doLogout() {
         adblock_detection: document.getElementById('cfg-adblock-detection')?.checked || false,
         devtools_blocker: document.getElementById('cfg-devtools-blocker')?.checked || false,
       };
+      // Enterprise transcoding qualities
+      const isEnterprise = (authWorkspace?.plan || '').toLowerCase() === 'enterprise';
+      const etCard = document.getElementById('enterprise-transcoding-card');
+      if (isEnterprise && etCard && etCard.style.display !== 'none') {
+        const selectedQuals = ['360p', '480p', '720p', '1080p', '1440p', '4k']
+          .filter(q => document.getElementById(`tq-${q}`)?.checked);
+        if (selectedQuals.length > 0) settings.transcodingQualities = selectedQuals;
+      }
       try {
         const r = await apiFetch(`${BASE}/api/workspaces/${authWorkspace.id}`, {
           method: 'PATCH', headers: { 'Content-Type': 'application/json' },

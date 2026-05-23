@@ -3625,6 +3625,41 @@
           </div>
         </div>
 
+        <!-- Enterprise Transcoding Qualities card -->
+        <div class="settings-card stab-hidden" id="enterprise-transcoding-card" style="margin-bottom:20px;display:none;">
+          <div class="settings-card-title" style="display:flex;align-items:center;gap:10px;">
+            <span>Calidades de Transcodificación</span>
+            <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:99px;background:rgba(251,191,36,0.15);color:var(--amber);border:1px solid rgba(251,191,36,0.3);">Enterprise</span>
+          </div>
+          <p style="font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.55;">Elige qué resoluciones se generarán al subir un video. Selecciona al menos una. Los cambios aplican a videos nuevos — los ya procesados no se re-transcodifican.</p>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;transition:border-color .14s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'">
+              <input type="checkbox" id="tq-360p" value="360p" style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer;">
+              <div><div style="font-weight:600;">360p</div><div style="font-size:12px;color:var(--muted);margin-top:2px;">Móvil y conexiones lentas — ~700 kbps</div></div>
+            </label>
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;transition:border-color .14s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'">
+              <input type="checkbox" id="tq-480p" value="480p" style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer;">
+              <div><div style="font-weight:600;">480p</div><div style="font-size:12px;color:var(--muted);margin-top:2px;">SD — ~1.2 Mbps</div></div>
+            </label>
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;transition:border-color .14s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'">
+              <input type="checkbox" id="tq-720p" value="720p" checked style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer;">
+              <div><div style="font-weight:600;">720p</div><div style="font-size:12px;color:var(--muted);margin-top:2px;">HD — ~2.5 Mbps</div></div>
+            </label>
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;transition:border-color .14s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'">
+              <input type="checkbox" id="tq-1080p" value="1080p" checked style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer;">
+              <div><div style="font-weight:600;">1080p</div><div style="font-size:12px;color:var(--muted);margin-top:2px;">Full HD — ~4.5 Mbps</div></div>
+            </label>
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;transition:border-color .14s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'">
+              <input type="checkbox" id="tq-1440p" value="1440p" style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer;">
+              <div><div style="font-weight:600;">1440p <span style="font-size:11px;color:var(--muted);font-weight:400;">2K</span></div><div style="font-size:12px;color:var(--muted);margin-top:2px;">~8 Mbps · mayor almacenamiento y CPU</div></div>
+            </label>
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;transition:border-color .14s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'">
+              <input type="checkbox" id="tq-4k" value="4k" style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer;">
+              <div><div style="font-weight:600;">4K <span style="font-size:11px;color:var(--muted);font-weight:400;">Ultra HD</span></div><div style="font-size:12px;color:var(--muted);margin-top:2px;">~16 Mbps · requiere fuente en resolución 4K</div></div>
+            </label>
+          </div>
+        </div>
+
         <!-- Webhooks card -->
         <div class="settings-card stab-hidden" id="webhooks-card" style="margin-bottom:20px;display:none;">
           <div class="settings-card-title" style="display:flex;align-items:center;justify-content:space-between;">

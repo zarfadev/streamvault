@@ -86,11 +86,12 @@ function transcodeQuality(inputPath, outputDir, preset, videoInfo, keyInfoPath, 
       `-bufsize ${parseInt(preset.vbr) * 2}k`,
       `-b:a ${preset.abr}`,
       `-ar 48000`,
+      `-pix_fmt yuv420p`,
       `-profile:v ${preset.profile}`,
       `-preset ultrafast`,
       `-tune fastdecode`,
       `-threads ${threadsPerJob}`,
-      `-hls_time 6`,
+      `-hls_time 4`,
       `-hls_playlist_type vod`,
       `-hls_segment_filename ${segmentPattern}`,
       `-hls_flags independent_segments`,
@@ -165,13 +166,47 @@ function generateSpriteSheet(inputPath, outputDir, duration) {
   });
 }
 
-async function resolvePresetsForSource(videoInfo) {
-  const tc = await getJsonConfig('transcoding', { qualities: ['480p', '720p', '1080p'] });
-  const allowed = new Set(Array.isArray(tc.qualities) ? tc.qualities : ['480p', '720p', '1080p']);
-  let presets = QUALITY_PRESETS.filter(p => allowed.has(p.name) && p.height <= videoInfo.height + 100);
+async function resolvePresetsForSource(videoInfo, workspaceId) {
+  const tc = await getJsonConfig('transcoding', { qualities: ['360p', '480p', '720p', '1080p'] });
+  const globalAllowed = new Set(Array.isArray(tc.qualities) ? tc.qualities : ['360p', '480p', '720p', '1080p']);
+
+  let maxHeight = 1080;
+  let customQualities = null;
+
+  if (workspaceId) {
+    try {
+      const ws = await db.prepare(`SELECT plan, settings FROM workspaces WHERE id = ?`).get(workspaceId);
+      if (ws) {
+        const plan = (ws.plan || 'starter').toLowerCase();
+        if (plan === 'starter') {
+          maxHeight = 720;
+        } else if (plan === 'enterprise') {
+          const settings = typeof ws.settings === 'string' ? JSON.parse(ws.settings || '{}') : (ws.settings || {});
+          if (Array.isArray(settings.transcodingQualities) && settings.transcodingQualities.length > 0) {
+            customQualities = new Set(settings.transcodingQualities);
+            maxHeight = 2160;
+          }
+        }
+      }
+    } catch (err) {
+      logger.warn({ workspaceId, err: err.message }, 'resolvePresetsForSource: workspace lookup failed — using defaults');
+    }
+  }
+
+  let presets;
+  if (customQualities) {
+    presets = QUALITY_PRESETS.filter(p => customQualities.has(p.name) && p.height <= videoInfo.height + 100);
+  } else {
+    presets = QUALITY_PRESETS.filter(p =>
+      globalAllowed.has(p.name) &&
+      p.height <= maxHeight &&
+      p.height <= videoInfo.height + 100
+    );
+  }
+
   if (!presets.length) {
-    const first = QUALITY_PRESETS.find(p => allowed.has(p.name)) || QUALITY_PRESETS[0];
-    presets = first ? [first] : [QUALITY_PRESETS[0]];
+    const fallback = QUALITY_PRESETS.find(p => p.height <= maxHeight) || QUALITY_PRESETS[0];
+    presets = [fallback];
   }
   return presets;
 }
@@ -465,7 +500,7 @@ async function processVideo(videoId, inputPath, title, options = {}) {
     const keyUrl = `${config.appUrl}/api/videos/${videoId}/hlskey/${hlsKeyId}`;
     fs.writeFileSync(keyInfoPath, `${keyUrl}\n${keyBinPath}\n`);
 
-    const presets = await resolvePresetsForSource(info);
+    const presets = await resolvePresetsForSource(info, workspaceId);
     const totalCpus = os.cpus().length;
     const done = [];
 
