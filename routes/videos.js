@@ -774,7 +774,7 @@ router.patch('/:id', authenticate, async (req, res) => {
     }
   }
 
-  const allowedVis = ['public', 'private', 'password'];
+  const allowedVis = ['public', 'private', 'unlisted', 'password'];
   const updateVisibility = allowedVis.includes(visibility);
   const newVis = updateVisibility ? visibility : null;
 

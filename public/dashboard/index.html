@@ -2863,6 +2863,7 @@
         <select id="library-filter-visibility" onchange="applyLibraryFilters()" aria-label="Filtrar por visibilidad">
           <option value="all">Toda visibilidad</option>
           <option value="public">Públicos</option>
+          <option value="unlisted">No listados</option>
           <option value="private">Privados</option>
           <option value="password">Con contraseña</option>
         </select>
@@ -4402,6 +4403,7 @@
           <label for="edit-visibility">Visibilidad</label>
           <select id="edit-visibility" class="modal-input" style="cursor:pointer;" onchange="onVisibilityChange()">
             <option value="public">Público — cualquiera puede verlo</option>
+            <option value="unlisted">No listado — solo con enlace directo</option>
             <option value="private">Privado — solo miembros del workspace</option>
             <option value="password">Con contraseña — requiere clave de acceso</option>
           </select>
