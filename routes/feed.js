@@ -62,7 +62,7 @@ router.get('/:slug', async (req, res) => {
     const videos = await db.prepare(
       `SELECT id, title, description, duration, size, created_at, updated_at, qualities, thumbnail
        FROM videos
-       WHERE workspace_id = ? AND visibility = 'public' AND status = 'ready'
+       WHERE workspace_id = ? AND visibility = 'public' AND status = 'ready' AND (dmca_suspended IS NULL OR dmca_suspended = FALSE)
        ORDER BY created_at DESC
        LIMIT ?`
     ).all(ws.id, MAX_ITEMS);

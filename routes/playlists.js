@@ -28,7 +28,7 @@ router.get('/:id/embed', async (req, res) => {
     const videos = await db.prepare(`
       SELECT v.id, v.title, v.duration, v.hls_cdn_url, v.thumbnail FROM playlist_videos pv
       JOIN videos v ON v.id = pv.video_id
-      WHERE pv.playlist_id = ? AND v.status = 'ready' ORDER BY pv.position ASC
+      WHERE pv.playlist_id = ? AND v.status = 'ready' AND (v.dmca_suspended IS NULL OR v.dmca_suspended = FALSE) ORDER BY pv.position ASC
     `).all(req.params.id);
     res.json({ ...pl, videos });
   } catch (err) {

@@ -197,8 +197,8 @@ router.get('/', async (req, res) => {
         `SELECT * FROM videos ${where} ORDER BY created_at DESC LIMIT ?`
       ).all(...baseParams, limit + 1); // fetch one extra to detect if there's a next page
     } else {
-      // No workspace context: only show public/ready videos (security: don't expose all videos)
-      const clauses = ["status = 'ready'", "(visibility IS NULL OR visibility = 'public')"];
+      // No workspace context: only show public/ready non-DMCA-suspended videos
+      const clauses = ["status = 'ready'", "(visibility IS NULL OR visibility = 'public')", "(dmca_suspended IS NULL OR dmca_suspended = FALSE)"];
       const baseParams = [];
       if (search) { clauses.push('(title ILIKE ? OR description ILIKE ?)'); baseParams.push(search, search); }
       if (cursor !== null) { clauses.push('created_at < ?'); baseParams.push(cursor); }
