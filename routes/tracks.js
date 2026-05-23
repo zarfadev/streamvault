@@ -96,6 +96,9 @@ router.post('/', trackUpload.single('file'), async (req, res) => {
         .get(video.workspace_id, req.user.id);
       if (!member) { fs.unlinkSync(req.file.path); return res.status(403).json({ error: 'Forbidden' }); }
       if (!['owner', 'admin'].includes(member.role)) { fs.unlinkSync(req.file.path); return res.status(403).json({ error: 'Se requiere rol owner o admin para subir pistas' }); }
+    } else if (req.user.platform_role !== 'super_admin') {
+      fs.unlinkSync(req.file.path);
+      return res.status(403).json({ error: 'Forbidden' });
     }
 
     const ext  = path.extname(req.file.filename).toLowerCase();
@@ -287,6 +290,8 @@ router.post('/rebuild-playlist', async (req, res) => {
       ).get(video.workspace_id, req.user.id);
       if (!member) return res.status(403).json({ error: 'Forbidden' });
       if (!['owner', 'admin'].includes(member.role)) return res.status(403).json({ error: 'Se requiere rol owner o admin para reconstruir la lista de reproducción' });
+    } else if (req.user.platform_role !== 'super_admin') {
+      return res.status(403).json({ error: 'Forbidden' });
     }
 
     await rebuildMasterPlaylist(req.params.videoId);
