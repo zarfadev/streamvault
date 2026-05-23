@@ -217,8 +217,16 @@ router.patch('/:workspaceId', resolveWorkspace, requireRole('owner', 'admin'), a
         .run(JSON.stringify(merged), ws.id);
     }
 
-    // F2.7: Custom embed domain (Pro + Enterprise)
+    // F2.7: Custom embed domain (Enterprise only)
     if (typeof custom_embed_domain !== 'undefined') {
+      const { hasFeature } = require('../middleware/checkFeature');
+      if (!await hasFeature(ws, 'customDomain')) {
+        return res.status(403).json({
+          error: 'Tu plan no incluye dominios personalizados. Actualiza a Enterprise para acceder.',
+          code: 'FEATURE_NOT_IN_PLAN',
+          requiredUpgrade: true,
+        });
+      }
       // Basic domain validation
       if (custom_embed_domain && !/^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(custom_embed_domain)) {
         return res.status(400).json({ error: 'Invalid domain format' });
@@ -241,6 +249,15 @@ router.patch('/:workspaceId', resolveWorkspace, requireRole('owner', 'admin'), a
 // Verify that a custom domain is pointing to this server
 router.post('/:workspaceId/verify-domain', rateLimit(10, 60_000), resolveWorkspace, requireRole('owner', 'admin'), async (req, res) => {
   const ws = req.workspace;
+  const { hasFeature } = require('../middleware/checkFeature');
+  if (!await hasFeature(ws, 'customDomain')) {
+    return res.status(403).json({
+      error: 'Tu plan no incluye dominios personalizados. Actualiza a Enterprise para acceder.',
+      code: 'FEATURE_NOT_IN_PLAN',
+      requiredUpgrade: true,
+    });
+  }
+
   const domain = (req.body.domain || '').trim().toLowerCase();
 
   if (!domain) return res.status(400).json({ error: 'Domain is required' });

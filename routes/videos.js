@@ -1380,9 +1380,9 @@ router.delete('/:id/thumbnail', authenticate, async (req, res) => {
       if (fs.existsSync(p)) { hlsPath = p; break; }
     }
     if (!hlsPath) return res.status(404).json({ error: 'No transcoded video found' });
-    const { exec } = require('child_process');
+    const { execFile } = require('child_process');
     await new Promise((resolve, reject) =>
-      exec(`ffmpeg -y -i "${hlsPath}" -ss 00:00:05 -vframes 1 -q:v 2 "${thumbPath}"`, (err) => err ? reject(err) : resolve())
+      execFile('ffmpeg', ['-y', '-i', hlsPath, '-ss', '00:00:05', '-vframes', '1', '-q:v', '2', thumbPath], (err) => err ? reject(err) : resolve())
     );
     res.json({ success: true });
   } catch (err) {

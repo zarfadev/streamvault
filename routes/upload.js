@@ -155,6 +155,7 @@ router.post('/', optionalAuth, (req, res, next) => {
 
       // ¿Uploads anónimos habilitados?
       if (!guestCfg.enabled) {
+        fs.unlink(req.file.path, () => {});
         return res.status(403).json({
           error: 'Los uploads sin cuenta están temporalmente deshabilitados.',
           code: 'GUEST_UPLOAD_DISABLED',
@@ -167,6 +168,7 @@ router.post('/', optionalAuth, (req, res, next) => {
         const label = guestCfg.maxFileSizeMB >= 1024
           ? `${(guestCfg.maxFileSizeMB / 1024).toFixed(1)} GB`
           : `${guestCfg.maxFileSizeMB} MB`;
+        fs.unlink(req.file.path, () => {});
         return res.status(413).json({
           error: `El archivo supera el límite de ${label} para subidas sin cuenta. Regístrate para subir archivos más grandes.`,
           code: 'GUEST_FILE_TOO_LARGE',
@@ -180,6 +182,7 @@ router.post('/', optionalAuth, (req, res, next) => {
           `SELECT COUNT(*) as cnt FROM videos WHERE guest_session_id = ? AND workspace_id IS NULL`
         ).get(guestSessionId);
         if ((count?.cnt ?? 0) >= guestCfg.maxVideos) {
+          fs.unlink(req.file.path, () => {});
           return res.status(429).json({
             error: `Has alcanzado el límite de ${guestCfg.maxVideos} video${guestCfg.maxVideos !== 1 ? 's' : ''} sin cuenta. Regístrate para subir más.`,
             code: 'GUEST_VIDEO_LIMIT',

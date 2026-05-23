@@ -204,6 +204,8 @@ router.post('/', rateLimit(5, 60_000), authenticate, async (req, res) => {
       if (!['owner', 'admin'].includes(member.role)) {
         return res.status(403).json({ error: 'Se requiere rol owner o admin para iniciar transcripciones' });
       }
+    } else if (req.user.platform_role !== 'super_admin') {
+      return res.status(403).json({ error: 'Forbidden' });
     }
     if (video.status !== 'ready') {
       return res.status(409).json({ error: 'Video is not ready yet' });
@@ -297,6 +299,8 @@ router.delete('/:id', authenticate, async (req, res) => {
       if (!['owner', 'admin'].includes(member.role)) {
         return res.status(403).json({ error: 'Se requiere rol owner o admin para eliminar transcripciones' });
       }
+    } else if (req.user.platform_role !== 'super_admin') {
+      return res.status(403).json({ error: 'Forbidden' });
     }
 
     await db.prepare(`DELETE FROM transcriptions WHERE id = ?`).run(req.params.id);
