@@ -1343,10 +1343,12 @@ router.get('/download/:token', async (req, res) => {
 // Generates a short-lived cast token embedded in every sub-manifest and key URL so the
 // Chromecast receiver can fetch segments and AES keys even when hotlink protection or
 // video-token enforcement is active — without exposing normal auth tokens to the TV.
+// Supports both local-storage videos and S3/CDN videos (fetches manifest from CDN when
+// local file was deleted after S3 upload with DELETE_LOCAL_AFTER_S3=1).
 router.get('/:id/cast-manifest', async (req, res) => {
   try {
     const videoId = req.params.id;
-    const video = await db.prepare(`SELECT id, workspace_id, visibility, hls_key_id FROM videos WHERE id=?`).get(videoId);
+    const video = await db.prepare(`SELECT id, workspace_id, visibility, hls_key_id, hls_cdn_url FROM videos WHERE id=?`).get(videoId);
     if (!video) return res.status(404).end();
 
     // Resolve base URL — honours Cloudflare tunnel and any reverse-proxy forwarding headers.
@@ -1354,14 +1356,23 @@ router.get('/:id/cast-manifest', async (req, res) => {
     const host  = req.headers['x-forwarded-host'] || req.headers.host || 'localhost:3000';
     const baseUrl = `${proto}://${host}`;
 
-    const masterPath = path.join(__dirname, '..', 'videos', videoId, 'master.m3u8');
-    if (!fs.existsSync(masterPath)) return res.status(404).end();
-
     // One cast token per session — embedded into every URL so the Chromecast can bypass
     // hotlink and token enforcement without having a browser session.
     const castToken = signCastToken(videoId);
 
-    let content = fs.readFileSync(masterPath, 'utf8');
+    // Load master.m3u8 — try local first, fall back to CDN for S3-hosted videos
+    let content;
+    const masterPath = path.join(__dirname, '..', 'videos', videoId, 'master.m3u8');
+    if (fs.existsSync(masterPath)) {
+      content = fs.readFileSync(masterPath, 'utf8');
+    } else if (video.hls_cdn_url) {
+      const cdnUrl = video.hls_cdn_url.startsWith('//') ? `https:${video.hls_cdn_url}` : video.hls_cdn_url;
+      const cdnRes = await fetch(cdnUrl);
+      if (!cdnRes.ok) return res.status(404).end();
+      content = await cdnRes.text();
+    } else {
+      return res.status(404).end();
+    }
 
     // Rewrite AES-128 key URIs (relative OR absolute) → absolute with cast token.
     // Transcoder writes absolute URLs using config.appUrl; we normalise to the
@@ -1375,11 +1386,23 @@ router.get('/:id/cast-manifest', async (req, res) => {
       }
     );
 
-    // Rewrite relative sub-playlist paths → routed through cast-manifest-sub with cast token
+    // Rewrite relative sub-playlist paths → routed through cast-manifest-sub with cast token.
+    // Both local and CDN master.m3u8 use relative quality paths (e.g. "720p/index.m3u8").
     content = content.replace(
       /^((?!#)(?!https?:\/\/).+\.m3u8)$/gm,
       (match) => `${baseUrl}/api/videos/${videoId}/cast-manifest-sub/${match}?cast_token=${castToken}`
     );
+
+    // Also rewrite any absolute CDN quality playlist URLs that may appear in CDN-hosted manifests
+    if (video.hls_cdn_url) {
+      const cdnBase = video.hls_cdn_url.replace(/\/master\.m3u8(\?.*)?$/i, '');
+      // Escape cdnBase for use in regex
+      const escaped = cdnBase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      content = content.replace(
+        new RegExp(`${escaped}/([a-zA-Z0-9_-]+/index\\.m3u8)`, 'g'),
+        (_, qualityPath) => `${baseUrl}/api/videos/${videoId}/cast-manifest-sub/${qualityPath}?cast_token=${castToken}`
+      );
+    }
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -1396,6 +1419,7 @@ router.get('/:id/cast-manifest', async (req, res) => {
 // segment URI so the Chromecast can load them without a browser auth token.
 // NOTE: The quality path is split into :qualityDir and :file because Express single params
 // do not match across "/" separators (e.g. "360p/index.m3u8" would fail as a single param).
+// Supports S3/CDN videos: fetches from CDN if local file was deleted after S3 upload.
 router.get('/:id/cast-manifest-sub/:qualityDir/:file', async (req, res) => {
   try {
     const videoId    = req.params.id;
@@ -1412,9 +1436,22 @@ router.get('/:id/cast-manifest-sub/:qualityDir/:file', async (req, res) => {
     if (!/^[a-zA-Z0-9_-]+$/.test(qualityDir) || !/^index\.m3u8$/.test(file)) return res.status(400).end();
 
     const subPath = path.join(__dirname, '..', 'videos', videoId, quality);
-    if (!fs.existsSync(subPath)) return res.status(404).end();
+    let content;
+    let cdnSegmentBase = null; // if set, rewrite segments to CDN URLs instead of local
 
-    let content = fs.readFileSync(subPath, 'utf8');
+    if (fs.existsSync(subPath)) {
+      content = fs.readFileSync(subPath, 'utf8');
+    } else {
+      // Local file not found — try CDN (S3 mode with local cleanup)
+      const videoRow = await db.prepare(`SELECT hls_cdn_url FROM videos WHERE id=?`).get(videoId);
+      if (!videoRow?.hls_cdn_url) return res.status(404).end();
+      const cdnBase = videoRow.hls_cdn_url.replace(/\/master\.m3u8(\?.*)?$/i, '');
+      const cdnUrl  = `${cdnBase}/${quality}`;
+      const cdnRes  = await fetch(cdnUrl);
+      if (!cdnRes.ok) return res.status(404).end();
+      content = await cdnRes.text();
+      cdnSegmentBase = `${cdnBase}/${qualityDir}`;
+    }
 
     const tokenSuffix = castToken ? `?cast_token=${encodeURIComponent(castToken)}` : '';
 
@@ -1428,11 +1465,20 @@ router.get('/:id/cast-manifest-sub/:qualityDir/:file', async (req, res) => {
       }
     );
 
-    // Rewrite relative segment filenames → absolute with cast token
-    content = content.replace(
-      /^(seg\d+\.ts)$/gm,
-      (match) => `${baseUrl}/videos/${videoId}/${qualityDir}/${match}${tokenSuffix}`
-    );
+    // Rewrite relative segment filenames.
+    // CDN: point to CDN (segments are public, no auth needed).
+    // Local: point to server with cast token.
+    if (cdnSegmentBase) {
+      content = content.replace(
+        /^(seg\d+\.ts)$/gm,
+        (match) => `${cdnSegmentBase}/${match}`
+      );
+    } else {
+      content = content.replace(
+        /^(seg\d+\.ts)$/gm,
+        (match) => `${baseUrl}/videos/${videoId}/${qualityDir}/${match}${tokenSuffix}`
+      );
+    }
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
     res.setHeader('Access-Control-Allow-Origin', '*');
