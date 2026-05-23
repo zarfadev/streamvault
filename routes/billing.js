@@ -296,7 +296,7 @@ router.post('/checkout', rateLimit(10, 3_600_000), authenticate, resolveWorkspac
     });
   } catch (err) {
     logger.error({ err }, 'Checkout error');
-    if (err.message?.includes('not configured') || err.message?.includes('No configurado')) {
+    if (err.message?.includes('not configured') || err.message?.includes('no configurado') || err.message?.includes('No configurado')) {
       return res.status(503).json({ error: err.message });
     }
     res.status(500).json({ error: 'Error al crear sesión de pago: ' + err.message });

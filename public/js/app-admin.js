@@ -13,14 +13,40 @@ function esc(str)     { return String(str||'').replace(/&/g,'&amp;').replace(/</
 function escAttr(str) { return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 (async function init() {
   if (!_token) return rl();
-  
+
   try {
-    const r = await fetch(`${BASE}/auth/me`, { headers: { Authorization: 'Bearer ' + _token } });
+    let r = await fetch(`${BASE}/auth/me`, { headers: { Authorization: 'Bearer ' + _token } });
+
+    // Token expired — try silent refresh before redirecting to login
+    if (r.status === 401) {
+      const rt = localStorage.getItem('sv_refresh_token') || sessionStorage.getItem('sv_refresh_token') || localStorage.getItem('sv_refresh');
+      if (rt) {
+        try {
+          const rr = await fetch(`${BASE}/auth/refresh`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refreshToken: rt }),
+          });
+          if (rr.ok) {
+            const rd = await rr.json();
+            if (rd.accessToken) {
+              const inSession = !localStorage.getItem('sv_access_token') && !!sessionStorage.getItem('sv_access_token');
+              const store = inSession ? sessionStorage : localStorage;
+              _token = rd.accessToken;
+              store.setItem('sv_access_token', _token);
+              if (rd.refreshToken) store.setItem('sv_refresh_token', rd.refreshToken);
+              r = await fetch(`${BASE}/auth/me`, { headers: { Authorization: 'Bearer ' + _token } });
+            }
+          }
+        } catch {}
+      }
+    }
+
     if (!r.ok) return rl();
     const d = await r.json();
-    if (d.user?.platform_role !== 'super_admin') { 
-      alert('Acceso denegado: Se requiere rol de Super Admin'); 
-      return window.location.href = '/dashboard'; 
+    if (d.user?.platform_role !== 'super_admin') {
+      alert('Acceso denegado: Se requiere rol de Super Admin');
+      return window.location.href = '/dashboard';
     }
     _user = d.user;
     document.getElementById('profile-avatar').textContent = (_user.name||'A')[0].toUpperCase();
@@ -29,14 +55,11 @@ function escAttr(str) { return String(str||'').replace(/&/g,'&amp;').replace(/</
     document.getElementById('dd-name').textContent = _user.name || _user.email;
     document.getElementById('dd-email').textContent = _user.email || '—';
     document.body.classList.add('ready');
-    // Arrancar el stream SSE de métricas en background para que el dot del nav
-    // muestre verde desde cualquier sección, sin necesidad de visitar Live primero
     startLiveStream();
-    // Restaurar la sección desde el hash de la URL
     restoreSection();
   } catch { rl(); }
 })();
-function rl() { window.location.href = '/login?next=/admin'; }
+function rl() { window.location.href = '/login?redirect=/admin'; }
 function doLogout() {
   const rt = localStorage.getItem('sv_refresh_token') || sessionStorage.getItem('sv_refresh_token') || localStorage.getItem('sv_refresh');
   if (rt) fetch(`${BASE}/auth/logout`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({refreshToken:rt}) }).catch(()=>{});

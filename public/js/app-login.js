@@ -19,7 +19,18 @@ let _rcReady = false;
 })();
 
 async function getCaptchaToken(action = 'submit') {
-  if (!_rcKey || !_rcReady) return '';
+  if (!_rcKey) return '';
+  if (!_rcReady) {
+    // Wait up to 4s for reCAPTCHA script to finish loading
+    await new Promise(resolve => {
+      let waited = 0;
+      const iv = setInterval(() => {
+        waited += 100;
+        if (_rcReady || waited >= 4000) { clearInterval(iv); resolve(); }
+      }, 100);
+    });
+  }
+  if (!_rcReady) return '';
   try { return await grecaptcha.execute(_rcKey, { action }); } catch { return ''; }
 }
 
@@ -143,10 +154,10 @@ async function doLogin() {
 
     const redirectTo = urlParams.get('redirect');
     const role = data.user?.platform_role;
-    if (role === 'super_admin') {
-      window.location.href = '/admin';
-    } else if (redirectTo && redirectTo.startsWith('/')) {
+    if (redirectTo && redirectTo.startsWith('/')) {
       window.location.href = redirectTo;
+    } else if (role === 'super_admin') {
+      window.location.href = '/admin';
     } else {
       window.location.href = '/dashboard';
     }

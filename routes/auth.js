@@ -26,6 +26,8 @@ function validatePasswordStrength(password) {
 async function verifyCaptcha(token) {
   const secret = process.env.RECAPTCHA_SECRET_KEY;
   if (!secret) return true; // not configured — skip
+  const siteKey = process.env.RECAPTCHA_SITE_KEY;
+  if (!siteKey) return true; // site key not set — frontend can't generate tokens, skip enforcement
   if (!token) return false;
   try {
     const https = require('https');
