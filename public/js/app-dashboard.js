@@ -5482,35 +5482,45 @@ function doLogout() {
         if (d.secret) {
           const m = document.createElement('div');
           m.className = 'modal-overlay';
-          m.style.display = 'flex';
           m.innerHTML = `
             <div class="modal-card" style="max-width:520px;">
               <div class="modal-head">
                 <h3><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:5px;"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>Secreto del Webhook</h3>
-                <button class="btn btn-ghost" onclick="this.closest('.modal-overlay').remove()" style="padding:4px 10px;font-size:18px;line-height:1;border-radius:8px;flex-shrink:0;" aria-label="Cerrar">×</button>
+                <button class="btn btn-ghost" onclick="this.closest('.modal-overlay').classList.remove('visible');setTimeout(()=>this.closest('.modal-overlay').remove(),200)" style="padding:4px 10px;font-size:18px;line-height:1;border-radius:8px;flex-shrink:0;" aria-label="Cerrar">×</button>
               </div>
               <div class="modal-body">
                 <p style="color:var(--muted);font-size:13px;margin-bottom:14px;line-height:1.6;">
-                  Guarda este secreto HMAC en un lugar seguro. Úsalo para verificar la firma de las notificaciones. 
+                  Guarda este secreto HMAC en un lugar seguro. Úsalo para verificar la firma de las notificaciones.
                   <strong style="color:var(--red);">No podrás verlo de nuevo.</strong>
                 </p>
                 <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:14px;margin-bottom:14px;position:relative;">
-                  <code style="font-family:var(--mono);font-size:12px;word-break:break-all;color:var(--text);display:block;line-height:1.6;">${esc(d.secret)}</code>
+                  <code id="wh-secret-code" style="font-family:var(--mono);font-size:12px;word-break:break-all;color:var(--text);display:block;line-height:1.6;user-select:all;">${esc(d.secret)}</code>
                 </div>
               </div>
               <div class="modal-foot">
-                <button class="btn btn-ghost" data-secret="${esc(d.secret)}" onclick="navigator.clipboard.writeText(this.dataset.secret).then(()=>toast('Secreto copiado al portapapeles','success'))">
+                <button class="btn btn-ghost" data-secret="${esc(d.secret)}" onclick="
+                  const s=this.dataset.secret;
+                  if(navigator.clipboard&&window.isSecureContext){
+                    navigator.clipboard.writeText(s).then(()=>toast('Secreto copiado','success')).catch(()=>{
+                      const el=document.getElementById('wh-secret-code');if(el){const r=document.createRange();r.selectNodeContents(el);window.getSelection().removeAllRanges();window.getSelection().addRange(r);}
+                      toast('Selecciona y copia el texto manualmente (Ctrl+C)','info');
+                    });
+                  } else {
+                    const el=document.getElementById('wh-secret-code');if(el){const r=document.createRange();r.selectNodeContents(el);window.getSelection().removeAllRanges();window.getSelection().addRange(r);}
+                    toast('Texto seleccionado — presiona Ctrl+C para copiar','info');
+                  }">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <rect x="9" y="9" width="13" height="13" rx="2"/>
                     <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
                   </svg>
                   Copiar secreto
                 </button>
-                <button class="btn btn-primary" onclick="this.closest('.modal-overlay').remove()">Entendido</button>
+                <button class="btn btn-primary" onclick="this.closest('.modal-overlay').classList.remove('visible');setTimeout(()=>this.closest('.modal-overlay').remove(),200)">Entendido</button>
               </div>
             </div>`;
           document.body.appendChild(m);
-          setTimeout(() => m.style.opacity = '1', 10);
+          // Use .visible class (not inline opacity) so pointer-events:auto is applied
+          requestAnimationFrame(() => m.classList.add('visible'));
         }
         
         // Reload webhooks list
