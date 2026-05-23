@@ -305,7 +305,7 @@ async function main() {
       const cutoff = Math.floor(Date.now() / 1000) - 2 * 60 * 60; // 2 hours ago
       const result = await db.pool.query(
         `UPDATE videos
-         SET status = 'error', updated_at = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT
+         SET status = 'error', transcoding_pct = NULL, updated_at = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT
          WHERE status IN ('transcoding', 'downloading')
            AND updated_at < $1
          RETURNING id, title`,
