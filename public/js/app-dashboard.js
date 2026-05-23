@@ -2789,18 +2789,18 @@ function doLogout() {
       if (_libView === 'list') {
         const statusBadge = v => {
           const hasQ = Array.isArray(v.qualities) && v.qualities.length > 0;
-          if (v.status === 'transcoding') {
-            const pctStr = v.progress_pct != null ? ` ${v.progress_pct}%` : '';
+          if (v.status === 'transcoding' || v.status === 'queued') {
+            const pct    = v.progress_pct ?? 0;
+            const pctStr = ` ${pct}%`;
             const label  = hasQ ? `Parcial${pctStr}` : `Procesando${pctStr}`;
             return `<div style="display:flex;flex-direction:column;gap:3px;">
               <span class="vt-status processing">${label}</span>
-              ${v.progress_pct != null ? `<div style="height:3px;border-radius:2px;background:var(--surface3);overflow:hidden;width:80px;"><div style="height:100%;width:${v.progress_pct}%;background:var(--amber);border-radius:2px;transition:width .5s;"></div></div>` : ''}
+              <div style="height:3px;border-radius:2px;background:var(--surface3);overflow:hidden;width:80px;"><div style="height:100%;width:${pct}%;background:var(--amber);border-radius:2px;transition:width .5s;"></div></div>
             </div>`;
           }
           const map = {
             ready: ['ready','Listo'],
             error: ['error','Error'],
-            queued: ['queued','En cola'],
             scheduled: ['queued','Programado'],
             processing: ['processing','Procesando'],
           };
@@ -2963,8 +2963,8 @@ function doLogout() {
         const _dot = c => `<svg width="6" height="6" viewBox="0 0 12 12" fill="${c}"><circle cx="6" cy="6" r="6"/></svg>`;
         const statusLabel = {
           ready:       _pill('var(--green)',  'rgba(34,197,94,.13)',   _dot('var(--green)'),  'Listo'),
-          transcoding: `<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:99px;background:rgba(251,191,36,.12);color:var(--amber);font-size:10px;font-weight:700;white-space:nowrap;flex-shrink:0;line-height:1.6;"><span class="spinner" style="width:7px;height:7px;border-width:1.5px;border-color:var(--amber);border-top-color:transparent;"></span>${v.progress_pct != null ? v.progress_pct + '%' : 'Procesando'}</span>`,
-          queued:      _pill('var(--accent2)','rgba(139,92,246,.12)',  _dot('var(--accent2)'),'En cola'),
+          transcoding: `<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:99px;background:rgba(251,191,36,.12);color:var(--amber);font-size:10px;font-weight:700;white-space:nowrap;flex-shrink:0;line-height:1.6;"><span class="spinner" style="width:7px;height:7px;border-width:1.5px;border-color:var(--amber);border-top-color:transparent;"></span>${(v.progress_pct ?? 0)}%</span>`,
+          queued:      `<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:99px;background:rgba(251,191,36,.12);color:var(--amber);font-size:10px;font-weight:700;white-space:nowrap;flex-shrink:0;line-height:1.6;"><span class="spinner" style="width:7px;height:7px;border-width:1.5px;border-color:var(--amber);border-top-color:transparent;"></span>0%</span>`,
           error:       _pill('var(--red)',    'rgba(239,68,68,.12)',   _dot('var(--red)'),    'Error'),
           scheduled:   _pill('#a78bfa',       'rgba(167,139,250,.12)', _dot('#a78bfa'),       'Programado'),
           downloading: _pill('var(--accent)', 'rgba(99,102,241,.12)',  _dot('var(--accent)'), 'Descargando'),
@@ -2997,7 +2997,7 @@ function doLogout() {
           <div class="video-title" title="${esc(v.title)}">${esc(v.title)}</div>
           ${statusLabel}
         </div>
-        ${isProcessing && v.progress_pct != null ? `<div style="margin:4px 0 6px;"><div style="height:3px;border-radius:2px;background:var(--surface3);overflow:hidden;"><div style="height:100%;width:${v.progress_pct}%;background:var(--amber);border-radius:2px;transition:width .5s ease;"></div></div><div style="font-size:10px;color:var(--amber);margin-top:3px;font-family:var(--mono);">${v.progress_pct}% completado</div></div>` : ''}
+        ${isProcessing ? `<div style="margin:4px 0 6px;"><div style="height:3px;border-radius:2px;background:var(--surface3);overflow:hidden;"><div style="height:100%;width:${v.progress_pct ?? 0}%;background:var(--amber);border-radius:2px;transition:width .5s ease;"></div></div><div style="font-size:10px;color:var(--amber);margin-top:3px;font-family:var(--mono);">${v.progress_pct ?? 0}% completado</div></div>` : ''}
         <div class="video-meta">
           ${v.duration ? `<span><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>${formatDuration(v.duration)}</span>` : ''}
           ${v.size ? `<span><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>${formatSize(v.size)}</span>` : ''}
@@ -3079,7 +3079,7 @@ function doLogout() {
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
               Programado${v.publish_at ? ' · ' + new Date(v.publish_at*1000).toLocaleDateString('es') : ''}
             </button>` : ''}`
-          : `<span style="font-size:12px;color:var(--muted);padding:6px 0;display:flex;align-items:center;gap:6px;"><span class="spinner"></span> ${isProcessing ? (v.progress_pct != null ? `Transcodificando… ${v.progress_pct}%` : 'Transcodificando…') : 'Procesando…'}</span>`}
+          : `<span style="font-size:12px;color:var(--muted);padding:6px 0;display:flex;align-items:center;gap:6px;"><span class="spinner"></span> Transcodificando… ${v.progress_pct ?? 0}%</span>`}
         </div>
       </div>
     </div>`;}).join('');

@@ -237,6 +237,12 @@ router.post('/', optionalAuth, (req, res, next) => {
 
     const payload = { videoId: id, inputPath: req.file.path, s3SourceKey, title, workspaceId, plan: req.workspace?.plan || 'starter' };
     const { inline } = await addTranscodeJob(payload);
+
+    // Mark as transcoding immediately so the dashboard shows a spinner + 0%
+    // instead of "En cola". The DB was inserted with status='queued'; flip it
+    // now before responding so the first poll the client does sees progress.
+    db.prepare(`UPDATE videos SET status='transcoding', transcoding_pct=0 WHERE id=?`).run(id).catch(() => {});
+
     if (inline) {
       processVideo(id, req.file.path, title, {
         workspaceId,

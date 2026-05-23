@@ -39,7 +39,11 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
-const transcodeConc     = Math.max(1, parseInt(process.env.WORKER_CONCURRENCY || '2', 10));
+const os = require('os');
+// Default: one slot per CPU core, capped at 8 to avoid memory pressure.
+// Override with WORKER_CONCURRENCY env var.
+const defaultConc       = Math.min(8, Math.max(2, os.cpus().length));
+const transcodeConc     = Math.max(1, parseInt(process.env.WORKER_CONCURRENCY || String(defaultConc), 10));
 const transcriptionConc = Math.max(1, parseInt(process.env.TRANSCRIPTION_CONCURRENCY || '4', 10));
 
 // ─── Graceful shutdown ────────────────────────────────────────────────────────

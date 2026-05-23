@@ -259,8 +259,8 @@ router.post(
           size = result.size;
         }
 
-        logger.info({ videoId, sizeMB: (size / 1e6).toFixed(1) }, 'Downloaded — queueing transcode');
-        await db.prepare(`UPDATE videos SET status='queued', size=? WHERE id=?`).run(size, videoId);
+        logger.info({ videoId, sizeMB: (size / 1e6).toFixed(1) }, 'Downloaded — starting transcode');
+        await db.prepare(`UPDATE videos SET status='transcoding', transcoding_pct=0, size=? WHERE id=?`).run(size, videoId);
 
         if (workspaceId && size) {
           await db.prepare(
