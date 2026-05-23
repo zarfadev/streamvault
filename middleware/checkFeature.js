@@ -34,6 +34,7 @@ const FEATURE_NAME_MAP = {
   'invitations':    'invitationsEnabled',
   'referrals':      'referralEnabled',
   'multiWorkspace': 'multiWorkspaceEnabled',
+  'customDomain':   'customDomainEnabled',
 };
 
 /**

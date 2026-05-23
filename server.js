@@ -663,6 +663,7 @@ app.get('/api/settings', async (req, res) => {
       bulkOperationsEnabled: true,
       apiKeysEnabled: true, tracksEnabled: true, invitationsEnabled: true,
       referralEnabled: true, multiWorkspaceEnabled: true,
+      customDomainEnabled: false,
     });
 
     // Si hay token de auth, intentar resolver features del plan del workspace

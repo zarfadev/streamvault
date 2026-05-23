@@ -43,12 +43,12 @@ function killAllFFmpeg() {
 }
 
 const QUALITY_PRESETS = [
-  { name: '360p',  height: 360,  vbr: '800k',   abr: '96k',  profile: 'baseline' },
-  { name: '480p',  height: 480,  vbr: '1400k',  abr: '128k', profile: 'main'     },
-  { name: '720p',  height: 720,  vbr: '2800k',  abr: '128k', profile: 'main'     },
-  { name: '1080p', height: 1080, vbr: '5000k',  abr: '192k', profile: 'high'     },
-  { name: '1440p', height: 1440, vbr: '10000k', abr: '256k', profile: 'high'     },
-  { name: '4k',    height: 2160, vbr: '20000k', abr: '320k', profile: 'high'     },
+  { name: '360p',  height: 360,  vbr: '700k',   abr: '96k',  profile: 'baseline' },
+  { name: '480p',  height: 480,  vbr: '1200k',  abr: '128k', profile: 'main'     },
+  { name: '720p',  height: 720,  vbr: '2500k',  abr: '128k', profile: 'main'     },
+  { name: '1080p', height: 1080, vbr: '4500k',  abr: '192k', profile: 'high'     },
+  { name: '1440p', height: 1440, vbr: '8000k',  abr: '256k', profile: 'high'     },
+  { name: '4k',    height: 2160, vbr: '16000k', abr: '320k', profile: 'high'     },
 ];
 
 function probeVideo(inputPath) {
@@ -82,16 +82,15 @@ function transcodeQuality(inputPath, outputDir, preset, videoInfo, keyInfoPath, 
     const opts = [
       `-vf scale=-2:${targetHeight}`,
       `-b:v ${preset.vbr}`,
-      `-maxrate ${preset.vbr}`,
+      `-maxrate ${parseInt(preset.vbr) * 1.5}k`,
       `-bufsize ${parseInt(preset.vbr) * 2}k`,
       `-b:a ${preset.abr}`,
       `-ar 48000`,
       `-profile:v ${preset.profile}`,
-      `-preset veryfast`,
-      `-crf 23`,
+      `-preset ultrafast`,
+      `-tune fastdecode`,
       `-threads ${threadsPerJob}`,
-      `-movflags +faststart`,
-      `-hls_time 4`,
+      `-hls_time 6`,
       `-hls_playlist_type vod`,
       `-hls_segment_filename ${segmentPattern}`,
       `-hls_flags independent_segments`,
@@ -447,13 +446,16 @@ async function processVideo(videoId, inputPath, title, options = {}) {
 
     await db.prepare(`UPDATE videos SET duration=?, size=?, status='transcoding' WHERE id=?`)
       .run(info.duration, info.size, videoId);
+    await onProgress(5);
+
+    // Thumbnail runs first (fast, needed for UI). Sprite sheet runs in background
+    // in parallel with transcoding so it doesn't add to the total wall-clock time.
+    await generateThumbnail(effectiveInputPath, outputDir, info.duration).catch(() => {});
     await onProgress(10);
 
-    await generateThumbnail(effectiveInputPath, outputDir, info.duration).catch(() => {});
-    await generateSpriteSheet(effectiveInputPath, outputDir, info.duration).catch(err =>
+    const spritePromise = generateSpriteSheet(effectiveInputPath, outputDir, info.duration).catch(err =>
       logger.warn({ videoId, err: err.message }, 'Sprite sheet skipped')
     );
-    await onProgress(20);
 
     const hlsKey   = crypto.randomBytes(16);
     const hlsKeyId = crypto.randomBytes(24).toString('base64url');
@@ -464,10 +466,14 @@ async function processVideo(videoId, inputPath, title, options = {}) {
     fs.writeFileSync(keyInfoPath, `${keyUrl}\n${keyBinPath}\n`);
 
     const presets = await resolvePresetsForSource(info);
-    const threadsPerJob = Math.max(1, Math.floor(os.cpus().length / presets.length));
+    const totalCpus = os.cpus().length;
+    // Give each parallel job at least 2 threads; more for single-quality jobs.
+    const threadsPerJob = presets.length === 1
+      ? Math.min(totalCpus, 8)
+      : Math.max(2, Math.floor(totalCpus / presets.length));
 
     const done = [];
-    logger.info({ videoId, presets: presets.map(p => p.name), threadsPerJob }, 'Transcoding all qualities in parallel');
+    logger.info({ videoId, presets: presets.map(p => p.name), threadsPerJob, totalCpus }, 'Transcoding all qualities in parallel');
     await Promise.all(presets.map((preset, i) => {
       const sliceStart = 20 + Math.round((i / presets.length) * 60);
       const sliceEnd   = 20 + Math.round(((i + 1) / presets.length) * 60);
@@ -495,11 +501,14 @@ async function processVideo(videoId, inputPath, title, options = {}) {
     try { fs.unlinkSync(keyBinPath); } catch {}
     try { fs.unlinkSync(keyInfoPath); } catch {}
 
-    // ── Extract embedded audio/subtitle tracks (MKV, multi-track MP4, etc.) ──
-    await extractEmbeddedTracks(videoId, effectiveInputPath).catch(err =>
-      logger.warn({ videoId, err: err.message }, '[transcoder] extractEmbeddedTracks failed — continuing')
-    );
-    await onProgress(85);
+    // ── Wait for sprite sheet + extract embedded tracks (both run in parallel) ──
+    await Promise.all([
+      spritePromise,
+      extractEmbeddedTracks(videoId, effectiveInputPath).catch(err =>
+        logger.warn({ videoId, err: err.message }, '[transcoder] extractEmbeddedTracks failed — continuing')
+      ),
+    ]);
+    await onProgress(90);
 
     // Use rebuildMasterPlaylist so extracted audio tracks are included via EXT-X-MEDIA
     await rebuildMasterPlaylist(videoId, done);
