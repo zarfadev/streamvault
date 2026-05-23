@@ -38,6 +38,7 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
   : [];
 
 const hlsKeyPath = /^\/api\/videos\/[^/]+\/hlskey\//;
+const castManifestPath = /^\/api\/videos\/[^/]+\/cast-manifest/;
 app.use((req, res, next) => {
   cors({
     origin: (origin, callback) => {
@@ -45,6 +46,12 @@ app.use((req, res, next) => {
       if (!origin) return callback(null, true);
       // HLS key endpoint is open to any origin — the handler enforces embedAllowedDomains itself
       if (hlsKeyPath.test(req.path)) return callback(null, true);
+      // Cast manifest endpoints must be open to the Chromecast receiver's origin
+      // (Default Media Receiver runs at a Google domain like www.gstatic.com)
+      if (castManifestPath.test(req.path)) return callback(null, true);
+      // Any request carrying a valid cast_token is from the Chromecast receiver —
+      // bypass CORS so the TV can fetch segments, sub-playlists, and AES keys.
+      if (req.query && req.query.cast_token) return callback(null, true);
       // Dev mode with no whitelist: allow everything
       if (allowedOrigins.length === 0) return callback(null, true);
       if (allowedOrigins.includes(origin)) return callback(null, true);

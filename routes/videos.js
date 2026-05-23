@@ -1339,6 +1339,25 @@ router.get('/download/:token', async (req, res) => {
   res.status(404).json({ error: 'Video file not found' });
 });
 
+// ─── CORS preflight for Chromecast receiver ───────────────────
+// The Default Media Receiver (running on a Google domain) sends OPTIONS preflight
+// requests before fetching HLS manifests and segments. Without this handler,
+// Express returns 404 for OPTIONS and the Chromecast fails to load the media.
+router.options('/:id/cast-manifest', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type');
+  res.setHeader('Access-Control-Max-Age', '86400');
+  res.status(204).end();
+});
+router.options('/:id/cast-manifest-sub/:qualityDir/:file', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type');
+  res.setHeader('Access-Control-Max-Age', '86400');
+  res.status(204).end();
+});
+
 // GET /api/videos/:id/cast-manifest — serve master.m3u8 with absolute URLs for Chromecast.
 // Generates a short-lived cast token embedded in every sub-manifest and key URL so the
 // Chromecast receiver can fetch segments and AES keys even when hotlink protection or

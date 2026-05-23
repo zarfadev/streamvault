@@ -442,6 +442,10 @@ function _doCastConnect() {
     const mi = new chrome.cast.media.MediaInfo(castManifestUrl, 'application/vnd.apple.mpegurl');
     mi.streamType = chrome.cast.media.StreamType.BUFFERED;
 
+    // HLS content type hint for the default media receiver
+    mi.hlsSegmentFormat = chrome.cast.media.HlsSegmentFormat?.TS || 'ts';
+    mi.hlsVideoSegmentFormat = chrome.cast.media.HlsVideoSegmentFormat?.MPEG2_TS || 'mpeg2_ts';
+
     const meta = new chrome.cast.media.GenericMediaMetadata();
     meta.title = videoData?.title || document.title;
     if (videoData?.thumbnailUrl) {
@@ -454,11 +458,33 @@ function _doCastConnect() {
 
     const req = new chrome.cast.media.LoadRequest(mi);
     req.currentTime = video.currentTime || 0;
+    req.autoplay = true;
     s.loadMedia(req).then(() => {
       toast('Transmitiendo en TV');
+      // Listen for media status updates to catch playback errors on the receiver
+      const ms = s.getMediaSession();
+      if (ms) {
+        ms.addUpdateListener((isAlive) => {
+          if (!isAlive) {
+            console.warn('[cast] Media session ended on receiver');
+            return;
+          }
+          if (ms.playerState === chrome.cast.media.PlayerState.IDLE && ms.idleReason) {
+            if (ms.idleReason === chrome.cast.media.IdleReason.ERROR) {
+              console.error('[cast] Receiver reported playback error');
+              toast('Error de reproducción en el TV — verifica la conexión');
+            }
+          }
+        });
+      }
     }).catch(e => {
       console.error('[cast] loadMedia error:', e);
-      toast('Error al transmitir: ' + (e?.description || e?.code || 'desconocido'));
+      const desc = e?.description || e?.message || e?.code || 'desconocido';
+      toast('Error al transmitir: ' + desc);
+      // If the error is a CORS/network issue, provide a more helpful message
+      if (String(desc).toLowerCase().includes('load') || String(desc).toLowerCase().includes('network')) {
+        toast('Verifica que el servidor sea accesible desde la red del Chromecast');
+      }
     });
   }).catch(e => {
     if (e?.code !== 'cancel') toast('No se pudo conectar al Chromecast');

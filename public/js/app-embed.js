@@ -320,6 +320,10 @@ function _embedCastConnect() {
     const mediaInfo = new chrome.cast.media.MediaInfo(castManifestUrl, 'application/vnd.apple.mpegurl');
     mediaInfo.streamType = chrome.cast.media.StreamType.BUFFERED;
 
+    // HLS content type hint for the default media receiver
+    mediaInfo.hlsSegmentFormat = chrome.cast.media.HlsSegmentFormat?.TS || 'ts';
+    mediaInfo.hlsVideoSegmentFormat = chrome.cast.media.HlsVideoSegmentFormat?.MPEG2_TS || 'mpeg2_ts';
+
     if (typeof videoData !== 'undefined' && videoData) {
       const meta = new chrome.cast.media.GenericMediaMetadata();
       meta.title = videoData.title || '';
@@ -336,7 +340,26 @@ function _embedCastConnect() {
 
     const request = new chrome.cast.media.LoadRequest(mediaInfo);
     request.currentTime = video.currentTime || 0;
-    session.loadMedia(request).catch(() => {});
+    request.autoplay = true;
+    session.loadMedia(request).then(() => {
+      if (typeof toast === 'function') toast('Transmitiendo en TV');
+      // Listen for playback errors on the receiver
+      const ms = session.getMediaSession();
+      if (ms) {
+        ms.addUpdateListener((isAlive) => {
+          if (!isAlive) return;
+          if (ms.playerState === chrome.cast.media.PlayerState.IDLE && ms.idleReason) {
+            if (ms.idleReason === chrome.cast.media.IdleReason.ERROR) {
+              console.error('[cast-embed] Receiver reported playback error');
+              if (typeof toast === 'function') toast('Error de reproducción en el TV');
+            }
+          }
+        });
+      }
+    }).catch(e => {
+      console.error('[cast-embed] loadMedia error:', e);
+      if (typeof toast === 'function') toast('Error al transmitir: ' + (e?.description || e?.code || 'desconocido'));
+    });
   }).catch(() => {});
 }
 
