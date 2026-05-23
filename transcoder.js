@@ -57,11 +57,20 @@ function probeVideo(inputPath) {
       if (err) return reject(err);
       const videoStream = metadata.streams.find(s => s.codec_type === 'video');
       const audioStream = metadata.streams.find(s => s.codec_type === 'audio');
+      // Parse frame rate fraction (e.g. "30/1", "24000/1001") → decimal
+      let fps = 30;
+      if (videoStream?.r_frame_rate) {
+        const parts = videoStream.r_frame_rate.split('/');
+        const num = parseFloat(parts[0] || '30');
+        const den = parseFloat(parts[1] || '1');
+        if (den > 0) fps = Math.round(num / den);
+      }
       resolve({
         width: videoStream?.width || 0,
         height: videoStream?.height || 0,
         duration: metadata.format?.duration || 0,
         size: metadata.format?.size || 0,
+        fps,
         videoCodec: videoStream?.codec_name,
         audioCodec: audioStream?.codec_name,
       });
@@ -79,8 +88,14 @@ function transcodeQuality(inputPath, outputDir, preset, videoInfo, keyInfoPath, 
     const targetHeight = Math.min(preset.height, videoInfo.height);
     const totalSecs = videoInfo.duration || 0;
 
+    const HLS_TIME  = 4;
+    const sourceFps = videoInfo.fps || 30;
+    // Align GOP to segment boundaries so every segment starts with a keyframe.
+    // sc_threshold 0 disables mid-segment forced keyframes on scene changes —
+    // critical for anime which has hundreds of cuts per minute.
+    const gopSize  = Math.max(1, Math.round(sourceFps * HLS_TIME));
     const opts = [
-      `-vf scale=-2:${targetHeight}`,
+      `-vf scale=-2:${targetHeight}:flags=fast_bilinear`,
       `-b:v ${preset.vbr}`,
       `-maxrate ${parseInt(preset.vbr) * 1.5}k`,
       `-bufsize ${parseInt(preset.vbr) * 2}k`,
@@ -90,8 +105,12 @@ function transcodeQuality(inputPath, outputDir, preset, videoInfo, keyInfoPath, 
       `-profile:v ${preset.profile}`,
       `-preset ultrafast`,
       `-tune fastdecode`,
+      `-sc_threshold 0`,
+      `-g ${gopSize}`,
+      `-keyint_min ${Math.max(1, Math.round(sourceFps / 2))}`,
+      `-bf 0`,
       `-threads ${threadsPerJob}`,
-      `-hls_time 4`,
+      `-hls_time ${HLS_TIME}`,
       `-hls_playlist_type vod`,
       `-hls_segment_filename ${segmentPattern}`,
       `-hls_flags independent_segments`,
@@ -504,6 +523,9 @@ async function processVideo(videoId, inputPath, title, options = {}) {
     const totalCpus = os.cpus().length;
     const done = [];
 
+    // Store expected quality count so the dashboard can show X/Y progress
+    await db.prepare(`UPDATE videos SET qualities_expected=? WHERE id=?`).run(presets.length, videoId).catch(() => {});
+
     // ── Phase 1: encode primary quality (720p or closest to source) first ────
     // All CPU threads go to this job so it finishes as fast as possible.
     // Once done, the video is immediately marked 'ready' so users can watch
@@ -513,7 +535,8 @@ async function processVideo(videoId, inputPath, title, options = {}) {
       return Math.abs(a.height - target) - Math.abs(b.height - target);
     })[0];
     const secondaryPresets = presets.filter(p => p.name !== primaryPreset.name);
-    const primaryThreads = Math.min(totalCpus, 8);
+    // 0 = FFmpeg auto (uses all logical CPUs) — no artificial cap
+    const primaryThreads = 0;
 
     logger.info({ videoId, primary: primaryPreset.name, secondary: secondaryPresets.map(p => p.name), totalCpus }, 'Transcoding — primary quality first');
 
@@ -534,21 +557,18 @@ async function processVideo(videoId, inputPath, title, options = {}) {
     await rebuildMasterPlaylist(videoId, done).catch(() => {});
     await onProgress(75);
 
-    // ── Phase 2: secondary qualities in pairs, half the threads each ──────────
+    // ── Phase 2: all secondary qualities in parallel, threads split evenly ────
     if (secondaryPresets.length) {
-      const secThreads = Math.max(2, Math.floor(totalCpus / Math.min(2, secondaryPresets.length)));
-      for (let i = 0; i < secondaryPresets.length; i += 2) {
-        const batch = secondaryPresets.slice(i, i + 2);
-        await Promise.all(batch.map(preset =>
-          transcodeQuality(effectiveInputPath, outputDir, preset, info, keyInfoPath, () => {}, secThreads)
-            .then(async name => {
-              done.push(name);
-              await db.prepare(`UPDATE videos SET qualities=? WHERE id=?`).run(JSON.stringify(done), videoId);
-              await rebuildMasterPlaylist(videoId, done).catch(() => {});
-            })
-            .catch(err => logger.error({ videoId, preset: preset.name, err: err.message }, 'Secondary quality transcode failed'))
-        ));
-      }
+      const secThreads = Math.max(2, Math.floor(totalCpus / secondaryPresets.length));
+      await Promise.all(secondaryPresets.map(preset =>
+        transcodeQuality(effectiveInputPath, outputDir, preset, info, keyInfoPath, () => {}, secThreads)
+          .then(async name => {
+            done.push(name);
+            await db.prepare(`UPDATE videos SET qualities=? WHERE id=?`).run(JSON.stringify(done), videoId);
+            await rebuildMasterPlaylist(videoId, done).catch(() => {});
+          })
+          .catch(err => logger.error({ videoId, preset: preset.name, err: err.message }, 'Secondary quality transcode failed'))
+      ));
     }
 
     await onProgress(85);

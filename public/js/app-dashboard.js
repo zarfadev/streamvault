@@ -2959,6 +2959,10 @@ function doLogout() {
         const isProcessing = ['queued','transcoding','processing'].includes(v.status);
         const isScheduled = v.status === 'scheduled';
         const isPartial = isProcessing && Array.isArray(v.qualities) && v.qualities.length > 0;
+        // Ready but secondary qualities still encoding in background
+        const isPartialReady = isReady
+          && typeof v.qualities_expected === 'number' && v.qualities_expected > 0
+          && (v.qualities || []).length < v.qualities_expected;
         const canPlay = isReady || isPartial;
         const ts = v.updated_at || Date.now();
         const thumbSrc = (v.thumbnailUrl || `/videos/${v.id}/thumb.jpg`) + `?t=${ts}`;
@@ -3002,7 +3006,10 @@ function doLogout() {
       <div class="video-body">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px;margin-bottom:4px;">
           <div class="video-title" title="${esc(v.title)}">${esc(v.title)}</div>
-          ${statusLabel}
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0;">
+            ${statusLabel}
+            ${isPartialReady ? `<span style="display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;padding:1px 6px;border-radius:99px;background:rgba(251,191,36,.1);color:var(--amber);border:1px solid rgba(251,191,36,.2);white-space:nowrap;" title="Procesando calidades adicionales en segundo plano"><span class="spinner" style="width:5px;height:5px;border-width:1px;border-color:var(--amber);border-top-color:transparent;"></span>${(v.qualities||[]).length}/${v.qualities_expected} cal.</span>` : ''}
+          </div>
         </div>
         ${isProcessing ? `<div style="margin:4px 0 6px;"><div style="height:3px;border-radius:2px;background:var(--surface3);overflow:hidden;"><div style="height:100%;width:${v.progress_pct ?? 0}%;background:var(--amber);border-radius:2px;transition:width .5s ease;"></div></div><div style="font-size:10px;color:var(--amber);margin-top:3px;font-family:var(--mono);">${v.progress_pct ?? 0}% completado</div></div>` : ''}
         <div class="video-meta">
@@ -3067,6 +3074,10 @@ function doLogout() {
                   Pistas y subtítulos
                 </button>` : ''}
                 <div class="more-menu-divider"></div>
+                ${_canManage ? `<button onclick="closeMoreMenu('${v.id}');retranscodeVideo('${v.id}')">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+                  Re-transcodificar
+                </button>` : ''}
                 ${_canManage ? `<button class="more-menu-danger" onclick="closeMoreMenu('${v.id}');deleteVideo('${v.id}')">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
                   Eliminar video
@@ -3420,6 +3431,24 @@ function doLogout() {
       } else {
         const d = await r.json().catch(() => ({}));
         toast(d.error || 'Error al reintentar', 'error');
+      }
+    }
+
+    async function retranscodeVideo(id) {
+      const ok = await confirmModal(
+        'Re-transcodificar video',
+        'El video volverá a procesarse desde el archivo original con las calidades de tu plan actual. Durante el proceso el video seguirá siendo reproducible en la calidad principal. ¿Continuar?',
+        'Re-transcodificar', 'Cancelar'
+      );
+      if (!ok) return;
+      const r = await apiFetch(`/api/videos/${id}/retranscode`, { method: 'POST' });
+      if (r.ok) {
+        toast('Re-transcodificación iniciada — las nuevas calidades aparecerán pronto');
+        loadVideos();
+        startPolling();
+      } else {
+        const d = await r.json().catch(() => ({}));
+        toast(d.error || 'Error al iniciar re-transcodificación', 'error');
       }
     }
 

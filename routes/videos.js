@@ -987,6 +987,90 @@ router.post('/:id/retry', authenticate, async (req, res) => {
   }
 });
 
+// POST /api/videos/:id/retranscode — re-encode from stored source (ready OR error videos)
+// Unlike /retry (error-only), this resets qualities and re-encodes with current plan settings.
+// Useful after plan upgrade (e.g. Starter→Pro to unlock 1080p) or Enterprise quality changes.
+router.post('/:id/retranscode', authenticate, async (req, res) => {
+  try {
+    const video = await db.prepare(`SELECT * FROM videos WHERE id=?`).get(req.params.id);
+    if (!video) return res.status(404).json({ error: 'Not found' });
+
+    if (video.workspace_id) {
+      const member = await db.prepare(
+        `SELECT role FROM workspace_members WHERE workspace_id = ? AND user_id = ?`
+      ).get(video.workspace_id, req.user.id);
+      if (!member || !['owner', 'admin'].includes(member.role)) {
+        return res.status(403).json({ error: 'Se requiere rol owner o admin para re-transcodificar' });
+      }
+    } else if (req.user.platform_role !== 'super_admin') {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    if (!['ready', 'error', 'scheduled'].includes(video.status)) {
+      return res.status(409).json({ error: `Video en estado '${video.status}' — espera a que termine el proceso actual` });
+    }
+
+    const s3svc = require('../services/s3Storage');
+    let inputPath = null;
+    let s3SourceKey = null;
+
+    if (video.source_file) {
+      if (s3svc.isS3Enabled() && !path.isAbsolute(video.source_file)) {
+        s3SourceKey = video.source_file;
+      } else {
+        inputPath = video.source_file;
+      }
+    }
+
+    if (!s3SourceKey && (!inputPath || !fs.existsSync(inputPath))) {
+      return res.status(409).json({
+        error: 'Archivo fuente no disponible. El video debe ser re-subido para aplicar nuevas calidades.',
+      });
+    }
+
+    // Reset to blank slate so dashboard shows transcoding progress from scratch
+    await db.prepare(
+      `UPDATE videos SET status='transcoding', transcoding_pct=0, qualities='[]', qualities_expected=NULL, updated_at=FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT WHERE id=?`
+    ).run(video.id);
+
+    try {
+      const { addTranscodeJob } = require('../services/queue');
+      const { processVideo } = require('../transcoder');
+      const result = await addTranscodeJob({
+        videoId:     video.id,
+        inputPath:   inputPath || null,
+        s3SourceKey,
+        title:       video.title,
+        workspaceId: video.workspace_id || null,
+      });
+
+      if (result.inline) {
+        processVideo(video.id, inputPath, video.title, {
+          workspaceId: video.workspace_id || null,
+          s3SourceKey,
+          onProgress: async (pct) => {
+            await db.prepare(`UPDATE videos SET transcoding_pct=? WHERE id=?`).run(pct, video.id).catch(() => {});
+          },
+        }).then(() => {
+          db.prepare(`UPDATE videos SET transcoding_pct=NULL WHERE id=?`).run(video.id).catch(() => {});
+        }).catch(err => logger.error({ err }, 'Retranscode inline error'));
+      }
+
+      logger.info({ videoId: video.id, workspaceId: video.workspace_id }, 'Video retranscode started');
+      res.json({ success: true, inline: result.inline });
+    } catch (queueErr) {
+      await db.prepare(
+        `UPDATE videos SET status='error', updated_at=FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT WHERE id=?`
+      ).run(video.id);
+      logger.error({ err: queueErr, videoId: video.id }, 'Retranscode queue failed');
+      res.status(500).json({ error: 'No se pudo iniciar la re-transcodificación' });
+    }
+  } catch (err) {
+    logger.error({ err }, 'Retranscode endpoint error');
+    res.status(500).json({ error: 'Error interno' });
+  }
+});
+
 // POST /api/videos/:id/download-link — generate signed download URL (F2.5, Pro+)
 router.post('/:id/download-link', authenticate, async (req, res) => {
   try {

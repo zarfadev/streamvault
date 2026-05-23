@@ -511,6 +511,7 @@ async function createSchema(pool) {
   // Stores the upload path (local: absolute path) or S3 source key (S3 mode).
   // Kept until the video is deleted so users can re-trigger transcoding.
   await pool.query(`ALTER TABLE videos ADD COLUMN IF NOT EXISTS source_file TEXT`);
+  await pool.query(`ALTER TABLE videos ADD COLUMN IF NOT EXISTS qualities_expected INTEGER DEFAULT NULL`);
 
   // ── Seed demo account (dev / SEED_DEMO_USER=1) ─────────────────
   await seedDemo(pool);

@@ -303,6 +303,8 @@ async function main() {
     if (_shuttingDown) return;
     try {
       const cutoff = Math.floor(Date.now() / 1000) - 2 * 60 * 60; // 2 hours ago
+
+      // Mark videos stuck in transcoding/downloading for >2h as error
       const result = await db.pool.query(
         `UPDATE videos
          SET status = 'error', transcoding_pct = NULL, updated_at = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT
@@ -313,6 +315,31 @@ async function main() {
       );
       if (result.rows.length > 0) {
         logger.warn({ rescued: result.rows.map(r => r.id) }, `Watchdog: marked ${result.rows.length} stuck video(s) as error`);
+      }
+
+      // Detect ready videos with fewer qualities than expected (secondary encode died silently).
+      // Log only — don't auto-retry since the video is still watchable. Users can retranscode manually.
+      const partialCutoff = Math.floor(Date.now() / 1000) - 3 * 60 * 60; // 3 hours ago
+      const partial = await db.pool.query(
+        `SELECT id, title, qualities, qualities_expected FROM videos
+         WHERE status = 'ready'
+           AND qualities_expected IS NOT NULL
+           AND jsonb_array_length(qualities::jsonb) < qualities_expected
+           AND updated_at < $1`,
+        [partialCutoff]
+      );
+      if (partial.rows.length > 0) {
+        logger.warn(
+          {
+            videos: partial.rows.map(r => ({
+              id: r.id,
+              title: r.title,
+              have: (JSON.parse(r.qualities || '[]')).length,
+              expected: r.qualities_expected,
+            })),
+          },
+          `Watchdog: ${partial.rows.length} video(s) have fewer qualities than expected — secondary encode may have failed. Re-transcode from dashboard to fix.`
+        );
       }
     } catch (e) {
       logger.error({ err: e.message }, 'Stuck video watchdog failed');
