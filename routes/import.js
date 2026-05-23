@@ -280,6 +280,8 @@ router.post(
           }
         }
 
+        await db.prepare(`UPDATE videos SET source_file=? WHERE id=?`).run(s3SourceKey || finalPath, videoId).catch(() => {});
+
         const { inline } = await addTranscodeJob({ videoId, inputPath: finalPath, s3SourceKey, title: videoTitle, workspaceId });
         if (inline) {
           processVideo(videoId, finalPath, videoTitle, { workspaceId, s3SourceKey }).catch(err => {

@@ -896,52 +896,87 @@ router.post('/:id/retry', authenticate, async (req, res) => {
     const video = await db.prepare(`SELECT * FROM videos WHERE id=?`).get(req.params.id);
     if (!video) return res.status(404).json({ error: 'Not found' });
 
+    // Auth: workspace member (owner/admin) or super_admin for orphan videos
     if (video.workspace_id) {
       const member = await db.prepare(
         `SELECT role FROM workspace_members WHERE workspace_id = ? AND user_id = ?`
       ).get(video.workspace_id, req.user.id);
       if (!member) return res.status(403).json({ error: 'Access denied' });
       if (!['owner', 'admin'].includes(member.role)) return res.status(403).json({ error: 'Se requiere rol owner o admin para reintentar transcodificación' });
+    } else if (req.user.platform_role !== 'super_admin') {
+      return res.status(403).json({ error: 'Forbidden' });
     }
 
     if (video.status !== 'error') {
       return res.status(409).json({ error: `Cannot retry video with status '${video.status}'` });
     }
 
-    const { addTranscodeJob } = require('../services/queue');
-    const uploadsDir = path.join(__dirname, '..', 'uploads');
-
+    const s3svc = require('../services/s3Storage');
     let inputPath = null;
-    if (video.original_filename) {
-      try {
-        const files = fs.readdirSync(uploadsDir);
-        const match = files.find(f => f.endsWith('-' + video.original_filename) || f === video.original_filename);
-        if (match) inputPath = path.join(uploadsDir, match);
-      } catch {}
+    let s3SourceKey = null;
+
+    // Prefer stored source_file (set at upload/import time)
+    if (video.source_file) {
+      if (s3svc.isS3Enabled() && !path.isAbsolute(video.source_file)) {
+        s3SourceKey = video.source_file;
+      } else {
+        inputPath = video.source_file;
+      }
     }
 
-    if (!inputPath || !fs.existsSync(inputPath)) {
+    // Fall back: scan uploads directory for a file matching original_filename
+    if (!s3SourceKey && (!inputPath || !fs.existsSync(inputPath))) {
+      const uploadsDir = path.join(__dirname, '..', 'uploads');
+      if (video.original_filename) {
+        try {
+          const files = fs.readdirSync(uploadsDir);
+          const match = files.find(f => f.endsWith('-' + video.original_filename) || f === video.original_filename);
+          if (match) inputPath = path.join(uploadsDir, match);
+        } catch {}
+      }
+    }
+
+    if (!s3SourceKey && (!inputPath || !fs.existsSync(inputPath))) {
       return res.status(409).json({
-        error: 'Original upload file not found. Please re-upload the video.',
+        error: 'Archivo original no encontrado. Por favor, vuelve a subir el video.',
       });
     }
 
     await db.prepare(
-      `UPDATE videos SET status = 'processing', updated_at = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT WHERE id = ?`
+      `UPDATE videos SET status='transcoding', transcoding_pct=0, updated_at=FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT WHERE id=?`
     ).run(video.id);
 
     try {
+      const { addTranscodeJob } = require('../services/queue');
+      const { processVideo } = require('../transcoder');
       const result = await addTranscodeJob({
-        videoId: video.id,
-        inputPath,
-        title: video.title,
+        videoId:     video.id,
+        inputPath:   inputPath || null,
+        s3SourceKey,
+        title:       video.title,
         workspaceId: video.workspace_id || null,
+        plan:        'starter',
       });
-      logger.info({ videoId: video.id, jobId: result.jobId }, 'Video retry queued');
-      res.json({ success: true, jobId: result.jobId || null });
+
+      if (result.inline) {
+        processVideo(video.id, inputPath, video.title, {
+          workspaceId: video.workspace_id || null,
+          s3SourceKey,
+          onProgress: async (pct) => {
+            await db.prepare(`UPDATE videos SET transcoding_pct=? WHERE id=?`).run(pct, video.id).catch(() => {});
+          },
+        }).then(() => {
+          db.prepare(`UPDATE videos SET transcoding_pct=NULL WHERE id=?`).run(video.id).catch(() => {});
+        }).catch(err => {
+          logger.error({ err }, 'Retry inline transcoding error');
+        });
+      }
+
+      logger.info({ videoId: video.id, jobId: result.jobId, inline: result.inline }, 'Video retry started');
+      res.json({ success: true, inline: result.inline, jobId: result.jobId || null });
     } catch (queueErr) {
       await db.prepare(
-        `UPDATE videos SET status = 'error', updated_at = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT WHERE id = ?`
+        `UPDATE videos SET status='error', updated_at=FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT WHERE id=?`
       ).run(video.id);
       logger.error({ err: queueErr, videoId: video.id }, 'Retry queue failed');
       res.status(500).json({ error: 'Failed to queue retry job' });

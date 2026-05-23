@@ -2460,7 +2460,7 @@ function doLogout() {
       const videos = allVideosCache;
       document.getElementById('stat-total').textContent = videos.length;
       document.getElementById('stat-ready').textContent = videos.filter(v => v.status === 'ready').length;
-      document.getElementById('stat-proc').textContent = videos.filter(v => ['queued', 'transcoding'].includes(v.status)).length;
+      document.getElementById('stat-proc').textContent = videos.filter(v => ['queued', 'transcoding', 'processing'].includes(v.status)).length;
       document.getElementById('stat-views').textContent = videos.reduce((s, v) => s + (v.views || 0), 0).toLocaleString('es');
     }
 
@@ -2494,7 +2494,7 @@ function doLogout() {
       // Status filter
       const statusF = document.getElementById('library-filter-status')?.value || 'all';
       if (statusF === 'ready') list = list.filter(v => v.status === 'ready');
-      else if (statusF === 'processing') list = list.filter(v => ['queued', 'transcoding'].includes(v.status));
+      else if (statusF === 'processing') list = list.filter(v => ['queued', 'transcoding', 'processing'].includes(v.status));
       // Visibility filter
       const visF = document.getElementById('library-filter-visibility')?.value || 'all';
       if (visF !== 'all') list = list.filter(v => (v.visibility || 'public') === visF);
@@ -2737,7 +2737,7 @@ function doLogout() {
           const tb = document.getElementById('library-total-badge');
           if (tb) { const n = json.pagination?.total ?? allVideosCache.length; tb.textContent = n; tb.style.display = n ? '' : 'none'; }
         }
-        const anyProc = allVideosCache.some(v => ['queued', 'transcoding'].includes(v.status));
+        const anyProc = allVideosCache.some(v => ['queued', 'transcoding', 'processing'].includes(v.status));
         if (anyProc && !pollInterval) startPolling();
         else if (!anyProc && pollInterval) { clearInterval(pollInterval); pollInterval = null; }
       } catch {
@@ -2789,7 +2789,7 @@ function doLogout() {
       if (_libView === 'list') {
         const statusBadge = v => {
           const hasQ = Array.isArray(v.qualities) && v.qualities.length > 0;
-          if (v.status === 'transcoding' || v.status === 'queued') {
+          if (v.status === 'transcoding' || v.status === 'queued' || v.status === 'processing') {
             const pct    = v.progress_pct ?? 0;
             const pctStr = ` ${pct}%`;
             const label  = hasQ ? `Parcial${pctStr}` : `Procesando${pctStr}`;
@@ -2950,7 +2950,7 @@ function doLogout() {
       grid.innerHTML = videos.map(v => {
         const isReady = v.status === 'ready';
         const isError = v.status === 'error';
-        const isProcessing = ['queued','transcoding'].includes(v.status);
+        const isProcessing = ['queued','transcoding','processing'].includes(v.status);
         const isScheduled = v.status === 'scheduled';
         const isPartial = isProcessing && Array.isArray(v.qualities) && v.qualities.length > 0;
         const canPlay = isReady || isPartial;
@@ -2965,6 +2965,7 @@ function doLogout() {
           ready:       _pill('var(--green)',  'rgba(34,197,94,.13)',   _dot('var(--green)'),  'Listo'),
           transcoding: `<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:99px;background:rgba(251,191,36,.12);color:var(--amber);font-size:10px;font-weight:700;white-space:nowrap;flex-shrink:0;line-height:1.6;"><span class="spinner" style="width:7px;height:7px;border-width:1.5px;border-color:var(--amber);border-top-color:transparent;"></span>${(v.progress_pct ?? 0)}%</span>`,
           queued:      `<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:99px;background:rgba(251,191,36,.12);color:var(--amber);font-size:10px;font-weight:700;white-space:nowrap;flex-shrink:0;line-height:1.6;"><span class="spinner" style="width:7px;height:7px;border-width:1.5px;border-color:var(--amber);border-top-color:transparent;"></span>0%</span>`,
+          processing:  `<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:99px;background:rgba(251,191,36,.12);color:var(--amber);font-size:10px;font-weight:700;white-space:nowrap;flex-shrink:0;line-height:1.6;"><span class="spinner" style="width:7px;height:7px;border-width:1.5px;border-color:var(--amber);border-top-color:transparent;"></span>${(v.progress_pct ?? 0)}%</span>`,
           error:       _pill('var(--red)',    'rgba(239,68,68,.12)',   _dot('var(--red)'),    'Error'),
           scheduled:   _pill('#a78bfa',       'rgba(167,139,250,.12)', _dot('#a78bfa'),       'Programado'),
           downloading: _pill('var(--accent)', 'rgba(99,102,241,.12)',  _dot('var(--accent)'), 'Descargando'),

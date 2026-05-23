@@ -287,12 +287,9 @@ async function startWorker(concurrency = 2) {
       const { videoId, inputPath, s3SourceKey } = job.data || {};
       if (videoId) {
         // Delete local upload file if it still exists (no s3SourceKey = local mode)
+        // S3 source is kept so the user can trigger a manual retry from the dashboard.
         if (inputPath && !s3SourceKey) {
           try { fs.unlinkSync(inputPath); } catch (_) {}
-        }
-        // Delete S3 source object — all retries exhausted, no point keeping it
-        if (s3SourceKey) {
-          s3Storage.deleteObject(s3SourceKey).catch(() => {});
         }
         await db.prepare(
           `UPDATE videos SET status = 'error', updated_at = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT WHERE id = ?`
