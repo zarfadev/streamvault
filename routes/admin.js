@@ -637,7 +637,12 @@ router.put('/videos/:id', superAdminAuth, async (req, res) => {
   const updates = [], values = [];
 
   if (title !== undefined)          { updates.push('title = ?');           values.push(title); }
-  if (visibility !== undefined)     { updates.push('visibility = ?');      values.push(visibility); }
+  const VALID_VIS = ['public', 'private', 'unlisted', 'password'];
+  if (visibility !== undefined) {
+    if (!VALID_VIS.includes(visibility)) return res.status(400).json({ error: `visibility must be one of: ${VALID_VIS.join(', ')}` });
+    updates.push('visibility = ?');
+    values.push(visibility);
+  }
   if (visibility === 'password' && password) {
     // Hash the password before storing
     const bcrypt = require('bcryptjs');
@@ -765,9 +770,9 @@ router.patch('/videos/bulk/visibility', superAdminAuth, async (req, res) => {
     return res.status(400).json({ error: 'video_ids array required' });
   }
 
-  const validVisibility = ['public', 'private', 'password'];
+  const validVisibility = ['public', 'private', 'unlisted', 'password'];
   if (!validVisibility.includes(visibility)) {
-    return res.status(400).json({ error: 'Invalid visibility' });
+    return res.status(400).json({ error: `visibility must be one of: ${validVisibility.join(', ')}` });
   }
 
   if (video_ids.length > 50) {
