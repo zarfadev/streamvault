@@ -542,16 +542,16 @@ async function processVideo(videoId, inputPath, title, options = {}) {
 
     if (hlsCdnUrl) {
       await db.prepare(`
-        UPDATE videos 
-        SET status = CASE WHEN publish_at IS NOT NULL AND publish_at > FLOOR(EXTRACT(EPOCH FROM NOW())) THEN 'scheduled' ELSE 'ready' END, 
-            qualities=?, hls_cdn_url=?, s3_object_prefix=? 
+        UPDATE videos
+        SET status = CASE WHEN publish_at IS NOT NULL AND publish_at > FLOOR(EXTRACT(EPOCH FROM NOW())) THEN 'scheduled' ELSE 'ready' END,
+            qualities=?, hls_cdn_url=?, s3_object_prefix=?, transcoding_pct=NULL
         WHERE id=?
       `).run(JSON.stringify(done), hlsCdnUrl, s3ObjectPrefix, videoId);
     } else {
       await db.prepare(`
-        UPDATE videos 
-        SET status = CASE WHEN publish_at IS NOT NULL AND publish_at > FLOOR(EXTRACT(EPOCH FROM NOW())) THEN 'scheduled' ELSE 'ready' END, 
-            qualities=? 
+        UPDATE videos
+        SET status = CASE WHEN publish_at IS NOT NULL AND publish_at > FLOOR(EXTRACT(EPOCH FROM NOW())) THEN 'scheduled' ELSE 'ready' END,
+            qualities=?, transcoding_pct=NULL
         WHERE id=?
       `).run(JSON.stringify(done), videoId);
     }
@@ -567,7 +567,7 @@ async function processVideo(videoId, inputPath, title, options = {}) {
     if (outputDir) {
       try { fs.rmSync(outputDir, { recursive: true, force: true }); } catch {}
     }
-    await db.prepare(`UPDATE videos SET status='error' WHERE id=?`).run(videoId);
+    await db.prepare(`UPDATE videos SET status='error', transcoding_pct=NULL WHERE id=?`).run(videoId);
     logger.error({ videoId, err }, 'Fatal transcode error');
     _notifyOwner(videoId, title, 'error').catch(() => {});
     _fireWebhook(videoId, 'video.failed', { videoId, title, error: err.message }).catch(() => {});

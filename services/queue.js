@@ -292,7 +292,7 @@ async function startWorker(concurrency = 2) {
           try { fs.unlinkSync(inputPath); } catch (_) {}
         }
         await db.prepare(
-          `UPDATE videos SET status = 'error', updated_at = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT WHERE id = ?`
+          `UPDATE videos SET status='error', transcoding_pct=NULL, updated_at=FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT WHERE id=?`
         ).run(videoId).catch(e => logger.error({ e: e.message, videoId }, 'Failed to mark video as error'));
         logger.info({ videoId }, 'Marked video as error after all retries exhausted');
       }

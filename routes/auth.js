@@ -98,6 +98,10 @@ router.post('/register', rateLimit(5, 60_000), async (req, res) => {
     const pwError = validatePasswordStrength(password);
     if (pwError) return res.status(400).json({ error: pwError });
 
+    if (name !== undefined && String(name).length > 100) {
+      return res.status(400).json({ error: 'Name too long (max 100 characters)' });
+    }
+
     const existing = await db.prepare(`SELECT id FROM users WHERE email = ?`).get(email.toLowerCase());
     if (existing) {
       return res.status(409).json({ error: 'An account with this email already exists' });
