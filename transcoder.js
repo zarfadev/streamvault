@@ -166,8 +166,8 @@ function generateSpriteSheet(inputPath, outputDir, duration) {
 }
 
 async function resolvePresetsForSource(videoInfo) {
-  const tc = await getJsonConfig('transcoding', { qualities: ['360p', '480p', '720p', '1080p'] });
-  const allowed = new Set(Array.isArray(tc.qualities) ? tc.qualities : ['360p', '480p', '720p', '1080p']);
+  const tc = await getJsonConfig('transcoding', { qualities: ['480p', '720p', '1080p'] });
+  const allowed = new Set(Array.isArray(tc.qualities) ? tc.qualities : ['480p', '720p', '1080p']);
   let presets = QUALITY_PRESETS.filter(p => allowed.has(p.name) && p.height <= videoInfo.height + 100);
   if (!presets.length) {
     const first = QUALITY_PRESETS.find(p => allowed.has(p.name)) || QUALITY_PRESETS[0];
@@ -467,34 +467,56 @@ async function processVideo(videoId, inputPath, title, options = {}) {
 
     const presets = await resolvePresetsForSource(info);
     const totalCpus = os.cpus().length;
-    // Give each parallel job at least 2 threads; more for single-quality jobs.
-    const threadsPerJob = presets.length === 1
-      ? Math.min(totalCpus, 8)
-      : Math.max(2, Math.floor(totalCpus / presets.length));
-
     const done = [];
-    logger.info({ videoId, presets: presets.map(p => p.name), threadsPerJob, totalCpus }, 'Transcoding all qualities in parallel');
-    await Promise.all(presets.map((preset, i) => {
-      const sliceStart = 20 + Math.round((i / presets.length) * 60);
-      const sliceEnd   = 20 + Math.round(((i + 1) / presets.length) * 60);
-      const onFrameProgress = (ratio) => {
-        onProgress(Math.round(sliceStart + ratio * (sliceEnd - sliceStart)));
-      };
-      return transcodeQuality(effectiveInputPath, outputDir, preset, info, keyInfoPath, onFrameProgress, threadsPerJob)
-        .then(async name => {
-          done.push(name);
-          await db.prepare(`UPDATE videos SET qualities=? WHERE id=?`).run(JSON.stringify(done), videoId);
-          await rebuildMasterPlaylist(videoId, done).catch(() => {});
-          await onProgress(sliceEnd);
-        })
-        .catch(err => {
-          logger.error({ videoId, preset: preset.name, err: err.message }, 'Quality transcode failed');
-        });
-    }));
+
+    // ── Phase 1: encode primary quality (720p or closest to source) first ────
+    // All CPU threads go to this job so it finishes as fast as possible.
+    // Once done, the video is immediately marked 'ready' so users can watch
+    // while secondary qualities continue encoding in the background.
+    const primaryPreset = [...presets].sort((a, b) => {
+      const target = Math.min(720, info.height);
+      return Math.abs(a.height - target) - Math.abs(b.height - target);
+    })[0];
+    const secondaryPresets = presets.filter(p => p.name !== primaryPreset.name);
+    const primaryThreads = Math.min(totalCpus, 8);
+
+    logger.info({ videoId, primary: primaryPreset.name, secondary: secondaryPresets.map(p => p.name), totalCpus }, 'Transcoding — primary quality first');
+
+    try {
+      await transcodeQuality(effectiveInputPath, outputDir, primaryPreset, info, keyInfoPath,
+        (ratio) => onProgress(Math.round(20 + ratio * 55)), primaryThreads);
+      done.push(primaryPreset.name);
+    } catch (err) {
+      logger.error({ videoId, preset: primaryPreset.name, err: err.message }, 'Primary quality transcode failed');
+    }
 
     if (done.length === 0) {
       throw new Error('All quality presets failed — no playable output produced');
     }
+
+    // Mark video ready as soon as primary quality is available
+    await db.prepare(`UPDATE videos SET qualities=? WHERE id=?`).run(JSON.stringify(done), videoId);
+    await rebuildMasterPlaylist(videoId, done).catch(() => {});
+    await onProgress(75);
+
+    // ── Phase 2: secondary qualities in pairs, half the threads each ──────────
+    if (secondaryPresets.length) {
+      const secThreads = Math.max(2, Math.floor(totalCpus / Math.min(2, secondaryPresets.length)));
+      for (let i = 0; i < secondaryPresets.length; i += 2) {
+        const batch = secondaryPresets.slice(i, i + 2);
+        await Promise.all(batch.map(preset =>
+          transcodeQuality(effectiveInputPath, outputDir, preset, info, keyInfoPath, () => {}, secThreads)
+            .then(async name => {
+              done.push(name);
+              await db.prepare(`UPDATE videos SET qualities=? WHERE id=?`).run(JSON.stringify(done), videoId);
+              await rebuildMasterPlaylist(videoId, done).catch(() => {});
+            })
+            .catch(err => logger.error({ videoId, preset: preset.name, err: err.message }, 'Secondary quality transcode failed'))
+        ));
+      }
+    }
+
+    await onProgress(85);
 
     await db.prepare(`UPDATE videos SET hls_key=?, hls_key_id=? WHERE id=?`)
       .run(hlsKey.toString('base64'), hlsKeyId, videoId);
