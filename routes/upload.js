@@ -235,6 +235,10 @@ router.post('/', optionalAuth, (req, res, next) => {
       }
     }
 
+    // Store source file reference for retry (local path or S3 key, whichever is available)
+    const sourceFile = s3SourceKey || req.file.path;
+    db.prepare(`UPDATE videos SET source_file=? WHERE id=?`).run(sourceFile, id).catch(() => {});
+
     const payload = { videoId: id, inputPath: req.file.path, s3SourceKey, title, workspaceId, plan: req.workspace?.plan || 'starter' };
     const { inline } = await addTranscodeJob(payload);
 
