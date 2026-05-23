@@ -101,7 +101,7 @@ router.patch('/:id', requireRole('owner', 'admin'), async (req, res) => {
   }
 });
 
-// DELETE /api/folders/:id — delete folder (videos become unfoldered)
+// DELETE /api/folders/:id — delete folder and all descendants (videos become unfoldered)
 router.delete('/:id', requireRole('owner', 'admin'), async (req, res) => {
   try {
     const folder = await db.prepare(
@@ -109,8 +109,38 @@ router.delete('/:id', requireRole('owner', 'admin'), async (req, res) => {
     ).get(req.params.id, req.workspace.id);
     if (!folder) return res.status(404).json({ error: 'Folder not found' });
 
-    await db.prepare(`UPDATE videos SET folder_id = NULL WHERE folder_id = ?`).run(req.params.id);
-    await db.prepare(`DELETE FROM folders WHERE id = ?`).run(req.params.id);
+    // Collect the folder and all its descendants via recursive CTE (PostgreSQL)
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+      // Find all descendant folder IDs (including the target folder)
+      const { rows } = await client.query(`
+        WITH RECURSIVE tree AS (
+          SELECT id FROM folders WHERE id = $1 AND workspace_id = $2
+          UNION ALL
+          SELECT f.id FROM folders f JOIN tree t ON f.parent_id = t.id
+        )
+        SELECT id FROM tree
+      `, [req.params.id, req.workspace.id]);
+
+      const ids = rows.map(r => r.id);
+      if (ids.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Folder not found' }); }
+
+      // Unfolder all videos in any of these folders
+      await client.query(
+        `UPDATE videos SET folder_id = NULL WHERE folder_id = ANY($1)`,
+        [ids]
+      );
+      // Delete all collected folders
+      await client.query(`DELETE FROM folders WHERE id = ANY($1)`, [ids]);
+      await client.query('COMMIT');
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+
     res.json({ success: true });
   } catch (err) {
     logger.error({ err }, 'delete folder failed');
