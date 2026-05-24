@@ -616,17 +616,21 @@ router.post('/referrals/redeem', rateLimit(5, 3_600_000), authenticate, resolveW
        WHERE id = ? AND free_months_remaining > 0`
     ).run(now, ws.id);
 
-    // Try to extend the subscription on Stripe if applicable
+    // Try to extend the subscription on Stripe by exactly 1 calendar month
     let extended = false;
+    let newPeriodEnd = null;
     try {
       if (ws.payment_provider === 'stripe' && ws.stripe_subscription_id) {
         const stripe = stripeService.getStripe();
         if (stripe) {
           const sub = await stripe.subscriptions.retrieve(ws.stripe_subscription_id);
-          const currentEnd = sub.current_period_end;
-          // Extend by 1 month (30 days in seconds)
+          const currentEnd = sub.current_period_end; // Unix timestamp
+          // Add exactly 1 calendar month using JS Date arithmetic
+          const d = new Date(currentEnd * 1000);
+          d.setMonth(d.getMonth() + 1);
+          newPeriodEnd = Math.floor(d.getTime() / 1000);
           await stripe.subscriptions.update(ws.stripe_subscription_id, {
-            trial_end: currentEnd + 30 * 24 * 3600,
+            trial_end: newPeriodEnd,
             proration_behavior: 'none',
           });
           extended = true;
@@ -639,12 +643,16 @@ router.post('/referrals/redeem', rateLimit(5, 3_600_000), authenticate, resolveW
     // Invalidate workspace cache
     cache.invalidate(`sv:ws:${ws.id}`).catch(() => {});
 
-    logger.info({ userId: req.user.id, wsId: ws.id, stripeExtended: extended }, 'Referral credit redeemed');
+    logger.info({ userId: req.user.id, wsId: ws.id, stripeExtended: extended, newPeriodEnd }, 'Referral credit redeemed');
+
+    const nextDate = newPeriodEnd
+      ? new Date(newPeriodEnd * 1000).toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' })
+      : null;
 
     res.json({
       success: true,
-      message: extended
-        ? '¡Crédito aplicado! Tu suscripción se extendió 30 días gratis.'
+      message: extended && nextDate
+        ? `¡Crédito aplicado! Tu plan está gratis hasta el ${nextDate}.`
         : '¡Crédito registrado! Tu próxima renovación se ajustará automáticamente.',
       remainingCredits: balance - 1,
     });

@@ -475,6 +475,13 @@ function doLogout() {
         const r = await apiFetch(`${BASE}/api/workspaces/${authWorkspace.id}`);
         if (!r.ok) return;
         ws = await r.json();
+        // Sync custom domain fields into authWorkspace so getEmbedBase() works correctly
+        // (authWorkspace from /auth/me only has basic fields)
+        authWorkspace = {
+          ...authWorkspace,
+          custom_embed_domain: ws.custom_embed_domain || null,
+          custom_domain_verified: !!ws.custom_domain_verified,
+        };
         const s = ws.settings || {};
         document.getElementById('cfg-player-name').value = s.embedPlayerName || '';
         document.getElementById('cfg-logo-url').value = s.embedLogo || '';
@@ -5730,7 +5737,8 @@ function doLogout() {
 
     async function redeemReferralCredit() {
       const btn = document.getElementById('ref-redeem-btn');
-      if (btn) { btn.disabled = true; btn.textContent = 'Canjeando...'; }
+      const btnInner = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg> Canjear mes gratis';
+      if (btn) { btn.disabled = true; btn.innerHTML = 'Canjeando...'; }
       try {
         const r = await apiFetch(`${BASE}/api/billing/referrals/redeem`, {
           method: 'POST',
@@ -5743,12 +5751,12 @@ function doLogout() {
         const creditEl = document.getElementById('ref-credit-balance');
         if (creditEl) creditEl.textContent = d.remainingCredits ?? 0;
         if (btn) {
-          btn.textContent = '🎁 Canjear mes gratis';
+          btn.innerHTML = btnInner;
           btn.disabled = (d.remainingCredits ?? 0) <= 0;
         }
       } catch (e) {
         toast(e.message || 'Error al canjear crédito', 'error');
-        if (btn) { btn.disabled = false; btn.textContent = '🎁 Canjear mes gratis'; }
+        if (btn) { btn.disabled = false; btn.innerHTML = btnInner; }
       }
     }
 
@@ -7099,52 +7107,62 @@ function doLogout() {
       if (!planSel) return;
 
       const plan = planSel.value;
-      
-      // Load dynamic plan details from billingStatus (loaded in loadBillingInfo)
+
+      // Load dynamic plan details from billingStatus (loaded in openUpgradeModal → loadUpgradePlans)
       const availablePlans = billingStatus?.availablePlans || [];
+
+      // Update ALL option labels with real prices from API
+      Array.from(planSel.options).forEach(opt => {
+        const pd = availablePlans.find(p => p.key === opt.value);
+        if (pd) {
+          const priceLabel = pd.price === 0 ? 'Gratis' : `$${pd.price}/mes`;
+          opt.text = `${pd.name} — ${priceLabel}`;
+        }
+      });
+
       const planData = availablePlans.find(p => p.key === plan);
-      
-      let details;
+
+      let price, features;
       if (planData) {
-        const price = planData.price === 0 ? 'Gratis' : `$${planData.price}/mes`;
-        const maxVideos = planData.maxVideos === 999999 ? 'ilimitados' : planData.maxVideos;
-        const maxStorage = planData.maxStorageGB === 999999 ? 'ilimitado' : `${planData.maxStorageGB} GB`;
-        const maxBandwidth = planData.maxBandwidthGB === 999999 ? 'ilimitado' : `${planData.maxBandwidthGB} GB`;
-        
-        details = {
-          price,
-          features: [
-            `${maxVideos} videos`,
-            `${maxStorage} de almacenamiento`,
-            `${maxBandwidth} de ancho de banda/mes`,
-            planData.features?.subtitles ? 'Transcripciones automáticas con IA' : null,
-            planData.features?.analytics ? 'Analytics avanzados' : 'Analytics básicos',
-            planData.features?.apiAccess ? 'Acceso API completo' : null,
-            plan === 'enterprise' ? 'Workspaces ilimitados' : plan === 'pro' ? 'Hasta 3 workspaces' : null,
-            plan === 'enterprise' ? 'Miembros ilimitados' : plan === 'pro' ? '5 miembros por workspace' : null,
-            plan === 'enterprise' ? 'SLA garantizado' : null,
-            plan === 'enterprise' ? 'Soporte dedicado 24/7' : plan === 'pro' ? 'Soporte prioritario' : null,
-            plan === 'enterprise' ? 'Onboarding personalizado' : null,
-          ].filter(Boolean)
-        };
+        price = planData.price === 0 ? 'Gratis' : `$${planData.price}/mes`;
+        const maxVideos   = planData.maxVideos     >= 999999 ? 'Ilimitados' : planData.maxVideos;
+        const maxStorage  = planData.maxStorageGB  >= 999999 ? 'Ilimitado'  : `${planData.maxStorageGB} GB`;
+        const maxBandwidth = planData.maxBandwidthGB >= 999999 ? 'Ilimitado' : `${planData.maxBandwidthGB} GB/mes`;
+        features = [
+          `${maxVideos} videos`,
+          `${maxStorage} de almacenamiento`,
+          `${maxBandwidth} de ancho de banda`,
+          planData.features?.subtitles ? 'Transcripciones automáticas con IA' : null,
+          planData.features?.analytics ? 'Analytics avanzados' : 'Analytics básicos',
+          planData.features?.apiAccess ? 'Acceso API completo' : null,
+          plan === 'enterprise' ? 'Workspaces ilimitados' : plan === 'pro' ? 'Hasta 3 workspaces' : null,
+          plan === 'enterprise' ? 'Miembros ilimitados' : plan === 'pro' ? '5 miembros por workspace' : null,
+          plan === 'enterprise' ? 'SLA garantizado' : null,
+          plan === 'enterprise' ? 'Soporte dedicado 24/7' : plan === 'pro' ? 'Soporte prioritario' : null,
+          plan === 'enterprise' ? 'Onboarding personalizado' : null,
+        ].filter(Boolean);
       } else {
-        // Fallback si no hay data (shouldn't happen)
-        details = {
-          price: plan === 'enterprise' ? 'Contactar' : '$' + (plan === 'pro' ? '59' : '99') + '/mes',
-          features: ['Plan ' + plan]
-        };
+        // Fallback before API loads
+        price = '—';
+        features = ['Cargando detalles del plan...'];
       }
 
-      if (featuresList) featuresList.innerHTML = details.features.map(f => `<li>${esc(f)}</li>`).join('');
-      if (totalPrice) totalPrice.textContent = details.price;
-      
+      if (featuresList) featuresList.innerHTML = features.map(f =>
+        `<li style="display:flex;align-items:flex-start;gap:8px;margin-bottom:4px;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:2px;color:var(--green);"><polyline points="20 6 9 17 4 12"/></svg>
+          <span>${esc(f)}</span>
+        </li>`
+      ).join('');
+      if (totalPrice) totalPrice.textContent = price;
+
       // Actualizar info del gateway si está seleccionado
       if (gatewaySel && gatewayInfo && gatewaySel.value) {
         const gateway = gatewaySel.value;
         const descriptions = {
-          stripe: 'Pago seguro con tarjeta de crédito o débito mediante Stripe.',
-          paypal: 'Paga con tu cuenta de PayPal o tarjeta a través de PayPal.',
-          binance: 'Paga con criptomonedas a través de Binance Pay.'
+          stripe:   'Pago seguro con tarjeta de crédito o débito mediante Stripe.',
+          paypal:   'Paga con tu cuenta de PayPal o tarjeta a través de PayPal.',
+          binance:  'Paga con criptomonedas a través de Binance Pay.',
+          dlocalgo: 'Paga con tarjeta, transferencia bancaria o voucher vía dLocal Go (LATAM).',
         };
         gatewayInfo.style.display = 'block';
         gatewayInfo.innerHTML = descriptions[gateway] || 'Método de pago disponible.';

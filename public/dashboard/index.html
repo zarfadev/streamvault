@@ -3732,8 +3732,9 @@
                 </div>
                 <div style="font-size:11px;color:var(--muted);margin-top:3px;">Por cada referido que pague, ganas 1 mes gratis.</div>
               </div>
-              <button class="btn btn-primary" style="padding:9px 18px;font-size:13px;" id="ref-redeem-btn" onclick="redeemReferralCredit()">
-                🎁 Canjear mes gratis
+              <button class="btn btn-primary" style="padding:9px 18px;font-size:13px;display:flex;align-items:center;gap:7px;" id="ref-redeem-btn" onclick="redeemReferralCredit()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>
+                Canjear mes gratis
               </button>
             </div>
           </div>
@@ -4799,8 +4800,8 @@
         <div class="modal-input-group">
           <label>Plan</label>
           <select id="upgrade-plan-select" class="modal-input modal-input-select" onchange="updateUpgradePlanDetails()">
-            <option value="pro">Pro — $9.99/mes</option>
-            <option value="enterprise">Enterprise — $29.99/mes</option>
+            <option value="pro">Pro — cargando...</option>
+            <option value="enterprise">Enterprise — cargando...</option>
           </select>
         </div>
 
@@ -4884,7 +4885,7 @@
   </div>
 
   <script src="../js/toast.js" integrity="sha384-NOlrAhsJK/ux0DquI1zmOgS8Cs9AZPo8L+h9cRBWrHtqgd++igVHeJh8U7MwFSS4" crossorigin="anonymous" defer></script>
-  <script src="../js/app-dashboard.js?v=2026.05.24d" defer></script>
+  <script src="../js/app-dashboard.js?v=2026.05.24e" defer></script>
 
   <!-- Onboarding wizard modal -->
   <div id="onboarding-overlay" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.65);align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);transition:opacity .28s;">

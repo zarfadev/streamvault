@@ -641,7 +641,8 @@ router.get('/me', authenticate, async (req, res) => {
   try {
     const [workspaces, userRow, refStats, creditRow] = await Promise.all([
       db.prepare(`
-        SELECT w.id, w.name, w.slug, w.plan, w.avatar_url, wm.role
+        SELECT w.id, w.name, w.slug, w.plan, w.avatar_url, wm.role,
+               w.custom_embed_domain, w.custom_domain_verified
         FROM workspaces w
         JOIN workspace_members wm ON w.id = wm.workspace_id
         WHERE wm.user_id = ?
