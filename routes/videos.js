@@ -201,9 +201,16 @@ router.get('/', async (req, res) => {
         `SELECT * FROM videos ${where} ORDER BY created_at DESC LIMIT ?`
       ).all(...baseParams, limit + 1); // fetch one extra to detect if there's a next page
     } else {
-      // No workspace context: only show public/ready non-DMCA-suspended videos
+      // No workspace context: only show public/ready non-DMCA-suspended videos.
+      // ?workspace_id=<uuid> is accepted as a read-only filter so the watch page
+      // can load related videos scoped to the same channel for unauthenticated viewers.
+      // It never exposes private videos — the public visibility filter always applies.
+      const rawWsId = req.query.workspace_id ? String(req.query.workspace_id).trim() : null;
+      const wsIdFilter = rawWsId && /^[0-9a-f-]{36}$/i.test(rawWsId) ? rawWsId : null;
+
       const clauses = ["status = 'ready'", "(visibility IS NULL OR visibility = 'public')", "(dmca_suspended IS NULL OR dmca_suspended = FALSE)"];
       const baseParams = [];
+      if (wsIdFilter) { clauses.push('workspace_id = ?'); baseParams.push(wsIdFilter); }
       if (search) { clauses.push('(title ILIKE ? OR description ILIKE ?)'); baseParams.push(search, search); }
       if (cursor !== null) { clauses.push('created_at < ?'); baseParams.push(cursor); }
       const where = `WHERE ${clauses.join(' AND ')}`;

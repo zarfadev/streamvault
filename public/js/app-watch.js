@@ -120,11 +120,12 @@ async function init(){
     document.title=`${v.title} — ${window._svSiteName||'StreamVault'}`;
 
     // Load related videos — scoped to same workspace so cross-tenant content never leaks.
-    // Pass X-Workspace-Id so the API filters by workspace; public videos only (no auth).
+    // Uses ?workspace_id= query param (works for both authenticated and anonymous viewers).
+    // The API only returns public+ready videos in this path regardless of the filter.
     let related=[];
     if(v.workspace_id){
       try{
-        const rr=await fetch(`${BASE}/api/videos?limit=10`,{headers:{'X-Workspace-Id':v.workspace_id}});
+        const rr=await fetch(`${BASE}/api/videos?limit=10&workspace_id=${encodeURIComponent(v.workspace_id)}`);
         if(rr.ok){
           const rd=await rr.json();
           related=(rd.videos||[]).filter(rv=>rv.id!==videoId&&rv.status==='ready'&&(rv.visibility==='public'||!rv.visibility)).slice(0,7);
