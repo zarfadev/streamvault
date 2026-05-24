@@ -2197,7 +2197,7 @@ function editGateway(provider) {
       title: 'Binance Pay',
       vars: [
         { name: 'BINANCE_API_KEY',          hint: 'API key del portal Binance Pay',           statusKey: 'configured' },
-        { name: 'BINANCE_API_SECRET',       hint: 'API secret correspondiente',               statusKey: 'configured' },
+        { name: 'BINANCE_SECRET_KEY',       hint: 'API secret correspondiente',               statusKey: 'configured' },
         { name: 'BINANCE_MERCHANT_ID',      hint: 'Merchant ID de tu cuenta',                 statusKey: 'configured' },
         { name: 'BINANCE_PRICE_STARTER',    hint: 'Precio en USD plan Starter',               statusKey: 'hasPrices' },
         { name: 'BINANCE_PRICE_PRO',        hint: 'Precio en USD plan Pro',                   statusKey: 'hasPrices' },
@@ -2228,15 +2228,56 @@ function editGateway(provider) {
 
   const listEl = document.getElementById('gw-config-env-list');
   if (listEl) {
-    const rows = cfg.vars.map(v => {
-      const ok = !!pStatus[v.statusKey];
-      return `<div class="gw-env-row">
-        <span class="gw-env-status ${ok ? 'ok' : 'missing'}"></span>
-        <span class="gw-env-name">${esc(v.name)}</span>
-        <span class="gw-env-hint">${esc(v.hint)}</span>
-      </div>`;
+    // Load existing masked credentials to show current state
+    api(`/api/admin/payment-gateways/credentials/${provider}`).then(r => r.json()).then(data => {
+      const maskedCreds = data.credentials || {};
+      const rows = cfg.vars.map(v => {
+        const ok = !!pStatus[v.statusKey];
+        const currentVal = maskedCreds[v.name] || '';
+        return `<div class="gw-env-row" style="display:flex;flex-direction:column;gap:4px;margin-bottom:12px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span class="gw-env-status ${ok ? 'ok' : 'missing'}"></span>
+            <span class="gw-env-name" style="font-weight:600;font-size:12px;">${esc(v.name)}</span>
+            ${currentVal ? `<span style="font-size:10px;color:var(--muted);">(${esc(currentVal)})</span>` : ''}
+          </div>
+          <input type="text" id="gw-cred-${v.name}" class="input" 
+            placeholder="${esc(v.hint)}" 
+            style="font-size:12px;padding:6px 10px;width:100%;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text);"
+            autocomplete="off" spellcheck="false">
+        </div>`;
+      });
+      listEl.innerHTML = rows.join('') + `
+        <div style="margin-top:16px;display:flex;gap:8px;">
+          <button class="btn btn-primary btn-sm" onclick="saveGatewayCredentials('${provider}')">
+            💾 Guardar credenciales
+          </button>
+          <span id="gw-save-status" style="font-size:12px;color:var(--muted);align-self:center;"></span>
+        </div>
+        <p style="font-size:11px;color:var(--muted);margin-top:8px;">
+          ⚡ Los cambios tienen efecto inmediato. Deja en blanco los campos que ya están configurados via .env para mantener ese valor.
+        </p>`;
+    }).catch(() => {
+      // Fallback: show editable form without masked values
+      const rows = cfg.vars.map(v => {
+        const ok = !!pStatus[v.statusKey];
+        return `<div class="gw-env-row" style="display:flex;flex-direction:column;gap:4px;margin-bottom:12px;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span class="gw-env-status ${ok ? 'ok' : 'missing'}"></span>
+            <span class="gw-env-name" style="font-weight:600;font-size:12px;">${esc(v.name)}</span>
+          </div>
+          <input type="text" id="gw-cred-${v.name}" class="input" 
+            placeholder="${esc(v.hint)}" 
+            style="font-size:12px;padding:6px 10px;width:100%;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text);"
+            autocomplete="off" spellcheck="false">
+        </div>`;
+      });
+      listEl.innerHTML = rows.join('') + `
+        <div style="margin-top:16px;">
+          <button class="btn btn-primary btn-sm" onclick="saveGatewayCredentials('${provider}')">
+            💾 Guardar credenciales
+          </button>
+        </div>`;
     });
-    listEl.innerHTML = rows.join('');
   }
 
   // Summary count
@@ -2249,6 +2290,66 @@ function editGateway(provider) {
   }
 
   openModal('gw-config-modal');
+}
+
+/**
+ * Save gateway credentials from the modal form inputs to the DB via admin API.
+ * Only non-empty fields are saved (empty = keep using .env value).
+ */
+async function saveGatewayCredentials(provider) {
+  const configs = {
+    stripe: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_PRICE_STARTER', 'STRIPE_PRICE_PRO', 'STRIPE_PRICE_ENTERPRISE'],
+    paypal: ['PAYPAL_CLIENT_ID', 'PAYPAL_CLIENT_SECRET', 'PAYPAL_WEBHOOK_ID', 'PAYPAL_PLAN_STARTER', 'PAYPAL_PLAN_PRO', 'PAYPAL_PLAN_ENTERPRISE', 'PAYPAL_MODE'],
+    binance: ['BINANCE_API_KEY', 'BINANCE_SECRET_KEY', 'BINANCE_MERCHANT_ID', 'BINANCE_PRICE_STARTER', 'BINANCE_PRICE_PRO', 'BINANCE_PRICE_ENTERPRISE', 'BINANCE_MODE'],
+    dlocalgo: ['DLOCALGO_API_KEY', 'DLOCALGO_SECRET_KEY', 'DLOCALGO_PLAN_STARTER', 'DLOCALGO_PLAN_PRO', 'DLOCALGO_PLAN_ENTERPRISE', 'DLOCALGO_MODE'],
+  };
+
+  const keys = configs[provider];
+  if (!keys) return toast('Provider no reconocido', 'error');
+
+  const credentials = {};
+  let hasAny = false;
+  for (const key of keys) {
+    const el = document.getElementById(`gw-cred-${key}`);
+    const val = el ? el.value.trim() : '';
+    if (val) {
+      credentials[key] = val;
+      hasAny = true;
+    }
+  }
+
+  if (!hasAny) {
+    toast('Ingresa al menos una credencial para guardar', 'error');
+    return;
+  }
+
+  const statusEl = document.getElementById('gw-save-status');
+  if (statusEl) statusEl.textContent = 'Guardando...';
+
+  try {
+    const r = await api('/api/admin/payment-gateways/credentials', {
+      method: 'PUT',
+      body: JSON.stringify({ provider, credentials })
+    });
+    const data = await r.json();
+    if (r.ok && data.success) {
+      toast(`✅ Credenciales de ${provider} guardadas. Efecto inmediato.`);
+      if (statusEl) { statusEl.textContent = '✅ Guardado'; statusEl.style.color = 'var(--green)'; }
+      // Clear inputs after save
+      for (const key of keys) {
+        const el = document.getElementById(`gw-cred-${key}`);
+        if (el) el.value = '';
+      }
+      // Reload gateways status
+      setTimeout(() => loadGateways(), 500);
+    } else {
+      toast(data.error || 'Error al guardar', 'error');
+      if (statusEl) { statusEl.textContent = '❌ Error'; statusEl.style.color = 'var(--red)'; }
+    }
+  } catch (e) {
+    toast('Error de conexión: ' + e.message, 'error');
+    if (statusEl) { statusEl.textContent = '❌ Error'; statusEl.style.color = 'var(--red)'; }
+  }
 }
 
 async function saveGatewaysQuiet() {

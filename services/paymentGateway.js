@@ -19,6 +19,7 @@ const stripeService = require('./stripe');
 const paypalService = require('./paypal');
 const binanceService = require('./binance');
 const dlocalgoService = require('./dlocalgo');
+const gwCreds = require('./gatewayCredentials');
 const logger = require('./logger').child({ module: 'paymentGateway' });
 const db = require('../db');
 
@@ -194,14 +195,24 @@ async function getEnabledGateways() {
     logger.warn({ err: err.message }, 'Could not load payment gateways config');
   }
 
-  // Defaults si no hay config en DB — dlocalgo y binance habilitados, stripe desactivado
-  const hasDlocal  = !!(process.env.DLOCALGO_API_KEY && process.env.DLOCALGO_SECRET_KEY);
-  const hasBinance = !!(process.env.BINANCE_API_KEY  && process.env.BINANCE_SECRET_KEY);
+  // Defaults si no hay config en DB — check both env AND DB credentials
+  let hasDlocal = false;
+  let hasBinance = false;
+  let hasPaypal = false;
+  try {
+    hasDlocal  = await gwCreds.isConfigured('dlocalgo');
+    hasBinance = await gwCreds.isConfigured('binance');
+    hasPaypal  = await gwCreds.isConfigured('paypal');
+  } catch {
+    hasDlocal  = !!(process.env.DLOCALGO_API_KEY && process.env.DLOCALGO_SECRET_KEY);
+    hasBinance = !!(process.env.BINANCE_API_KEY  && process.env.BINANCE_SECRET_KEY);
+    hasPaypal  = !!(process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_CLIENT_SECRET);
+  }
   return {
     stripe:   { enabled: false, default: false },
-    paypal:   { enabled: false, default: false },
+    paypal:   { enabled: hasPaypal, default: !hasDlocal && hasPaypal },
     dlocalgo: { enabled: hasDlocal,  default: hasDlocal  },
-    binance:  { enabled: hasBinance, default: !hasDlocal && hasBinance },
+    binance:  { enabled: hasBinance, default: !hasDlocal && !hasPaypal && hasBinance },
   };
 }
 

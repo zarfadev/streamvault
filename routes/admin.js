@@ -1493,37 +1493,105 @@ router.put('/payment-gateways', superAdminAuth, async (req, res) => {
 
 /**
  * GET /api/admin/payment-gateways/status
- * Verifica el estado y disponibilidad de cada gateway
+ * Verifica el estado y disponibilidad de cada gateway (reads from DB + env)
  */
 router.get('/payment-gateways/status', superAdminAuth, async (req, res) => {
   try {
+    const gwCreds = require('../services/gatewayCredentials');
+    const [stripeStatus, paypalStatus, binanceStatus, dlocalgoStatus] = await Promise.all([
+      gwCreds.getProviderStatus('stripe'),
+      gwCreds.getProviderStatus('paypal'),
+      gwCreds.getProviderStatus('binance'),
+      gwCreds.getProviderStatus('dlocalgo'),
+    ]);
+
     const status = {
-      stripe: {
-        configured: !!(process.env.STRIPE_SECRET_KEY && !process.env.STRIPE_SECRET_KEY.startsWith('sk_test_...')),
-        hasWebhookSecret: !!process.env.STRIPE_WEBHOOK_SECRET,
-        hasPriceIds: !!(process.env.STRIPE_PRICE_STARTER && process.env.STRIPE_PRICE_PRO && process.env.STRIPE_PRICE_ENTERPRISE)
-      },
-      paypal: {
-        configured: !!(process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_CLIENT_SECRET),
-        hasWebhookId: !!process.env.PAYPAL_WEBHOOK_ID,
-        hasPlanIds: !!(process.env.PAYPAL_PLAN_STARTER && process.env.PAYPAL_PLAN_PRO && process.env.PAYPAL_PLAN_ENTERPRISE),
-        mode: process.env.PAYPAL_MODE || 'sandbox'
-      },
-      binance: {
-        configured: !!(process.env.BINANCE_API_KEY && process.env.BINANCE_SECRET_KEY && process.env.BINANCE_MERCHANT_ID),
-        hasPrices: !!(process.env.BINANCE_PRICE_STARTER && process.env.BINANCE_PRICE_PRO && process.env.BINANCE_PRICE_ENTERPRISE),
-        mode: process.env.BINANCE_MODE || 'sandbox'
-      },
-      dlocalgo: {
-        configured: !!(process.env.DLOCALGO_API_KEY && process.env.DLOCALGO_SECRET_KEY),
-        hasPlanIds: !!(process.env.DLOCALGO_PLAN_STARTER && process.env.DLOCALGO_PLAN_PRO && process.env.DLOCALGO_PLAN_ENTERPRISE),
-        mode: process.env.DLOCALGO_MODE || 'sandbox',
-      },
+      stripe: stripeStatus,
+      paypal: paypalStatus,
+      binance: binanceStatus,
+      dlocalgo: dlocalgoStatus,
     };
 
     res.json({ success: true, status });
   } catch (e) {
     logger.error({ err: e.message }, 'Get payment gateways status error');
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/**
+ * PUT /api/admin/payment-gateways/credentials
+ * Guarda las credenciales de un gateway específico en la DB (cifradas).
+ * Body: { provider: 'dlocalgo', credentials: { DLOCALGO_API_KEY: '...', ... } }
+ * 
+ * Los campos vacíos ("") se ignoran y se usa el valor de .env como fallback.
+ * Efecto inmediato: no requiere reiniciar el servidor.
+ */
+router.put('/payment-gateways/credentials', superAdminAuth, async (req, res) => {
+  try {
+    const { provider, credentials } = req.body;
+
+    if (!provider || !['stripe', 'paypal', 'binance', 'dlocalgo'].includes(provider)) {
+      return res.status(400).json({ error: 'Provider inválido. Opciones: stripe, paypal, binance, dlocalgo' });
+    }
+
+    if (!credentials || typeof credentials !== 'object') {
+      return res.status(400).json({ error: 'Se requiere un objeto "credentials" con los campos a configurar' });
+    }
+
+    const gwCreds = require('../services/gatewayCredentials');
+    await gwCreds.saveCredentials(provider, credentials);
+
+    // Re-check status after saving
+    const newStatus = await gwCreds.getProviderStatus(provider);
+
+    logAudit(req, 'gateway_credentials_updated', 'system_config', provider, {
+      fieldsUpdated: Object.keys(credentials).filter(k => credentials[k]),
+    }).catch(() => {});
+
+    logger.info({ provider, admin: req.userEmail }, 'Gateway credentials updated via admin panel');
+
+    res.json({
+      success: true,
+      message: `Credenciales de ${provider} guardadas correctamente. Efecto inmediato.`,
+      status: newStatus,
+    });
+  } catch (e) {
+    logger.error({ err: e.message }, 'Save gateway credentials error');
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/**
+ * GET /api/admin/payment-gateways/credentials/:provider
+ * Obtiene las credenciales guardadas (masked para seguridad).
+ * Solo muestra si están configuradas, no revela los valores completos.
+ */
+router.get('/payment-gateways/credentials/:provider', superAdminAuth, async (req, res) => {
+  try {
+    const { provider } = req.params;
+    if (!['stripe', 'paypal', 'binance', 'dlocalgo'].includes(provider)) {
+      return res.status(400).json({ error: 'Provider inválido' });
+    }
+
+    const gwCreds = require('../services/gatewayCredentials');
+    const creds = await gwCreds.getCredentials(provider);
+
+    // Return masked values (show first 4 and last 4 chars only)
+    const masked = {};
+    for (const [key, val] of Object.entries(creds)) {
+      if (val && val.length > 8) {
+        masked[key] = val.slice(0, 4) + '••••' + val.slice(-4);
+      } else if (val) {
+        masked[key] = '••••••••';
+      } else {
+        masked[key] = '';
+      }
+    }
+
+    res.json({ success: true, provider, credentials: masked });
+  } catch (e) {
+    logger.error({ err: e.message }, 'Get gateway credentials error');
     res.status(500).json({ error: e.message });
   }
 });

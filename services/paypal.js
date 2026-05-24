@@ -17,15 +17,19 @@ const config = require('../config');
 const db = require('../db');
 const cache = require('./cache');
 const logger = require('./logger').child({ module: 'paypal' });
+const gwCreds = require('./gatewayCredentials');
 
 // ══════════════════════════════════════════════════════════════════════════
-// PayPal Client Configuration
+// PayPal Client Configuration (reads from DB first, then .env fallback)
 // ══════════════════════════════════════════════════════════════════════════
 
 let _paypalClient = null;
+let _paypalMode = null;
+let _clientInitAt = 0;
+const CLIENT_TTL = 60_000; // Reinitialize client every 60s to pick up credential changes
 
 function getPayPalClient() {
-  if (_paypalClient) return _paypalClient;
+  if (_paypalClient && Date.now() - _clientInitAt < CLIENT_TTL) return _paypalClient;
 
   const clientId = process.env.PAYPAL_CLIENT_ID;
   const clientSecret = process.env.PAYPAL_CLIENT_SECRET;
@@ -41,22 +45,64 @@ function getPayPalClient() {
     : new checkoutNodeJssdk.core.SandboxEnvironment(clientId, clientSecret);
 
   _paypalClient = new checkoutNodeJssdk.core.PayPalHttpClient(environment);
+  _paypalMode = mode;
+  _clientInitAt = Date.now();
   
   logger.info({ mode }, 'PayPal client initialized');
   return _paypalClient;
 }
 
 /**
+ * Async version that checks DB credentials first
+ */
+async function getPayPalClientAsync() {
+  const creds = await gwCreds.getCredentials('paypal');
+  const clientId = creds.PAYPAL_CLIENT_ID || process.env.PAYPAL_CLIENT_ID || '';
+  const clientSecret = creds.PAYPAL_CLIENT_SECRET || process.env.PAYPAL_CLIENT_SECRET || '';
+  const mode = creds.PAYPAL_MODE || process.env.PAYPAL_MODE || 'sandbox';
+
+  if (!clientId || !clientSecret) {
+    return null;
+  }
+
+  // Reinitialize if credentials or mode changed
+  if (_paypalClient && _paypalMode === mode && Date.now() - _clientInitAt < CLIENT_TTL) {
+    return _paypalClient;
+  }
+
+  const environment = mode === 'live'
+    ? new checkoutNodeJssdk.core.LiveEnvironment(clientId, clientSecret)
+    : new checkoutNodeJssdk.core.SandboxEnvironment(clientId, clientSecret);
+
+  _paypalClient = new checkoutNodeJssdk.core.PayPalHttpClient(environment);
+  _paypalMode = mode;
+  _clientInitAt = Date.now();
+
+  logger.info({ mode }, 'PayPal client initialized (from DB credentials)');
+  return _paypalClient;
+}
+
+/**
  * IDs de planes de PayPal (deben crearse en el dashboard de PayPal)
  * Estos IDs se obtienen al crear los "Products" y "Plans" en PayPal
+ * Priority: DB credentials > process.env
  */
+async function getPlanIdAsync(planKey) {
+  const creds = await gwCreds.getCredentials('paypal');
+  const planIds = {
+    starter: creds.PAYPAL_PLAN_STARTER || process.env.PAYPAL_PLAN_STARTER || '',
+    pro: creds.PAYPAL_PLAN_PRO || process.env.PAYPAL_PLAN_PRO || '',
+    enterprise: creds.PAYPAL_PLAN_ENTERPRISE || process.env.PAYPAL_PLAN_ENTERPRISE || '',
+  };
+  return planIds[planKey] || null;
+}
+
 function getPlanId(planKey) {
   const planIds = {
     starter: process.env.PAYPAL_PLAN_STARTER,
     pro: process.env.PAYPAL_PLAN_PRO,
     enterprise: process.env.PAYPAL_PLAN_ENTERPRISE,
   };
-
   return planIds[planKey];
 }
 
@@ -68,14 +114,14 @@ function getPlanId(planKey) {
  * Crea una suscripción de PayPal y retorna la URL de aprobación
  */
 async function createCheckoutSession(workspaceId, planKey, successUrl, cancelUrl) {
-  const client = getPayPalClient();
+  const client = await getPayPalClientAsync();
   if (!client) {
-    throw new Error('PayPal not configured. Set PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET');
+    throw new Error('PayPal no configurado. Configura las credenciales en el panel de administración (Gateways → PayPal → Configurar).');
   }
 
-  const planId = getPlanId(planKey);
+  const planId = await getPlanIdAsync(planKey);
   if (!planId) {
-    throw new Error(`PayPal plan not configured for: ${planKey}`);
+    throw new Error(`Plan de PayPal no configurado para: ${planKey}. Configura el Plan ID en el panel de administración.`);
   }
 
   const workspace = await db.prepare(`SELECT * FROM workspaces WHERE id = ?`).get(workspaceId);

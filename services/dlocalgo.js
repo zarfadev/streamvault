@@ -27,12 +27,47 @@ const cache = require('./cache');
 const logger = require('./logger').child({ module: 'dlocalgo' });
 const invoiceService = require('./invoices');
 const emailService = require('./email');
+const gwCreds = require('./gatewayCredentials');
 
 // ══════════════════════════════════════════════════════════════════════════
-// Configuration
+// Configuration (reads from DB first, then .env fallback)
 // ══════════════════════════════════════════════════════════════════════════
 
+// Cached config resolved from DB+env
+let _resolvedConfig = null;
+let _resolvedAt = 0;
+const CONFIG_TTL = 15_000; // 15s cache
+
+async function getDLocalConfigAsync() {
+  if (_resolvedConfig && Date.now() - _resolvedAt < CONFIG_TTL) return _resolvedConfig;
+
+  const creds = await gwCreds.getCredentials('dlocalgo');
+  const apiKey = creds.DLOCALGO_API_KEY || process.env.DLOCALGO_API_KEY || '';
+  const secretKey = creds.DLOCALGO_SECRET_KEY || process.env.DLOCALGO_SECRET_KEY || '';
+
+  if (!apiKey || !secretKey) { _resolvedConfig = null; _resolvedAt = Date.now(); return null; }
+
+  const mode = creds.DLOCALGO_MODE || process.env.DLOCALGO_MODE || 'sandbox';
+  const isSandbox = mode !== 'production';
+
+  _resolvedConfig = {
+    apiKey,
+    secretKey,
+    isSandbox,
+    mode,
+    baseUrl: isSandbox ? 'https://api-sbx.dlocalgo.com' : 'https://api.dlocalgo.com',
+    checkoutBase: isSandbox
+      ? 'https://checkout-sbx.dlocalgo.com'
+      : 'https://checkout.dlocalgo.com',
+  };
+  _resolvedAt = Date.now();
+  return _resolvedConfig;
+}
+
+// Synchronous version for webhook verification (uses cached or env fallback)
 function getDLocalConfig() {
+  if (_resolvedConfig) return _resolvedConfig;
+  // Fallback to env only
   const apiKey = process.env.DLOCALGO_API_KEY;
   const secretKey = process.env.DLOCALGO_SECRET_KEY;
   if (!apiKey || !secretKey) return null;
@@ -42,6 +77,7 @@ function getDLocalConfig() {
     apiKey,
     secretKey,
     isSandbox,
+    mode: process.env.DLOCALGO_MODE || 'sandbox',
     baseUrl: isSandbox ? 'https://api-sbx.dlocalgo.com' : 'https://api.dlocalgo.com',
     checkoutBase: isSandbox
       ? 'https://checkout-sbx.dlocalgo.com'
@@ -52,6 +88,16 @@ function getDLocalConfig() {
 // Plan token = el ID del plan creado en el dashboard de dLocal Go.
 // El checkout de suscripción se genera como:
 //   {checkoutBase}/validate/subscription/{token}?external_id={workspaceId}&email={email}
+async function getPlanTokenAsync(planKey) {
+  const creds = await gwCreds.getCredentials('dlocalgo');
+  const tokens = {
+    starter:    creds.DLOCALGO_PLAN_STARTER || process.env.DLOCALGO_PLAN_STARTER || '',
+    pro:        creds.DLOCALGO_PLAN_PRO || process.env.DLOCALGO_PLAN_PRO || '',
+    enterprise: creds.DLOCALGO_PLAN_ENTERPRISE || process.env.DLOCALGO_PLAN_ENTERPRISE || '',
+  };
+  return tokens[planKey] || null;
+}
+
 function getPlanToken(planKey) {
   const tokens = {
     starter:    process.env.DLOCALGO_PLAN_STARTER,
@@ -109,16 +155,17 @@ async function dlocalRequest(method, path, body = null) {
  * (Integrations > Subscription > Plans) y configurado en las env vars.
  */
 async function createCheckoutSession(workspaceId, planKey, successUrl, cancelUrl) {
-  const cfg = getDLocalConfig();
+  // Use async config resolution (reads from DB credentials first)
+  const cfg = await getDLocalConfigAsync();
   if (!cfg) {
-    throw new Error('dLocal Go no configurado. Configura DLOCALGO_API_KEY y DLOCALGO_SECRET_KEY en .env');
+    throw new Error('dLocal Go no configurado. Configura las credenciales en el panel de administración o en .env');
   }
 
-  const planToken = getPlanToken(planKey);
+  const planToken = await getPlanTokenAsync(planKey);
   if (!planToken) {
     throw new Error(
       `Plan de dLocal Go no configurado para: ${planKey}. ` +
-      `Establece DLOCALGO_PLAN_${planKey.toUpperCase()} con el token del plan de tu dashboard dLocal Go.`
+      `Configura el token del plan ${planKey} en el panel de administración (Gateways → dLocal Go → Configurar).`
     );
   }
 
