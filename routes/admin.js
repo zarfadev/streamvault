@@ -924,6 +924,36 @@ router.put('/config', superAdminAuth, async (req, res) => {
     } else {
       await dynCfg.setDynConfig(section, data);
     }
+
+    // ── Sync plans.starter / plans.pro / plans.enterprise ─────────────────────
+    // checkFeature.js reads `plans.<planName>` (individual keys) while the admin
+    // UI saves to the aggregate `plans` key. Keep both in sync so feature checks
+    // always see the latest admin configuration.
+    //
+    // Also normalises feature keys: the admin UI uses short names (folders, webhooks)
+    // while checkFeature uses canonical Enabled names (foldersEnabled, webhooksEnabled).
+    // Both formats are stored so checkFeature's legacy-fallback lookup works too.
+    if (section === 'plans') {
+      const { FEATURE_NAME_MAP } = require('../middleware/checkFeature');
+      for (const planName of ['starter', 'pro', 'enterprise']) {
+        const planData = data[planName];
+        if (!planData) continue;
+        // Normalise feature keys: ensure both short and Enabled variants are present
+        const rawFeatures = planData.features || {};
+        const normalised = {};
+        for (const [key, val] of Object.entries(rawFeatures)) {
+          normalised[key] = val; // keep original (short OR long)
+          // If this is a short key that has a canonical mapping, also add the Enabled version
+          const canonical = FEATURE_NAME_MAP[key];
+          if (canonical && canonical !== key) normalised[canonical] = val;
+          // If this is already a canonical key (ends with Enabled), also add the short version
+          const shortKey = Object.keys(FEATURE_NAME_MAP).find(k => FEATURE_NAME_MAP[k] === key);
+          if (shortKey && shortKey !== key) normalised[shortKey] = val;
+        }
+        await dynCfg.setDynConfig(`plans.${planName}`, { ...planData, features: normalised });
+      }
+    }
+
     logger.info({ section }, 'Admin config updated');
     res.json({ ok: true });
   } catch (e) {
