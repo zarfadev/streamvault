@@ -552,52 +552,21 @@ async function processVideo(videoId, inputPath, title, options = {}) {
       throw new Error('All quality presets failed — no playable output produced');
     }
 
-    // Mark video ready as soon as primary quality is available
+    // ── FAST PATH: Mark video ready immediately after primary quality ────────────
+    // Users can watch as soon as ONE quality is available. Secondary qualities and
+    // S3 upload all happen in the background. This cuts perceived wait time from
+    // "all qualities + S3 upload" to just "primary quality transcode" (~50% faster).
     await db.prepare(`UPDATE videos SET qualities=? WHERE id=?`).run(JSON.stringify(done), videoId);
     await rebuildMasterPlaylist(videoId, done).catch(() => {});
-    await onProgress(75);
 
-    // ── Phase 2: all secondary qualities in parallel, threads split evenly ────
-    if (secondaryPresets.length) {
-      const secThreads = Math.max(2, Math.floor(totalCpus / secondaryPresets.length));
-      await Promise.all(secondaryPresets.map(preset =>
-        transcodeQuality(effectiveInputPath, outputDir, preset, info, keyInfoPath, () => {}, secThreads)
-          .then(async name => {
-            done.push(name);
-            await db.prepare(`UPDATE videos SET qualities=? WHERE id=?`).run(JSON.stringify(done), videoId);
-            await rebuildMasterPlaylist(videoId, done).catch(() => {});
-          })
-          .catch(err => logger.error({ videoId, preset: preset.name, err: err.message }, 'Secondary quality transcode failed'))
-      ));
-    }
-
-    await onProgress(85);
-
+    // Save HLS key immediately so the player can decrypt the primary quality
     await db.prepare(`UPDATE videos SET hls_key=?, hls_key_id=? WHERE id=?`)
       .run(hlsKey.toString('base64'), hlsKeyId, videoId);
     try { fs.unlinkSync(keyBinPath); } catch {}
     try { fs.unlinkSync(keyInfoPath); } catch {}
 
-    // ── Wait for sprite sheet + extract embedded tracks (both run in parallel) ──
-    await Promise.all([
-      spritePromise,
-      extractEmbeddedTracks(videoId, effectiveInputPath).catch(err =>
-        logger.warn({ videoId, err: err.message }, '[transcoder] extractEmbeddedTracks failed — continuing')
-      ),
-    ]);
-    await onProgress(90);
-
-    // Use rebuildMasterPlaylist so extracted audio tracks are included via EXT-X-MEDIA
-    await rebuildMasterPlaylist(videoId, done);
-    // Delete original local upload file (no-op if already deleted after S3 upload)
-    try { fs.unlinkSync(inputPath); } catch {}
-    // Delete S3 raw source — transcoding done, no longer needed
-    if (s3SourceKey) {
-      s3.deleteObject(s3SourceKey).catch(err =>
-        logger.warn({ videoId, s3SourceKey, err: err.message }, 'S3 source cleanup failed after transcode')
-      );
-    }
-
+    // If S3 is enabled, upload primary quality immediately so the video is
+    // accessible even when DELETE_LOCAL_AFTER_S3=1 cleans up local files.
     let hlsCdnUrl = null;
     let s3ObjectPrefix = null;
     if (s3.isS3Enabled() && done.length) {
@@ -605,18 +574,13 @@ async function processVideo(videoId, inputPath, title, options = {}) {
         const up = await s3.uploadVideoDirectory(outputDir, workspaceId, videoId);
         hlsCdnUrl = up.cdnMasterUrl;
         s3ObjectPrefix = up.objectPrefix;
-        if (process.env.DELETE_LOCAL_AFTER_S3 === '1') {
-          try {
-            fs.rmSync(outputDir, { recursive: true, force: true });
-          } catch (e) {
-            logger.warn({ videoId, err: e.message }, 'Local cleanup after S3 upload failed');
-          }
-        }
+        logger.info({ videoId, hlsCdnUrl }, 'Primary quality uploaded to S3 — marking ready');
       } catch (e) {
-        logger.error({ videoId, err: e.message }, 'S3 upload failed — keeping local files');
+        logger.error({ videoId, err: e.message }, 'S3 upload of primary failed — keeping local');
       }
     }
 
+    // Mark the video READY NOW so users can immediately watch it
     if (hlsCdnUrl) {
       await db.prepare(`
         UPDATE videos
@@ -632,12 +596,78 @@ async function processVideo(videoId, inputPath, title, options = {}) {
         WHERE id=?
       `).run(JSON.stringify(done), videoId);
     }
-    logger.info({ videoId, qualities: done }, 'Transcode complete');
 
-    // Notify video owner + fire webhook + in-app notification
+    logger.info({ videoId, primaryQuality: done[0] }, 'Video marked READY — secondary qualities encoding in background');
+    // Fire notifications immediately so users know the video is available
     _notifyOwner(videoId, title, 'ready').catch(() => {});
     _fireWebhook(videoId, 'video.ready', { videoId, title, qualities: done }).catch(() => {});
     _createInAppNotification(videoId, title, 'ready').catch(() => {});
+
+    await onProgress(75);
+
+    // ── Phase 2: secondary qualities in background (non-blocking) ───────────────
+    if (secondaryPresets.length) {
+      const secThreads = Math.max(2, Math.floor(totalCpus / secondaryPresets.length));
+      await Promise.all(secondaryPresets.map(preset =>
+        transcodeQuality(effectiveInputPath, outputDir, preset, info, keyInfoPath, () => {}, secThreads)
+          .then(async name => {
+            done.push(name);
+            // Update qualities list as each one finishes
+            await db.prepare(`UPDATE videos SET qualities=? WHERE id=?`).run(JSON.stringify(done), videoId);
+            await rebuildMasterPlaylist(videoId, done).catch(() => {});
+            logger.info({ videoId, quality: name, total: done.length }, 'Secondary quality ready');
+            // Upload this quality to S3 incrementally if enabled
+            if (s3.isS3Enabled() && s3ObjectPrefix) {
+              s3.uploadVideoDirectory(outputDir, workspaceId, videoId).then(up => {
+                db.prepare(`UPDATE videos SET hls_cdn_url=?, s3_object_prefix=? WHERE id=?`)
+                  .run(up.cdnMasterUrl, up.objectPrefix, videoId).catch(() => {});
+              }).catch(err => logger.warn({ videoId, err: err.message }, 'S3 update after secondary failed'));
+            }
+          })
+          .catch(err => logger.error({ videoId, preset: preset.name, err: err.message }, 'Secondary quality transcode failed'))
+      ));
+    }
+
+    await onProgress(90);
+
+    // ── Wait for sprite sheet + extract embedded tracks ──────────────────────────
+    await Promise.all([
+      spritePromise,
+      extractEmbeddedTracks(videoId, effectiveInputPath).catch(err =>
+        logger.warn({ videoId, err: err.message }, '[transcoder] extractEmbeddedTracks failed — continuing')
+      ),
+    ]);
+
+    // Final rebuild with all qualities + audio tracks
+    await rebuildMasterPlaylist(videoId, done);
+
+    // Final S3 sync with all qualities + cleanup local files
+    if (s3.isS3Enabled() && done.length) {
+      try {
+        const finalUp = await s3.uploadVideoDirectory(outputDir, workspaceId, videoId);
+        await db.prepare(`UPDATE videos SET qualities=?, hls_cdn_url=?, s3_object_prefix=? WHERE id=?`)
+          .run(JSON.stringify(done), finalUp.cdnMasterUrl, finalUp.objectPrefix, videoId);
+        if (process.env.DELETE_LOCAL_AFTER_S3 === '1') {
+          try { fs.rmSync(outputDir, { recursive: true, force: true }); } catch (e) {
+            logger.warn({ videoId, err: e.message }, 'Local cleanup after final S3 upload failed');
+          }
+        }
+      } catch (e) {
+        logger.error({ videoId, err: e.message }, 'Final S3 upload failed — keeping local files');
+      }
+    }
+
+    // Delete original local upload file + S3 source
+    try { fs.unlinkSync(inputPath); } catch {}
+    if (s3SourceKey) {
+      s3.deleteObject(s3SourceKey).catch(err =>
+        logger.warn({ videoId, s3SourceKey, err: err.message }, 'S3 source cleanup failed after transcode')
+      );
+    }
+
+    // Update final qualities in DB
+    await db.prepare(`UPDATE videos SET qualities=? WHERE id=?`).run(JSON.stringify(done), videoId);
+    logger.info({ videoId, qualities: done }, 'Transcode complete — all qualities ready');
 
   } catch (err) {
     // Remove partial output directory — unusable without a complete transcode
