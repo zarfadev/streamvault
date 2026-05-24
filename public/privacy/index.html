@@ -41,12 +41,15 @@ a:hover { text-decoration: underline; }
 
 .divider { height: 1px; background: var(--border); margin: 48px 0; }
 
-footer { text-align: center; padding: 40px; font-size: 13px; color: var(--muted); border-top: 1px solid var(--border); margin-top: auto; }
 
 @media (max-width: 640px) {
   nav { padding: 0 20px; }
   .container { padding: 40px 20px 60px; }
 }
+.sv-footer { border-top: 1px solid var(--border); padding: 32px 48px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--muted); margin-top: auto; }
+.sv-footer a { color: var(--muted); text-decoration: none; transition: color .14s; }
+.sv-footer a:hover { color: var(--text); }
+@media (max-width: 640px) { .sv-footer { padding: 24px 20px; flex-direction: column; align-items: center; text-align: center; } }
 </style>
 </head>
 <body>
@@ -117,16 +120,18 @@ footer { text-align: center; padding: 40px; font-size: 13px; color: var(--muted)
   <p style="font-size:13px;"><a href="/terms">Términos de Uso</a> · <a href="/cookies">Política de Cookies</a> · <a href="/gdpr">GDPR</a> · <a href="mailto:privacy@streamvault.link" data-contact-email>privacy@streamvault.link</a></p>
 </div>
 
-<footer style="text-align:center;padding:28px 40px 36px;font-size:13px;color:var(--muted);border-top:1px solid var(--border);margin-top:auto;">
-  <div style="margin-bottom:12px;display:flex;gap:14px;justify-content:center;flex-wrap:wrap;">
-    <a href="/referidos" style="color:var(--muted);">Referidos</a>
-    <a href="/privacy" style="color:var(--muted);">Privacidad</a>
-    <a href="/terms" style="color:var(--muted);">Términos</a>
-    <a href="/cookies" style="color:var(--muted);">Cookies</a>
-    <a href="/gdpr" style="color:var(--muted);">GDPR</a>
-    <a href="/status" style="color:var(--muted);">Estado</a>
+<footer class="sv-footer">
+  <a href="/" style="font-family:var(--mono);font-weight:700;color:var(--accent2);font-size:14px;text-decoration:none;">Stream<span style="color:var(--muted);font-weight:400;">Vault</span></a>
+  <div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:center;">
+    <a href="/referidos">Referidos</a>
+    <a href="/privacy">Privacidad</a>
+    <a href="/terms">Términos</a>
+    <a href="/cookies">Cookies</a>
+    <a href="/gdpr">GDPR</a>
+    <a href="/status">Estado</a>
+    <a href="/api-docs">API</a>
   </div>
-  <p id="sv-copy">© 2026 StreamVault · <a href="https://myscreators.com" target="_blank" rel="noopener" style="color:var(--muted);">Una marca de M&amp;S Creators S.A.S.</a></p>
+  <span id="sv-copy">© 2026 StreamVault · <a href="https://myscreators.com" target="_blank" rel="noopener">Una marca de M&amp;S Creators S.A.S.</a></span>
 </footer>
 
 <script src="/js/cookie-banner.js"></script>

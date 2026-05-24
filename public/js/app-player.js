@@ -1326,6 +1326,9 @@ function initHls(m3u8Url) {
       levels = hls.levels;
       audioTracks = hls.audioTracks;
       currentAudioTrack = hls.audioTrack;
+      // Show settings gear only after HLS manifest is ready (has actual menu content)
+      const sbtn = document.getElementById('settings-btn');
+      if (sbtn) sbtn.style.display = '';
       updateSettingsBadge();
       renderSettingsMenu();
       const t0 = parseFloat(new URLSearchParams(location.search).get('t') || '0');
@@ -1354,6 +1357,9 @@ function initHls(m3u8Url) {
     video.addEventListener('loadedmetadata', () => {
       const t0 = parseFloat(new URLSearchParams(location.search).get('t') || '0');
       if (t0 > 0) video.currentTime = t0;
+      // Show settings gear for native HLS (Safari)
+      const sbtn = document.getElementById('settings-btn');
+      if (sbtn) sbtn.style.display = '';
       video.play().catch(() => {});
     });
   } else {
