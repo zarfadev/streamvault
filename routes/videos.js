@@ -208,14 +208,33 @@ router.get('/', async (req, res) => {
       const rawWsId = req.query.workspace_id ? String(req.query.workspace_id).trim() : null;
       const wsIdFilter = rawWsId && /^[0-9a-f-]{36}$/i.test(rawWsId) ? rawWsId : null;
 
-      const clauses = ["status = 'ready'", "(visibility IS NULL OR visibility = 'public')", "(dmca_suspended IS NULL OR dmca_suspended = FALSE)"];
+      const clauses = [
+        "v.status = 'ready'",
+        "(v.visibility IS NULL OR v.visibility = 'public')",
+        "(v.dmca_suspended IS NULL OR v.dmca_suspended = FALSE)",
+      ];
       const baseParams = [];
-      if (wsIdFilter) { clauses.push('workspace_id = ?'); baseParams.push(wsIdFilter); }
-      if (search) { clauses.push('(title ILIKE ? OR description ILIKE ?)'); baseParams.push(search, search); }
-      if (cursor !== null) { clauses.push('created_at < ?'); baseParams.push(cursor); }
+
+      if (wsIdFilter) {
+        // Related-videos request: scoped to specific workspace — show their content
+        // even if hideFromPlatformListing is set (user already has direct link to a video there)
+        clauses.push('v.workspace_id = ?'); baseParams.push(wsIdFilter);
+      } else {
+        // Global public discovery — respect workspace opt-out
+        clauses.push(`(
+          w.settings IS NULL
+          OR (w.settings::jsonb->>'hideFromPlatformListing') IS DISTINCT FROM 'true'
+        )`);
+      }
+
+      if (search) { clauses.push('(v.title ILIKE ? OR v.description ILIKE ?)'); baseParams.push(search, search); }
+      if (cursor !== null) { clauses.push('v.created_at < ?'); baseParams.push(cursor); }
+
       const where = `WHERE ${clauses.join(' AND ')}`;
       videos = await db.prepare(
-        `SELECT * FROM videos ${where} ORDER BY created_at DESC LIMIT ?`
+        `SELECT v.* FROM videos v
+         LEFT JOIN workspaces w ON w.id = v.workspace_id
+         ${where} ORDER BY v.created_at DESC LIMIT ?`
       ).all(...baseParams, limit + 1);
     }
 

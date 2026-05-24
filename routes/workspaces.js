@@ -207,6 +207,8 @@ router.patch('/:workspaceId', resolveWorkspace, requireRole('owner', 'admin'), a
         'transcodingQualities',
         // Misc
         'customCss', 'customJs', 'streamQuality', 'maxUploadSize',
+        // Platform listing visibility
+        'hideFromPlatformListing',
       ]);
       const safeSettings = Object.fromEntries(
         Object.entries(settings).filter(([k]) => ALLOWED_SETTINGS_KEYS.has(k))

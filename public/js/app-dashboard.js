@@ -496,6 +496,8 @@ function doLogout() {
         if (hp) hp.checked = !!s.hotlinkProtection;
         const rt = document.getElementById('cfg-require-tokens');
         if (rt) rt.checked = !!s.requireTokensAlways;
+        const hl = document.getElementById('cfg-hide-from-listing');
+        if (hl) hl.checked = !!s.hideFromPlatformListing;
       } catch { }
       try {
         const r = await apiFetch(`${BASE}/api/videos?limit=200`);
@@ -532,6 +534,7 @@ function doLogout() {
         playlistsPublic: document.getElementById('cfg-playlists-public')?.checked ?? true,
         hotlinkProtection: document.getElementById('cfg-hotlink-protection')?.checked ?? false,
         requireTokensAlways: document.getElementById('cfg-require-tokens')?.checked ?? false,
+        hideFromPlatformListing: document.getElementById('cfg-hide-from-listing')?.checked ?? false,
       };
       const _isEnt = (authWorkspace?.plan || '').toLowerCase() === 'enterprise';
       const _etCard = document.getElementById('enterprise-transcoding-card');
@@ -6342,6 +6345,8 @@ function doLogout() {
         if (hp) hp.checked = !!s.hotlinkProtection;
         const rtk = document.getElementById('cfg-require-tokens');
         if (rtk) rtk.checked = !!s.requireTokensAlways;
+        const hfl = document.getElementById('cfg-hide-from-listing');
+        if (hfl) hfl.checked = !!s.hideFromPlatformListing;
         // Player security
         const abd = document.getElementById('cfg-adblock-detection');
         if (abd) abd.checked = !!s.adblock_detection;
@@ -6412,6 +6417,7 @@ function doLogout() {
         playlistsPublic: document.getElementById('cfg-playlists-public')?.checked ?? true,
         hotlinkProtection: document.getElementById('cfg-hotlink-protection')?.checked || false,
         requireTokensAlways: document.getElementById('cfg-require-tokens')?.checked || false,
+        hideFromPlatformListing: document.getElementById('cfg-hide-from-listing')?.checked || false,
         // Player security
         adblock_detection: document.getElementById('cfg-adblock-detection')?.checked || false,
         devtools_blocker: document.getElementById('cfg-devtools-blocker')?.checked || false,

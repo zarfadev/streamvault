@@ -3596,6 +3596,16 @@
           <div class="settings-card-title">Acceso & Distribución</div>
           <p style="font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.55;">Controla qué funciones están habilitadas para los visitantes de tus videos. Similar a como funcionan VOE, Filemoon o Streamtape.</p>
           <div style="display:flex;flex-direction:column;gap:14px;">
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;transition:border-color .14s;border-color:rgba(251,191,36,0.3);" onmouseover="this.style.borderColor='var(--amber)'" onmouseout="this.style.borderColor='rgba(251,191,36,0.3)'">
+              <input type="checkbox" id="cfg-hide-from-listing" style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer;">
+              <div>
+                <div style="font-weight:600;display:flex;align-items:center;gap:8px;">
+                  No aparecer en el catálogo público de la plataforma
+                  <span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:99px;background:rgba(251,191,36,0.12);color:var(--amber);border:1px solid rgba(251,191,36,0.3);">Hosting privado</span>
+                </div>
+                <div style="font-size:12px;color:var(--muted);margin-top:2px;">Tus videos NO aparecerán en <strong style="color:var(--text2);">streamvault.link</strong>. Solo accesibles por link directo, embed o tu dominio propio. Igual que VOE, Filemoon o Streamtape — hosting invisible.</div>
+              </div>
+            </label>
             <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;transition:border-color .14s;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'">
               <input type="checkbox" id="cfg-downloads-enabled" checked style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer;">
               <div><div style="font-weight:600;">Descargas habilitadas</div><div style="font-size:12px;color:var(--muted);margin-top:2px;">Permitir que los visitantes descarguen videos como MP4</div></div>
