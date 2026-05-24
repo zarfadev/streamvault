@@ -364,7 +364,25 @@ async function processWebhookEvent(event) {
       const planKey = getPlanKeyFromPayPalPlanId(planId);
 
       if (planKey) {
+        // Obtener info del workspace antes de activar
+        const ws = await db.prepare(`SELECT plan, owner_id FROM workspaces WHERE id = ?`).get(customId);
+        const fromPlan = ws?.plan || 'starter';
+        
         await activateSubscription(customId, planKey, subscriptionId);
+        
+        // ── REFERRAL CREDIT: Actualizar credited_at cuando el referido compra ──
+        if (ws?.owner_id && fromPlan === 'starter') {
+          // Es la primera compra (upgrade desde starter) → marcar como convertido
+          try {
+            await db.prepare(
+              `UPDATE referrals SET credited_at = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT 
+               WHERE referred_id = ? AND credited_at IS NULL`
+            ).run(ws.owner_id);
+            logger.info({ userId: ws.owner_id }, 'Referral conversion credited (PayPal)');
+          } catch (refErr) {
+            logger.error({ err: refErr.message }, 'Failed to credit referral (PayPal)');
+          }
+        }
       }
       break;
     }

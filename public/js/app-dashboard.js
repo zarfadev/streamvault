@@ -7043,44 +7043,50 @@ function doLogout() {
 
     function updateUpgradePlanDetails() {
       const planSel = document.getElementById('upgrade-plan-select');
-      const gatewaySel = document.getElementById('upgrade-gateway-select');
       const featuresList = document.getElementById('upgrade-features-list');
       const totalPrice = document.getElementById('upgrade-total-price');
+      const gatewaySel = document.getElementById('upgrade-gateway-select');
       const gatewayInfo = document.getElementById('upgrade-gateway-info');
-      
+
       if (!planSel) return;
-      
+
       const plan = planSel.value;
-      const planDetails = {
-        pro: {
-          price: '$59/mes',
-          features: [
-            '200 videos',
-            '500 GB de almacenamiento',
-            '1 TB de ancho de banda/mes',
-            'Transcripciones automáticas con IA',
-            'Analytics avanzados',
-            'Hasta 3 workspaces',
-            '5 miembros por workspace',
-            'Soporte prioritario'
-          ]
-        },
-        enterprise: {
-          price: 'Contactar',
-          features: [
-            'Videos ilimitados',
-            'Almacenamiento ilimitado',
-            'Ancho de banda ilimitado',
-            'Workspaces ilimitados',
-            'Miembros ilimitados',
-            'SLA garantizado',
-            'Soporte dedicado 24/7',
-            'Onboarding personalizado'
-          ]
-        }
-      };
       
-      const details = planDetails[plan] || planDetails.pro;
+      // Load dynamic plan details from billingStatus (loaded in loadBillingInfo)
+      const availablePlans = billingStatus?.availablePlans || [];
+      const planData = availablePlans.find(p => p.key === plan);
+      
+      let details;
+      if (planData) {
+        const price = planData.price === 0 ? 'Gratis' : `$${planData.price}/mes`;
+        const maxVideos = planData.maxVideos === 999999 ? 'ilimitados' : planData.maxVideos;
+        const maxStorage = planData.maxStorageGB === 999999 ? 'ilimitado' : `${planData.maxStorageGB} GB`;
+        const maxBandwidth = planData.maxBandwidthGB === 999999 ? 'ilimitado' : `${planData.maxBandwidthGB} GB`;
+        
+        details = {
+          price,
+          features: [
+            `${maxVideos} videos`,
+            `${maxStorage} de almacenamiento`,
+            `${maxBandwidth} de ancho de banda/mes`,
+            planData.features?.subtitles ? 'Transcripciones automáticas con IA' : null,
+            planData.features?.analytics ? 'Analytics avanzados' : 'Analytics básicos',
+            planData.features?.apiAccess ? 'Acceso API completo' : null,
+            plan === 'enterprise' ? 'Workspaces ilimitados' : plan === 'pro' ? 'Hasta 3 workspaces' : null,
+            plan === 'enterprise' ? 'Miembros ilimitados' : plan === 'pro' ? '5 miembros por workspace' : null,
+            plan === 'enterprise' ? 'SLA garantizado' : null,
+            plan === 'enterprise' ? 'Soporte dedicado 24/7' : plan === 'pro' ? 'Soporte prioritario' : null,
+            plan === 'enterprise' ? 'Onboarding personalizado' : null,
+          ].filter(Boolean)
+        };
+      } else {
+        // Fallback si no hay data (shouldn't happen)
+        details = {
+          price: plan === 'enterprise' ? 'Contactar' : '$' + (plan === 'pro' ? '59' : '99') + '/mes',
+          features: ['Plan ' + plan]
+        };
+      }
+
       if (featuresList) featuresList.innerHTML = details.features.map(f => `<li>${esc(f)}</li>`).join('');
       if (totalPrice) totalPrice.textContent = details.price;
       

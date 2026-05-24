@@ -140,8 +140,24 @@ async function processWebhookEvent(event) {
             provider: 'stripe',
             subscriptionId: session.subscription,
           });
-          // Enviar email de activación
+          
+          // ── REFERRAL CREDIT: Actualizar credited_at cuando el referido compra ──
           const ownerId = ws.rows[0]?.owner_id;
+          if (ownerId && fromPlan === 'starter') {
+            // Es la primera compra (upgrade desde starter) → marcar como convertido
+            try {
+              await db.query(
+                `UPDATE referrals SET credited_at = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT 
+                 WHERE referred_id = $1 AND credited_at IS NULL`,
+                [ownerId]
+              );
+              logger.info({ userId: ownerId }, 'Referral conversion credited');
+            } catch (refErr) {
+              logger.error({ err: refErr.message }, 'Failed to credit referral');
+            }
+          }
+          
+          // Enviar email de activación
           if (ownerId) {
             const userRes = await db.query(`SELECT email, name FROM users WHERE id = $1`, [ownerId]);
             const user = userRes.rows[0];

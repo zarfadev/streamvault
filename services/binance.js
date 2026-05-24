@@ -421,7 +421,7 @@ async function processWebhookEvent(event) {
     case 'PAY_SUCCESS': {
       const merchantTradeNo = data.merchantTradeNo;
       const workspace = await db.prepare(
-        `SELECT id, plan, payment_metadata FROM workspaces 
+        `SELECT id, plan, owner_id, payment_metadata FROM workspaces 
          WHERE payment_subscription_id = ? OR payment_metadata LIKE ?`
       ).get(merchantTradeNo, `%${merchantTradeNo}%`);
 
@@ -452,7 +452,22 @@ async function processWebhookEvent(event) {
         logger.info({ workspaceId: workspace.id }, 'Subscription renewed for 30 more days');
       } else {
         // Primer pago - activar plan
+        const fromPlan = workspace.plan;
         await activateSubscription(workspace.id, workspace.plan, merchantTradeNo);
+        
+        // ── REFERRAL CREDIT: Actualizar credited_at cuando el referido compra ──
+        if (fromPlan === 'starter') {
+          // Es la primera compra (upgrade desde starter) → marcar como convertido
+          try {
+            await db.prepare(
+              `UPDATE referrals SET credited_at = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT 
+               WHERE referred_id = ? AND credited_at IS NULL`
+            ).run(workspace.owner_id);
+            logger.info({ userId: workspace.owner_id }, 'Referral conversion credited (Binance)');
+          } catch (refErr) {
+            logger.error({ err: refErr.message }, 'Failed to credit referral (Binance)');
+          }
+        }
       }
       break;
     }

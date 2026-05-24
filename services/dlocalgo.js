@@ -387,7 +387,27 @@ async function processWebhookEvent(event) {
         break;
       }
 
+      const fromPlan = workspace.plan;
       await activateSubscription(workspaceId, planKey, paymentId);
+
+      // ── REFERRAL CREDIT: Actualizar credited_at cuando el referido compra ──
+      if (fromPlan === 'starter') {
+        // Es la primera compra (upgrade desde starter) → marcar como convertido
+        try {
+          const ownerR = await db.query(`SELECT owner_id FROM workspaces WHERE id = $1`, [workspaceId]);
+          const ownerId = ownerR.rows[0]?.owner_id;
+          if (ownerId) {
+            await db.query(
+              `UPDATE referrals SET credited_at = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT 
+               WHERE referred_id = $1 AND credited_at IS NULL`,
+              [ownerId]
+            );
+            logger.info({ userId: ownerId }, 'Referral conversion credited (dLocal Go)');
+          }
+        } catch (refErr) {
+          logger.error({ err: refErr.message }, 'Failed to credit referral (dLocal Go)');
+        }
+      }
 
       // Registrar factura
       await invoiceService.createInvoice({
