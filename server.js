@@ -42,7 +42,7 @@ const hlsKeyPath = /^\/api\/videos\/[^/]+\/hlskey\//;
 const castManifestPath = /^\/api\/videos\/[^/]+\/cast-manifest/;
 app.use((req, res, next) => {
   cors({
-    origin: (origin, callback) => {
+    origin: async (origin, callback) => {
       // Allow requests with no origin (curl, Postman, server-to-server)
       if (!origin) return callback(null, true);
       // HLS key endpoint is open to any origin — the handler enforces embedAllowedDomains itself
@@ -56,6 +56,13 @@ app.use((req, res, next) => {
       // Dev mode with no whitelist: allow everything
       if (allowedOrigins.length === 0) return callback(null, true);
       if (allowedOrigins.includes(origin)) return callback(null, true);
+      // Allow verified custom embed domains — players embedded from custom domains
+      // (e.g. cdn.animepelix.com) make XHR requests to the API from that origin.
+      try {
+        const originHost = new URL(origin).hostname;
+        const wsId = await lookupCustomDomain(originHost);
+        if (wsId) return callback(null, true);
+      } catch {}
       callback(new Error(`CORS: origin '${origin}' not allowed`));
     },
     credentials: true,
@@ -111,6 +118,8 @@ app.use((req, res, next) => {
       'www.gstatic.com',
       // chart.googleapis.com used as QR code fallback in 2FA setup
       'chart.googleapis.com',
+      // Cloudflare Web Analytics beacon (injected by Cloudflare proxy)
+      'static.cloudflareinsights.com',
     ].filter(Boolean).join(' '),
     // 'unsafe-inline' required for style-src: the dashboard JS generates thousands of
     // dynamic inline styles (via template literals in innerHTML). It is not feasible
@@ -121,15 +130,20 @@ app.use((req, res, next) => {
       'fonts.googleapis.com',
     ].filter(Boolean).join(' '),
     "font-src 'self' fonts.gstatic.com www.gstatic.com" + (cdnOrigins ? ' ' + cdnOrigins : ''),
-    "img-src 'self' data: blob: https:",
+    // flagcdn.com: country flag images in analytics + globe tooltip
+    "img-src 'self' data: blob: https: https://flagcdn.com",
     "media-src 'self' blob: https: http:",
     // cdn.jsdelivr.net for HLS.js; imasdk.googleapis.com for Chromecast
+    // cloudflareinsights.com for Cloudflare beacon reporting
+    // *.streamvault.link + custom domains: player in embed makes XHR back to API
     [
       "connect-src 'self'",
       cdnOrigins,
       'cdn.jsdelivr.net',
       'unpkg.com',
       'imasdk.googleapis.com',
+      'cloudflareinsights.com',
+      'https://cloudflareinsights.com',
     ].filter(Boolean).join(' '),
     "worker-src blob:",
     "object-src 'none'",
