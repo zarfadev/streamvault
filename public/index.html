@@ -1688,7 +1688,7 @@ document.addEventListener("DOMContentLoaded", () => {
     var isSm = SIZE < 360;
 
     var points = CITIES.map(function(c) {
-      return { lat: c.lat, lng: c.lng, s: c.s, n: c.n, country: c.country,
+      return { lat: c.lat, lng: c.lng, s: c.s, n: c.n, country: c.country, iso: c.iso,
                color: c.c === 0 ? PURPLE : PURPLE2 };
     });
 
