@@ -318,9 +318,19 @@ function validateRegPass(input) {
   }
 }
 
-// If already logged in, redirect
+// If already logged in, redirect respecting role
 const existingToken = localStorage.getItem('sv_access_token') || sessionStorage.getItem('sv_access_token') || localStorage.getItem('sv_token');
 if (existingToken) {
   const redirectTo = new URLSearchParams(window.location.search).get('redirect');
-  window.location.href = (redirectTo && redirectTo.startsWith('/')) ? redirectTo : '/dashboard';
+  if (redirectTo && redirectTo.startsWith('/')) {
+    window.location.href = redirectTo;
+  } else {
+    // Determine target by role — super_admin goes to /admin
+    let role = '';
+    try {
+      const stored = localStorage.getItem('sv_user') || sessionStorage.getItem('sv_user');
+      role = JSON.parse(stored)?.platform_role || '';
+    } catch {}
+    window.location.href = role === 'super_admin' ? '/admin' : '/dashboard';
+  }
 }

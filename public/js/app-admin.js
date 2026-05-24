@@ -516,12 +516,18 @@ async function doImpersonate() {
     if (r.ok) {
       const d = await r.json();
       // Guardar tokens de admin para restaurar al salir
-      localStorage.setItem('sv_imp_admin_access',  localStorage.getItem('sv_access_token')  || '');
-      localStorage.setItem('sv_imp_admin_refresh',  localStorage.getItem('sv_refresh_token') || '');
+      // Buscar en ambos storages — el admin pudo haber entrado sin "recordar sesión"
+      const _adminAccess  = localStorage.getItem('sv_access_token')  || sessionStorage.getItem('sv_access_token')  || '';
+      const _adminRefresh = localStorage.getItem('sv_refresh_token') || sessionStorage.getItem('sv_refresh_token') || '';
+      localStorage.setItem('sv_imp_admin_access',  _adminAccess);
+      localStorage.setItem('sv_imp_admin_refresh', _adminRefresh);
       // Metadata del usuario impersonado (para el banner)
       localStorage.setItem('sv_imp_email', _impTarget.email);
       localStorage.setItem('sv_imp_name',  _impTarget.name || _impTarget.email);
-      // Activar tokens del usuario
+      // Activar tokens del usuario — borrar sesión anterior de ambos storages
+      ['sv_access_token','sv_refresh_token','sv_token','sv_refresh'].forEach(k => {
+        localStorage.removeItem(k); sessionStorage.removeItem(k);
+      });
       localStorage.setItem('sv_access_token',  d.accessToken);
       localStorage.setItem('sv_refresh_token', d.refreshToken);
       // Navegar al dashboard (mismo tab — el banner persiste al refrescar)

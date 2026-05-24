@@ -10,7 +10,7 @@
   <script src="/js/auth-check.js"
     integrity="sha384-1ITl/+1GhuQnOb6R59D5VJ+7zJ59ag57c1JpgJaTdDWdQ530d7voNSm+whfCmTBU"
     crossorigin="anonymous"></script>
-  <link rel="stylesheet" href="/css/sv-theme.css">
+  <link rel="stylesheet" href="/css/sv-theme.css?v=2026.05.24">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="preload" as="style"
@@ -2407,7 +2407,10 @@
         <div class="notif-panel" id="notif-panel" style="display:none;">
           <div class="notif-panel-head">
             <span style="font-size:13px;font-weight:700;color:var(--text);">Notificaciones</span>
-            <button type="button" class="btn btn-ghost" style="font-size:11px;padding:3px 8px;" onclick="markAllNotifsRead()">Marcar todas leídas</button>
+            <div style="display:flex;gap:4px;">
+              <button type="button" class="btn btn-ghost" style="font-size:11px;padding:3px 8px;" onclick="markAllNotifsRead()">Marcar leídas</button>
+              <button type="button" class="btn btn-ghost" style="font-size:11px;padding:3px 8px;color:var(--muted);" onclick="clearAllNotifs()">Limpiar</button>
+            </div>
           </div>
           <div class="notif-list" id="notif-list">
             <div style="text-align:center;padding:24px;color:var(--muted);font-size:13px;">Sin notificaciones</div>
@@ -2451,7 +2454,7 @@
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
               Ver canal público
             </a>
-            <a class="profile-dd-item" id="admin-panel-link" href="/admin" target="_blank" rel="noopener" style="display:none;" onclick="closeProfileMenu()">
+            <a class="profile-dd-item" id="admin-panel-link" href="/admin" style="display:none;" onclick="closeProfileMenu()">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
               Admin
             </a>
@@ -4855,7 +4858,7 @@
   </div>
 
   <script src="../js/toast.js" integrity="sha384-NOlrAhsJK/ux0DquI1zmOgS8Cs9AZPo8L+h9cRBWrHtqgd++igVHeJh8U7MwFSS4" crossorigin="anonymous" defer></script>
-  <script src="../js/app-dashboard.js?v=2026.05.20b" defer></script>
+  <script src="../js/app-dashboard.js?v=2026.05.24b" defer></script>
 
   <!-- Onboarding wizard modal -->
   <div id="onboarding-overlay" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.65);align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);transition:opacity .28s;">

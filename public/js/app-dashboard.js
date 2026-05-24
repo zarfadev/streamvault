@@ -20,8 +20,14 @@
     function exitImpersonation() {
       const adminAccess  = localStorage.getItem('sv_imp_admin_access');
       const adminRefresh = localStorage.getItem('sv_imp_admin_refresh');
+      // Borrar TODOS los tokens del usuario impersonado de ambos storages
+      ['sv_access_token','sv_refresh_token','sv_token','sv_refresh'].forEach(k => {
+        localStorage.removeItem(k); sessionStorage.removeItem(k);
+      });
+      // Restaurar tokens del admin (siempre en localStorage para que /admin los lea)
       if (adminAccess)  localStorage.setItem('sv_access_token',  adminAccess);
       if (adminRefresh) localStorage.setItem('sv_refresh_token', adminRefresh);
+      // Limpiar claves de impersonación
       localStorage.removeItem('sv_imp_admin_access');
       localStorage.removeItem('sv_imp_admin_refresh');
       localStorage.removeItem('sv_imp_email');
@@ -2689,7 +2695,7 @@ function doLogout() {
         try {
           const r = await apiFetch(`/api/folders`);
           if (r.ok) _allFolders = await r.json();
-        } catch {}
+        } catch (e) { console.warn('[StreamVault] Error loading folders:', e); }
       }
 
       const folderList = _allFolders.map(f => `<option value="${esc(f.id)}">${esc(f.name)}</option>`).join('');
@@ -3193,7 +3199,7 @@ function doLogout() {
       const folderSel = document.getElementById('move-folder-select');
       document.getElementById('move-video-title').textContent = `${ids.length} ${ids.length === 1 ? 'video seleccionado' : 'videos seleccionados'}`;
       if (!_allFolders.length && authWorkspace) {
-        try { const r = await apiFetch(`/api/folders`); if (r.ok) _allFolders = await r.json(); } catch {}
+        try { const r = await apiFetch(`/api/folders`); if (r.ok) _allFolders = await r.json(); } catch (e) { console.warn('[StreamVault] Error loading folders:', e); }
       }
       const folderList = _allFolders.map(f => `<option value="${esc(f.id)}">${esc(f.name)}</option>`).join('');
       folderSel.innerHTML = `<option value="">— Sin carpeta (raíz) —</option>${folderList}`;
@@ -3246,7 +3252,7 @@ function doLogout() {
       const ids = getSelectedVideoIds();
       if (!ids.length) return;
       if (!_allPlaylists.length) {
-        try { const r = await apiFetch(`${BASE}/api/playlists`); if (r.ok) _allPlaylists = await r.json(); } catch {}
+        try { const r = await apiFetch(`${BASE}/api/playlists`); if (r.ok) _allPlaylists = await r.json(); } catch (e) { console.warn('[StreamVault] Error loading playlists:', e); }
       }
       const overlay = document.createElement('div');
       overlay.dataset.svOverlay = '1';
@@ -5146,12 +5152,14 @@ function doLogout() {
           drop.innerHTML = `<div style="padding:12px 14px;font-size:13px;color:var(--muted);">${q ? 'Sin resultados' : 'Sin videos disponibles'}</div>`;
         } else {
           drop.innerHTML = filtered.slice(0, 80).map(v => {
-            const thumb = `/videos/${v.id}/thumb.jpg`;
-            return `<div data-vid="${v.id}" style="display:flex;align-items:center;gap:10px;padding:7px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px;" onmouseover="this.style.background='var(--surface3)'" onmouseout="this.style.background=''">
-              <div style="width:40px;height:23px;background:var(--surface3);border-radius:4px;flex-shrink:0;overflow:hidden;">
+            const thumb = v.thumbnailUrl || `/videos/${v.id}/thumb.jpg`;
+            const dur = v.duration ? (() => { const s=Math.floor(v.duration); const m=Math.floor(s/60); const sec=s%60; return `${m}:${String(sec).padStart(2,'0')}`; })() : '';
+            return `<div data-vid="${v.id}" style="display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px;" onmouseover="this.style.background='var(--surface3)'" onmouseout="this.style.background=''">
+              <div style="width:56px;height:32px;background:var(--surface3);border-radius:4px;flex-shrink:0;overflow:hidden;position:relative;">
                 <img src="${thumb}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none'">
+                ${dur ? `<span style="position:absolute;bottom:2px;right:2px;background:rgba(0,0,0,.75);color:#fff;font-size:9px;padding:1px 3px;border-radius:2px;line-height:1.4;">${dur}</span>` : ''}
               </div>
-              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(v.title)}</span>
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${esc(v.title)}</span>
             </div>`;
           }).join('');
         }
@@ -5183,10 +5191,14 @@ function doLogout() {
         if (!videos.length) {
           listEl.innerHTML = '<p style="font-size:13px;color:var(--muted);">Sin videos aún. Selecciona uno arriba para añadirlo.</p>';
         } else {
-          listEl.innerHTML = videos.map(v => `
+          listEl.innerHTML = videos.map(v => {
+            const thumb = v.thumbnailUrl || `/videos/${v.id}/thumb.jpg`;
+            const dur = v.duration ? (() => { const s=Math.floor(v.duration); const m=Math.floor(s/60); const sec=s%60; return `${m}:${String(sec).padStart(2,'0')}`; })() : '';
+            return `
             <div data-vid="${esc(v.id)}" style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface2);border-radius:8px;border:1px solid var(--border2);margin-bottom:6px;">
-              <div style="width:48px;height:27px;background:var(--surface3);border-radius:4px;flex-shrink:0;overflow:hidden;">
-                <img src="/videos/${v.id}/thumb.jpg" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none'">
+              <div style="width:56px;height:32px;background:var(--surface3);border-radius:4px;flex-shrink:0;overflow:hidden;position:relative;">
+                <img src="${thumb}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none'">
+                ${dur ? `<span style="position:absolute;bottom:2px;right:2px;background:rgba(0,0,0,.75);color:#fff;font-size:9px;padding:1px 3px;border-radius:2px;line-height:1.4;">${dur}</span>` : ''}
               </div>
               <div style="flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(v.title)}</div>
               <div style="display:flex;align-items:center;gap:4px;margin-right:4px;">
@@ -5195,7 +5207,8 @@ function doLogout() {
                 <button onclick="reorderPlaylistVideo('${plId}', '${v.id}', ${v.position}, 1, this)" style="background:var(--surface3);border:1px solid var(--border2);border-radius:4px;color:var(--text);cursor:pointer;padding:2px 6px;font-size:10px;" title="Bajar">▼</button>
               </div>
               <button onclick="removeFromPlaylist('${plId}','${v.id}',this)" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:18px;padding:2px 6px;line-height:1;flex-shrink:0;" title="Quitar"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-            </div>`).join('');
+            </div>`;
+          }).join('');
         }
       } catch { listEl.innerHTML = '<p style="font-size:13px;color:var(--red);">Error cargando videos.</p>'; }
     }
@@ -5251,9 +5264,9 @@ function doLogout() {
         try {
           const r = await apiFetch(`${BASE}/api/playlists`);
           if (r.ok) _allPlaylists = await r.json();
-        } catch {}
+        } catch (e) { console.warn('[StreamVault] Error loading playlists:', e); }
       }
-      
+
       const overlay = document.createElement('div');
       overlay.dataset.svOverlay = '1';
       overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);backdrop-filter:blur(8px);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;';
@@ -5337,7 +5350,7 @@ function doLogout() {
         if (abd) abd.checked = !!s.adblock_detection;
         const dtb = document.getElementById('cfg-devtools-blocker');
         if (dtb) dtb.checked = !!s.devtools_blocker;
-      } catch {}
+      } catch (e) { console.error('[StreamVault] Error loading watermark/security settings:', e); }
     }
 
     function getWatermarkSettings() {
@@ -5623,7 +5636,7 @@ function doLogout() {
           if (converted) converted.textContent = refs.converted ?? 0;
           if (pending) pending.textContent = (refs.total - refs.converted) > 0 ? (refs.total - refs.converted) : 0;
         }
-      } catch {}
+      } catch (e) { console.warn('[StreamVault] Error loading referral stats:', e); }
     }
 
     function copyReferralCode() {
@@ -6270,7 +6283,7 @@ function doLogout() {
             });
           }
         }
-      } catch {}
+      } catch (e) { console.error('[StreamVault] Error loading settings section:', e); }
       // Embed video selector
       try {
         const r = await apiFetch(`${BASE}/api/videos?limit=200`);
@@ -6281,7 +6294,7 @@ function doLogout() {
           videos.filter(v => v.status === 'ready').map(v =>
             `<option value="${esc(v.id)}">${esc(v.title)}</option>`
           ).join('');
-      } catch {}
+      } catch (e) { console.error('[StreamVault] Error loading embed video selector:', e); }
       // Secondary loads (parallel)
       await Promise.allSettled([
         loadApiKeys(),
@@ -7209,7 +7222,7 @@ function doLogout() {
         error:   `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
         info:    `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`,
       };
-      list.innerHTML = _notifs.slice(0, 30).map(n => {
+      list.innerHTML = _notifs.map(n => {
         const iconKind = n.kind === 'success' ? 'success' : n.kind === 'error' ? 'error' : 'info';
         const icon = icons[iconKind] || icons.info;
         const clickAction = n.link ? `onclick="markNotifRead('${n.id}');window.location='${n.link}';"` : `onclick="markNotifRead('${n.id}')"`;
@@ -7220,6 +7233,7 @@ function doLogout() {
             ${n.body ? `<div class="notif-body">${esc(n.body)}</div>` : ''}
             <div class="notif-time">${timeAgo(n.created_at)}</div>
           </div>
+          <button onclick="event.stopPropagation();deleteNotif('${n.id}')" title="Borrar" style="flex-shrink:0;width:22px;height:22px;border-radius:5px;border:none;background:transparent;color:var(--muted);font-size:14px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;margin-top:1px;transition:background .12s,color .12s;" onmouseover="this.style.background='rgba(248,113,113,.12)';this.style.color='var(--red)'" onmouseout="this.style.background='transparent';this.style.color='var(--muted)'">×</button>
         </div>`;
       }).join('');
     }
@@ -7266,6 +7280,21 @@ function doLogout() {
       renderNotifBadge();
       renderNotifPanel();
       apiFetch('/api/notifications/read-all', { method: 'PATCH' }).catch(() => {});
+    }
+
+    async function deleteNotif(id) {
+      _notifs = _notifs.filter(n => n.id !== id);
+      renderNotifBadge();
+      renderNotifPanel();
+      apiFetch(`/api/notifications/${id}`, { method: 'DELETE' }).catch(() => {});
+    }
+
+    async function clearAllNotifs() {
+      if (!_notifs.length) return;
+      _notifs = [];
+      renderNotifBadge();
+      renderNotifPanel();
+      apiFetch('/api/notifications', { method: 'DELETE' }).catch(() => {});
     }
 
     function startNotifPolling() {
