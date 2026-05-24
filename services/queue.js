@@ -138,9 +138,48 @@ async function addTranscodeJob(payload) {
     return { inline: true };
   }
 
-  // Prioridad según plan del workspace — Enterprise y Pro van primero
+  // ── Fair queuing: reduce priority for workspaces hogging the queue ───────────
+  // Plan-based priority: Enterprise=1, Pro=2, Starter=3 (lower = processed first).
+  // On top of that, if a workspace already has N+ active/waiting jobs, we bump
+  // their priority down so other workspaces get a chance to be served.
+  //
+  // Limits per workspace (active + waiting):
+  //   Enterprise: up to 8 before throttling (generous)
+  //   Pro:        up to 4 before throttling
+  //   Starter:    up to 2 before throttling
+  //
+  // A throttled workspace doesn't get blocked — their new jobs still queue,
+  // they just run after jobs from other workspaces with fewer videos in flight.
+  const WORKSPACE_THROTTLE_LIMITS = { enterprise: 8, pro: 4, starter: 2 };
+
   const plan     = (payload.plan || 'starter').toLowerCase();
-  const priority = PLAN_PRIORITY[plan] ?? 3;
+  let priority = PLAN_PRIORITY[plan] ?? 3;
+
+  if (payload.workspaceId) {
+    try {
+      // Count how many jobs this workspace currently has waiting or active
+      const [waiting, active] = await Promise.all([
+        q.getWaiting(),
+        q.getActive(),
+      ]);
+      const wsJobCount = [...waiting, ...active].filter(
+        j => j.data?.workspaceId === payload.workspaceId
+      ).length;
+
+      const throttleLimit = WORKSPACE_THROTTLE_LIMITS[plan] ?? 2;
+      if (wsJobCount >= throttleLimit) {
+        // Bump priority down so other workspaces get ahead in the queue
+        // Priority 10+ = throttled (still runs, just waits for others first)
+        priority = Math.max(priority + (wsJobCount - throttleLimit + 1) * 2, 10);
+        logger.info(
+          { workspaceId: payload.workspaceId, wsJobCount, throttleLimit, newPriority: priority },
+          'Fair queue: workspace throttled'
+        );
+      }
+    } catch {
+      // If we can't count jobs, use default priority — never block uploads
+    }
+  }
 
   const job = await q.add(payload, {
     jobId:    payload.videoId,
