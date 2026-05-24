@@ -64,6 +64,47 @@ async function headBucket() {
   }
 }
 
+// Files that must never be uploaded to S3 (HLS encryption keys are served
+// by the API server, not CDN; uploading them would be a security risk).
+const S3_EXCLUDED_FILES = new Set(['hls.key', 'hls.keyinfo']);
+
+/**
+ * Upload a single local file to S3 and return its CDN URL.
+ * Used to publish the thumbnail immediately after generation so it's
+ * accessible via CDN even while transcoding is still in progress.
+ *
+ * @param {string} localPath    - Absolute path to the local file
+ * @param {string} workspaceId  - Workspace ID (for S3 key prefix)
+ * @param {string} videoId      - Video ID (for S3 key prefix)
+ * @param {string} filename     - Filename within the video prefix (e.g. 'thumb.jpg')
+ * @returns {Promise<string>}   - CDN URL of the uploaded file
+ */
+async function uploadFile(localPath, workspaceId, videoId, filename) {
+  const { Upload } = require('@aws-sdk/lib-storage');
+  const keyPrefix = [cfg.s3KeyPrefix || 'streamvault', workspaceId, videoId]
+    .filter(Boolean).join('/');
+  const key = `${keyPrefix}/${filename}`;
+
+  const upload = new Upload({
+    client: getClient(),
+    params: {
+      Bucket:      cfg.s3Bucket,
+      Key:         key,
+      Body:        fs.createReadStream(localPath),
+      ContentType: mimeFor(localPath),
+    },
+    partSize:  8 * 1024 * 1024,
+    queueSize: 4,
+    leavePartsOnError: false,
+  });
+  await upload.done();
+
+  const cdnBase = cfg.cdnBaseUrl
+    ? cfg.cdnBaseUrl.replace(/\/$/, '')
+    : `https://${cfg.s3Bucket}.s3.${cfg.awsRegion}.amazonaws.com`;
+  return `${cdnBase}/${key}`;
+}
+
 /**
  * Upload all files from a local directory to S3 under a key prefix.
  *
@@ -86,6 +127,8 @@ async function uploadVideoDirectory(localDir, workspaceId, videoId) {
   // For faster uploads at scale, switch to a p-limit pool here.
   for (const filePath of files) {
     const relative    = path.relative(localDir, filePath);
+    // Skip HLS key files — they must be served by the API, not CDN
+    if (S3_EXCLUDED_FILES.has(path.basename(filePath))) continue;
     const key         = `${keyPrefix}/${relative}`;
     const contentType = mimeFor(filePath);
 
@@ -324,6 +367,7 @@ async function invalidateCDN(paths) {
 module.exports = {
   isS3Enabled,
   headBucket,
+  uploadFile,
   uploadVideoDirectory,
   uploadSourceFile,
   downloadSourceFile,

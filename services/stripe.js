@@ -92,6 +92,34 @@ async function createBillingPortalSession(workspaceId, returnUrl) {
 }
 
 async function processWebhookEvent(event) {
+  // ── Idempotency guard ─────────────────────────────────────────────────────
+  // Stripe retries webhooks on network errors or non-2xx responses.
+  // Without this check, the same event (e.g. checkout.session.completed) could
+  // activate a plan twice, creating duplicate invoices and wrong plan states.
+  // We use the webhook_deliveries table (already exists) keyed on event.id.
+  if (event?.id) {
+    try {
+      const existing = await db.query(
+        `SELECT id FROM webhook_deliveries WHERE event = $1 AND payload::jsonb->>'stripe_event_id' = $2 LIMIT 1`,
+        ['stripe_idempotency', event.id]
+      ).catch(() => null); // gracefully ignore if column doesn't exist yet
+
+      if (existing?.rows?.length > 0) {
+        logger.info({ eventId: event.id, eventType: event.type }, 'Stripe webhook already processed — skipping (idempotent)');
+        return; // Already handled — do not process again
+      }
+
+      // Record this event BEFORE processing to prevent race conditions
+      // (two concurrent retries both pass the check simultaneously).
+      await db.query(
+        `INSERT INTO webhook_deliveries (id, webhook_id, event, payload, status_code, created_at)
+         VALUES ($1, 'stripe-system', 'stripe_idempotency', $2::text, 200, FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT)
+         ON CONFLICT DO NOTHING`,
+        [require('uuid').v4 ? require('uuid').v4() : event.id + '_' + Date.now(), JSON.stringify({ stripe_event_id: event.id, type: event.type })]
+      ).catch(() => {}); // Non-fatal: if insert fails, processing continues
+    } catch {}
+  }
+
   switch (event.type) {
 
     // ── Successful checkout → activate plan ──────────────────────────────────

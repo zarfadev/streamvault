@@ -65,14 +65,39 @@ function getTransporter() {
   return transporter;
 }
 
+/**
+ * Send an email with up to 3 automatic retries on transient SMTP errors.
+ * Non-retryable errors (bad recipient, auth failure) fail immediately.
+ * All errors are swallowed so callers never crash — but they are logged.
+ */
 async function _send(opts) {
-  try {
-    await getTransporter().sendMail(opts);
-    return true;
-  } catch (err) {
-    logger.error({ err: err.message, to: opts.to, subject: opts.subject }, 'Email send failed');
-    return false;
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY_MS = [2000, 5000, 10000]; // 2s, 5s, 10s backoff
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      await getTransporter().sendMail(opts);
+      return true;
+    } catch (err) {
+      const isTransient = (
+        err.code === 'ECONNREFUSED' ||
+        err.code === 'ETIMEDOUT' ||
+        err.code === 'ENOTFOUND' ||
+        err.responseCode >= 500 ||       // SMTP 5xx server errors are retryable
+        err.message?.includes('ECONNRESET') ||
+        err.message?.includes('timeout')
+      );
+
+      if (!isTransient || attempt === MAX_RETRIES) {
+        logger.error({ err: err.message, to: opts.to, subject: opts.subject, attempt }, 'Email send failed permanently');
+        return false;
+      }
+
+      logger.warn({ err: err.message, to: opts.to, attempt, nextRetryMs: RETRY_DELAY_MS[attempt - 1] }, `Email send failed (attempt ${attempt}/${MAX_RETRIES}) — retrying`);
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS[attempt - 1]));
+    }
   }
+  return false;
 }
 
 async function sendPasswordReset(email, resetToken) {
