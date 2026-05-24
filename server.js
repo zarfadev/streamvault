@@ -197,6 +197,84 @@ app.get('/robots.txt', (req, res) => {
   );
 });
 
+// ─── Custom domain middleware (MUST be before express.static) ────────────────
+// Workspaces can point their own domain (e.g. blackx.vip) via CNAME to the platform.
+// On custom domains we ONLY serve video-related routes — everything else redirects to
+// the platform so the client's domain never shows StreamVault branding / management UI.
+//
+// Allowed on custom domains:
+//   /watch/:id        — video watch page
+//   /player/:id       — standalone player
+//   /embed/:id        — embeddable player
+//   /embed-playlist/  — embeddable playlist player
+//   /download/:id     — download page
+//   /channel/ /c/     — public channel page
+//   /videos/**        — HLS segments & keys
+//   /api/videos/**    — video metadata, token, views, events, unlock, download
+//   /api/chapters/**  — chapter VTT for player
+//   /api/transcriptions/** — subtitle VTT for player
+//   /api/tracks/**    — audio track manifests
+//   /api/playlists/** — playlist data for embed-playlist
+//   /api/progress/**  — watch progress (resumption)
+//   /api/settings     — site name & branding used by player/watch pages
+//   /api/health       — healthcheck
+//   /css/** /js/** /icons/** /favicon* /og.*  — static assets needed by player pages
+//
+// Everything else → 302 redirect to the equivalent URL on the platform origin.
+
+const _cdCache = new Map(); // host → { wsId: string|null, at: number }
+const CD_CACHE_TTL = 5 * 60 * 1000; // 5 min
+
+async function lookupCustomDomain(host) {
+  const now = Date.now();
+  const cached = _cdCache.get(host);
+  if (cached && now - cached.at < CD_CACHE_TTL) return cached.wsId;
+  try {
+    const row = await database.prepare(
+      `SELECT id FROM workspaces WHERE custom_embed_domain = ? AND custom_domain_verified = true`
+    ).get(host);
+    const wsId = row?.id || null;
+    _cdCache.set(host, { wsId, at: now });
+    return wsId;
+  } catch {
+    return null;
+  }
+}
+
+const CD_ALLOWED_PREFIXES = [
+  '/watch/', '/player/', '/embed/', '/embed-playlist/',
+  '/download/', '/channel/', '/c/',
+  '/videos/',
+  '/api/videos/', '/api/chapters/', '/api/transcriptions/',
+  '/api/tracks/', '/api/playlists/', '/api/progress/',
+  '/api/settings', '/api/health',
+  '/css/', '/js/', '/icons/',
+];
+const CD_ALLOWED_EXACT = new Set([
+  '/favicon.ico', '/favicon.svg', '/og.png', '/og.svg',
+]);
+const _cdMainHost = (process.env.APP_URL || '').replace(/^https?:\/\//, '').split('/')[0].split(':')[0];
+
+app.use(async (req, res, next) => {
+  const host = req.hostname;
+  if (!host || host === _cdMainHost || host === 'localhost' || host.endsWith('.localhost')) return next();
+
+  const wsId = await lookupCustomDomain(host);
+  if (!wsId) return next(); // Unknown host — pass through (auth protects sensitive routes anyway)
+
+  // Verified custom domain — enforce allowed routes
+  const p = req.path;
+  const allowed =
+    CD_ALLOWED_EXACT.has(p) ||
+    CD_ALLOWED_PREFIXES.some(prefix => p === prefix.replace(/\/$/, '') || p.startsWith(prefix));
+
+  if (allowed) return next();
+
+  // Not a video route on a custom domain → redirect to platform
+  const platformOrigin = process.env.APP_URL || 'https://streamvault.link';
+  return res.redirect(302, platformOrigin + req.originalUrl);
+});
+
 // ─── Static assets — cache headers for CDN ────────────────────
 // CSS, JS, images, fonts: aggressive long-lived cache (1 year).
 // HTML files: no-cache so browsers always get the latest version.
@@ -948,90 +1026,6 @@ app.get('/v/:code', async (req, res) => {
   }
 });
 
-// ─── Custom domain middleware ─────────────────────────────────────────────────
-// Workspaces can point their own domain (e.g. blackx.vip) via CNAME to the platform.
-// On custom domains we ONLY serve video-related routes — everything else redirects to
-// the platform so the client's domain never shows StreamVault branding / management UI.
-//
-// Allowed on custom domains:
-//   /watch/:id        — video watch page
-//   /player/:id       — standalone player
-//   /embed/:id        — embeddable player
-//   /embed-playlist/  — embeddable playlist player
-//   /download/:id     — download page
-//   /channel/         — public channel page
-//   /videos/**        — HLS segments & keys (served by express.static above)
-//   /api/videos/**    — video metadata, token, views, events, unlock, download
-//   /api/chapters/**  — chapter VTT for player
-//   /api/transcriptions/** — subtitle VTT for player
-//   /api/tracks/**    — audio track manifests
-//   /api/playlists/** — playlist data for embed-playlist
-//   /api/progress/**  — watch progress (resumption)
-//   /api/settings     — site name & branding used by player/watch pages
-//   /api/health       — healthcheck (useful for uptime monitors on custom domain)
-//   /css/** /js/** /icons/** /favicon* /og.png /og.svg — static assets
-//
-// Everything else → 302 redirect to the equivalent URL on the platform origin.
-
-const _cdCache = new Map(); // host → { wsId: string|null, at: number }
-const CD_CACHE_TTL = 5 * 60 * 1000; // 5 min
-
-async function lookupCustomDomain(host) {
-  const now = Date.now();
-  const cached = _cdCache.get(host);
-  if (cached && now - cached.at < CD_CACHE_TTL) return cached.wsId;
-  try {
-    const row = await database.prepare(
-      `SELECT id FROM workspaces WHERE custom_embed_domain = ? AND custom_domain_verified = true`
-    ).get(host);
-    const wsId = row?.id || null;
-    _cdCache.set(host, { wsId, at: now });
-    return wsId;
-  } catch {
-    return null;
-  }
-}
-
-// Invalidate cache for a specific domain (called when domain is verified/removed)
-function invalidateCustomDomainCache(host) {
-  if (host) _cdCache.delete(host);
-}
-
-// Paths/prefixes allowed on custom domains
-const CD_ALLOWED_PREFIXES = [
-  '/watch/', '/player/', '/embed/', '/embed-playlist/',
-  '/download/', '/channel/', '/c/',
-  '/videos/',
-  '/api/videos/', '/api/chapters/', '/api/transcriptions/',
-  '/api/tracks/', '/api/playlists/', '/api/progress/',
-  '/api/settings', '/api/health',
-  '/css/', '/js/', '/icons/',
-];
-const CD_ALLOWED_EXACT = new Set([
-  '/favicon.ico', '/favicon.svg', '/og.png', '/og.svg',
-]);
-
-const _cdMainHost = (process.env.APP_URL || '').replace(/^https?:\/\//, '').split('/')[0].split(':')[0];
-
-app.use(async (req, res, next) => {
-  const host = req.hostname;
-  if (!host || host === _cdMainHost || host === 'localhost' || host.endsWith('.localhost')) return next();
-
-  const wsId = await lookupCustomDomain(host);
-  if (!wsId) return next(); // Unknown host — let it fall through to normal routing
-
-  // Verified custom domain — check if route is allowed
-  const p = req.path;
-  const allowed =
-    CD_ALLOWED_EXACT.has(p) ||
-    CD_ALLOWED_PREFIXES.some(prefix => p === prefix.replace(/\/$/, '') || p.startsWith(prefix));
-
-  if (allowed) return next();
-
-  // Not a video route — redirect to platform equivalent
-  const platformOrigin = process.env.APP_URL || 'https://streamvault.link';
-  return res.redirect(302, platformOrigin + req.originalUrl);
-});
 
 // Embeddable playlist player — public (only shows public playlists)
 app.get('/embed/playlist/:id', (req, res) => {
