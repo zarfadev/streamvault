@@ -228,10 +228,12 @@ router.get('/', async (req, res) => {
         // even if hideFromPlatformListing is set (user already has direct link to a video there)
         clauses.push('v.workspace_id = ?'); baseParams.push(wsIdFilter);
       } else {
-        // Global public discovery — respect workspace opt-out
+        // Global public discovery — respect workspace opt-out.
+        // Usar ->> con cast seguro para evitar error 502 cuando settings no es JSON válido.
         clauses.push(`(
           w.settings IS NULL
-          OR (w.settings::jsonb->>'hideFromPlatformListing') IS DISTINCT FROM 'true'
+          OR w.settings = ''
+          OR (w.settings::text::jsonb->>'hideFromPlatformListing') IS DISTINCT FROM 'true'
         )`);
       }
 

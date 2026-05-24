@@ -197,20 +197,33 @@ function generateSpriteSheet(inputPath, outputDir, duration) {
   });
 }
 
+// Calidades mínimas garantizadas por plan — independientemente de la config global del admin.
+// Esto evita que una mala configuración en system_config.transcoding.qualities
+// deje a los workspaces sin las calidades a las que su plan les da derecho.
+const PLAN_MIN_QUALITIES = {
+  starter:    new Set(['360p', '480p', '720p']),
+  pro:        new Set(['360p', '480p', '720p', '1080p']),
+  enterprise: new Set(['360p', '480p', '720p', '1080p']),
+};
+
 async function resolvePresetsForSource(videoInfo, workspaceId) {
   const tc = await getJsonConfig('transcoding', { qualities: ['360p', '480p', '720p', '1080p'] });
   const globalAllowed = new Set(Array.isArray(tc.qualities) ? tc.qualities : ['360p', '480p', '720p', '1080p']);
 
   // maxHeight caps which presets are eligible per plan tier.
-  // 0 = no cap (use globalAllowed / customQualities only, bounded by source).
-  let maxHeight = 0;  // pro and above: no artificial cap beyond globalAllowed
+  // 0 = no cap (use effectiveAllowed / customQualities only, bounded by source).
+  let maxHeight = 0;
   let customQualities = null;
+  let planMin = null; // minimum quality set guaranteed by plan
 
   if (workspaceId) {
     try {
       const ws = await db.prepare(`SELECT plan, settings FROM workspaces WHERE id = ?`).get(workspaceId);
       if (ws) {
         const plan = (ws.plan || 'starter').toLowerCase();
+        // Obtener mínimos del plan (fallback si globalAllowed es muy restrictivo)
+        planMin = PLAN_MIN_QUALITIES[plan] || PLAN_MIN_QUALITIES.starter;
+
         if (plan === 'starter') {
           maxHeight = 720; // starter capped at 720p
         } else if (plan === 'enterprise') {
@@ -219,31 +232,38 @@ async function resolvePresetsForSource(videoInfo, workspaceId) {
             // Enterprise workspace with explicit custom quality list — use it exclusively
             customQualities = new Set(settings.transcodingQualities);
           }
-          // Enterprise: no height cap — allow up to 4K from globalAllowed (or customQualities)
+          // Enterprise: no height cap
           maxHeight = 0;
         }
-        // pro / any other plan: maxHeight=0 means use globalAllowed without an artificial cap
+        // pro / any other plan: maxHeight=0 means use effectiveAllowed without an artificial cap
       }
     } catch (err) {
       logger.warn({ workspaceId, err: err.message }, 'resolvePresetsForSource: workspace lookup failed — using defaults');
     }
   }
 
+  // effectiveAllowed = unión de globalAllowed y los mínimos del plan.
+  // Así, aunque el admin configure system_config con menos calidades, los planes
+  // siempre tienen acceso a sus calidades mínimas garantizadas.
+  const effectiveAllowed = planMin
+    ? new Set([...globalAllowed, ...planMin])
+    : globalAllowed;
+
   let presets;
   if (customQualities) {
     // Enterprise custom list: respect workspace setting but still don't upscale past source+100
     presets = QUALITY_PRESETS.filter(p => customQualities.has(p.name) && p.height <= videoInfo.height + 100);
   } else if (maxHeight > 0) {
-    // Starter (or other capped plan): globalAllowed ∩ [≤maxHeight] ∩ [≤source+100]
+    // Starter (or other capped plan): effectiveAllowed ∩ [≤maxHeight] ∩ [≤source+100]
     presets = QUALITY_PRESETS.filter(p =>
-      globalAllowed.has(p.name) &&
+      effectiveAllowed.has(p.name) &&
       p.height <= maxHeight &&
       p.height <= videoInfo.height + 100
     );
   } else {
-    // Pro / Enterprise (no cap): globalAllowed ∩ [≤source+100]
+    // Pro / Enterprise (no cap): effectiveAllowed ∩ [≤source+100]
     presets = QUALITY_PRESETS.filter(p =>
-      globalAllowed.has(p.name) &&
+      effectiveAllowed.has(p.name) &&
       p.height <= videoInfo.height + 100
     );
   }
@@ -253,6 +273,8 @@ async function resolvePresetsForSource(videoInfo, workspaceId) {
     const fallback = [...QUALITY_PRESETS].reverse().find(p => p.height <= videoInfo.height) || QUALITY_PRESETS[0];
     presets = [fallback];
   }
+
+  logger.info({ workspaceId, presets: presets.map(p => p.name), globalAllowed: [...globalAllowed], planMin: planMin ? [...planMin] : null, customQualities: customQualities ? [...customQualities] : null }, '[transcoder] resolvePresetsForSource result');
   return presets;
 }
 

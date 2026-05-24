@@ -139,8 +139,14 @@
       const ok = await refreshTokens();
       if (!ok) {
         authToken = ''; authUser = null; authWorkspace = null;
-        ['sv_access_token', 'sv_token', 'sv_refresh_token', 'sv_refresh'].forEach(k => localStorage.removeItem(k));
-        updateAuthBar();
+        ['sv_access_token', 'sv_token', 'sv_refresh_token', 'sv_refresh'].forEach(k => {
+          localStorage.removeItem(k);
+          sessionStorage.removeItem(k);
+        });
+        // Redirigir a login — el token expiró y el refresh falló.
+        // Guardar la URL actual para restaurarla tras el login.
+        const returnPath = window.location.pathname + window.location.hash;
+        window.location.href = '/login?next=' + encodeURIComponent(returnPath);
         return r;
       }
       return fetch(input, { ...init, headers: buildHeaders() });

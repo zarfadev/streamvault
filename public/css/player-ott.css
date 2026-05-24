@@ -1400,7 +1400,7 @@ video::cue {
   background: none !important;
   border-radius: 50% !important;
   outline: none;
-  display: inline-flex !important;
+  display: inline-flex; /* no !important — lets style="display:none" hide it before video loads */
   align-items: center;
   justify-content: center;
   cursor: pointer;
