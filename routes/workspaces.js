@@ -219,6 +219,14 @@ router.patch('/:workspaceId', resolveWorkspace, requireRole('owner', 'admin'), a
       }
       await db.prepare(`UPDATE workspaces SET settings = ?, updated_at = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT WHERE id = ?`)
         .run(JSON.stringify(merged), ws.id);
+
+      // Sync analyticsRetentionDays to dedicated column (used by worker for data pruning)
+      if (safeSettings.analyticsRetentionDays !== undefined) {
+        const days = parseInt(safeSettings.analyticsRetentionDays, 10);
+        const clampedDays = Number.isFinite(days) && days >= 7 ? Math.min(days, 3650) : 90;
+        await db.prepare(`UPDATE workspaces SET analytics_retention_days = ?, updated_at = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT WHERE id = ?`)
+          .run(clampedDays, ws.id);
+      }
     }
 
     // F2.7: Custom embed domain (Enterprise only)

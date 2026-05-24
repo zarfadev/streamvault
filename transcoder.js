@@ -756,15 +756,23 @@ async function _fireWebhook(videoId, event, payload) {
 
 async function _notifyOwner(videoId, title, status) {
   const row = await db.prepare(`
-    SELECT u.email, u.name FROM videos v
+    SELECT u.email, u.name, w.settings FROM videos v
     JOIN workspaces w ON w.id = v.workspace_id
     JOIN users u ON u.id = w.owner_id
     WHERE v.id = ?
   `).get(videoId);
   if (!row?.email) return;
-  if (status === 'ready') {
+
+  // Respect workspace notification settings
+  let wsSettings = {};
+  try { wsSettings = JSON.parse(row.settings || '{}'); } catch {}
+  const emailEnabled = wsSettings.emailNotifications !== false; // default ON
+  const notifyReady  = wsSettings.notifyOnReady !== false;      // default ON
+  const notifyError  = wsSettings.notifyOnError !== false;      // default ON
+
+  if (status === 'ready' && emailEnabled && notifyReady) {
     await sendTranscodeComplete(row.email, title, `/watch/${videoId}`);
-  } else {
+  } else if (status !== 'ready' && emailEnabled && notifyError) {
     await sendTranscodeError(row.email, title);
   }
 }
