@@ -740,13 +740,15 @@ function doLogout() {
           // Build a status message that includes the CNAME verification result
           let msg = 'Dominio verificado y activo';
           if (data.cname_ok) {
-            msg += ` — CNAME apunta correctamente a ${data.cname_expected}`;
+            // Perfect: CNAME points directly to our host
+            msg += ` — CNAME → ${data.cname_expected}`;
           } else if (data.cname_chain && data.cname_chain.length > 0) {
-            msg += ` — ⚠️ CNAME apunta a ${data.cname_chain[0]} (esperado: ${data.cname_expected})`;
-          } else {
-            msg += ` — ⚠️ Sin registro CNAME detectado (verifica que el CNAME apunte a ${data.cname_expected || 'streamvault.link'})`;
+            // CNAME found but points elsewhere — might be misconfigured
+            msg += ` — ⚠️ CNAME apunta a ${data.cname_chain[0]} (esperado: ${data.cname_expected || 'streamvault.link'})`;
           }
-          if (data.resolved_ip) msg += ` · IP: ${data.resolved_ip}`;
+          // No CNAME visible: likely Cloudflare "orange cloud" proxy or plain A record.
+          // The domain IS verified (IP resolved + HTTP check passed). Don't alarm user.
+          if (data.resolved_ip) msg += ` · IP ${data.resolved_ip}`;
           toast('Dominio verificado correctamente', 'success');
           showDomainStatus(true, msg);
           authWorkspace.custom_domain_verified = true;
