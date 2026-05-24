@@ -71,4 +71,22 @@ async function awardReferralCredit(referredUserId) {
   }
 }
 
-module.exports = { awardReferralCredit };
+/**
+ * Clear the pending referral credit once payment is confirmed.
+ * Called from every gateway's webhook handler after plan activation.
+ *
+ * @param {string} workspaceId
+ */
+async function clearReferralCredit(workspaceId) {
+  if (!workspaceId) return;
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    await db.prepare(
+      `UPDATE workspaces SET referral_credit_usd = 0, updated_at = ? WHERE id = ? AND referral_credit_usd > 0`
+    ).run(now, workspaceId);
+  } catch (err) {
+    logger.warn({ err: err.message, workspaceId }, 'clearReferralCredit failed');
+  }
+}
+
+module.exports = { awardReferralCredit, clearReferralCredit };

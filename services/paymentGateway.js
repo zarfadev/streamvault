@@ -47,11 +47,11 @@ function getProviderService(provider) {
  * @param {string} cancelUrl - URL de retorno cancelado
  * @returns {Promise<{checkoutUrl: string, sessionId: string}>}
  */
-async function createCheckoutSession(workspaceId, planKey, provider = 'stripe', successUrl, cancelUrl) {
-  logger.info({ workspaceId, planKey, provider }, 'Creating checkout session');
-  
+async function createCheckoutSession(workspaceId, planKey, provider = 'stripe', successUrl, cancelUrl, discountUSD = 0) {
+  logger.info({ workspaceId, planKey, provider, discountUSD }, 'Creating checkout session');
+
   const service = getProviderService(provider);
-  
+
   if (!service || !service.createCheckoutSession) {
     throw new Error(`Provider ${provider} not configured or not available`);
   }
@@ -60,7 +60,8 @@ async function createCheckoutSession(workspaceId, planKey, provider = 'stripe', 
     workspaceId,
     planKey,
     successUrl,
-    cancelUrl
+    cancelUrl,
+    discountUSD   // each gateway applies this discount in its own way
   );
 
   return session;

@@ -401,6 +401,9 @@ async function createSchema(pool) {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`);
   // Index on users.referral_code for fast referral lookups
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_users_referral_code ON users(referral_code)`);
+  // ── Referral credit balance (USD, ready to apply on next checkout) ─────────
+  // Populated when user redeems referral credits; zeroed after gateway confirms payment.
+  await pool.query(`ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS referral_credit_usd NUMERIC(10,2) DEFAULT 0`);
   // Index on videos.status for fast status filtering
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_videos_status ON videos(status)`);
   // Index on videos.visibility for public video queries

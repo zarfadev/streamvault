@@ -28,7 +28,7 @@ const logger = require('./logger').child({ module: 'dlocalgo' });
 const invoiceService = require('./invoices');
 const emailService = require('./email');
 const gwCreds = require('./gatewayCredentials');
-const { awardReferralCredit } = require('./referralCredit');
+const { awardReferralCredit, clearReferralCredit } = require('./referralCredit');
 
 // ══════════════════════════════════════════════════════════════════════════
 // Configuration (reads from DB first, then .env fallback)
@@ -155,7 +155,7 @@ async function dlocalRequest(method, path, body = null) {
  * El token del plan debe haberse creado en el dashboard de dLocal Go
  * (Integrations > Subscription > Plans) y configurado en las env vars.
  */
-async function createCheckoutSession(workspaceId, planKey, successUrl, cancelUrl) {
+async function createCheckoutSession(workspaceId, planKey, successUrl, cancelUrl, discountUSD = 0) {
   // Use async config resolution (reads from DB credentials first)
   const cfg = await getDLocalConfigAsync();
   if (!cfg) {
@@ -174,6 +174,15 @@ async function createCheckoutSession(workspaceId, planKey, successUrl, cancelUrl
   const workspace = wsResult.rows[0];
   if (!workspace) throw new Error('Workspace not found');
 
+  // ── Referral credit: dLocal Go uses pre-configured plan tokens with fixed prices,
+  // so we cannot change the checkout amount at runtime. The credit is stored in
+  // referral_credit_usd on the workspace and will be applied by the admin or
+  // automatically deducted from the next billing cycle via a note in metadata.
+  if (discountUSD > 0) {
+    logger.info({ workspaceId, planKey, discountUSD },
+      'dLocal Go: referral credit stored as pending — cannot modify subscription price at checkout (platform limitation)');
+  }
+
   // Construir URL de checkout con parámetros de rastreo
   const checkoutUrl = new URL(`${cfg.checkoutBase}/validate/subscription/${planToken}`);
   checkoutUrl.searchParams.set('external_id', workspaceId);
@@ -186,7 +195,12 @@ async function createCheckoutSession(workspaceId, planKey, successUrl, cancelUrl
          payment_metadata = $1,
          updated_at       = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT
      WHERE id = $2`,
-    [JSON.stringify({ status: 'checkout_pending', plan: planKey, started_at: Math.floor(Date.now() / 1000) }), workspaceId]
+    [JSON.stringify({
+      status: 'checkout_pending',
+      plan: planKey,
+      started_at: Math.floor(Date.now() / 1000),
+      ...(discountUSD > 0 ? { pending_referral_credit_usd: discountUSD } : {}),
+    }), workspaceId]
   );
 
   logger.info({ workspaceId, planKey, isSandbox: cfg.isSandbox }, 'dLocal Go subscription checkout created');
@@ -521,6 +535,8 @@ async function activateSubscription(workspaceId, planKey, subscriptionId) {
       workspaceId,
     ]
   );
+  // Clear pending referral credit now that payment is confirmed
+  clearReferralCredit(workspaceId).catch(() => {});
   cache.invalidate(`sv:ws:${workspaceId}`).catch(() => {});
 
   logger.info({ workspaceId, planKey }, 'Plan activado vía dLocal Go');

@@ -4,7 +4,7 @@ const cache = require('./cache');
 const logger = require('./logger').child({ module: 'stripe' });
 const invoiceService = require('./invoices');
 const emailService = require('./email');
-const { awardReferralCredit } = require('./referralCredit');
+const { awardReferralCredit, clearReferralCredit } = require('./referralCredit');
 
 let _stripe = null;
 function getStripe() {
@@ -34,7 +34,7 @@ async function createCustomer(email, name, workspaceId) {
   return customer;
 }
 
-async function createCheckoutSession(workspaceId, planKey, successUrl, cancelUrl) {
+async function createCheckoutSession(workspaceId, planKey, successUrl, cancelUrl, discountUSD = 0) {
   const stripe = getStripe();
   if (!stripe) throw new Error('Stripe not configured');
 
@@ -53,7 +53,27 @@ async function createCheckoutSession(workspaceId, planKey, successUrl, cancelUrl
     customerId = customer.id;
   }
 
-  const session = await stripe.checkout.sessions.create({
+  // ── Referral credit: create a one-time coupon if there's a pending discount ──
+  const discountCents = Math.round(Number(discountUSD) * 100);
+  let discounts = [];
+  if (discountCents > 0) {
+    try {
+      const coupon = await stripe.coupons.create({
+        amount_off:      discountCents,
+        currency:        'usd',
+        duration:        'once',
+        max_redemptions: 1,
+        name:            `Crédito por referidos — $${discountUSD}`,
+        metadata:        { workspaceId, source: 'referral_credit' },
+      });
+      discounts = [{ coupon: coupon.id }];
+      logger.info({ workspaceId, discountUSD, couponId: coupon.id }, 'Referral credit coupon created for Stripe checkout');
+    } catch (couponErr) {
+      logger.warn({ err: couponErr.message, workspaceId }, 'Failed to create referral coupon — proceeding without discount');
+    }
+  }
+
+  const sessionParams = {
     customer: customerId,
     mode: 'subscription',
     line_items: [{ price: priceId, quantity: 1 }],
@@ -63,10 +83,12 @@ async function createCheckoutSession(workspaceId, planKey, successUrl, cancelUrl
     subscription_data: {
       metadata: { workspaceId, plan: planKey },
     },
-    allow_promotion_codes: true,
+    allow_promotion_codes: discounts.length === 0, // disable promo codes if we already applied a coupon
     billing_address_collection: 'auto',
-  });
+  };
+  if (discounts.length > 0) sessionParams.discounts = discounts;
 
+  const session = await stripe.checkout.sessions.create(sessionParams);
   return session;
 }
 
@@ -415,6 +437,8 @@ async function activateSubscription(workspaceId, planKey, subscriptionId) {
      WHERE id = $6`,
     [planKey, subscriptionId, plan.maxVideos, plan.maxStorageGB * 1e9, plan.maxBandwidthGB * 1e9, workspaceId]
   );
+  // Clear pending referral credit — coupon already applied via checkout session discounts
+  clearReferralCredit(workspaceId).catch(() => {});
   cache.invalidate(`sv:ws:${workspaceId}`).catch(() => {});
 
   logger.info({ workspaceId, planKey }, 'Workspace plan activated');

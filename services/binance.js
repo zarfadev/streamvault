@@ -20,6 +20,7 @@ const db = require('../db');
 const logger = require('./logger').child({ module: 'binance' });
 const cache = require('./cache');
 const { sendCryptoRenewalPending } = require('./email');
+const { clearReferralCredit } = require('./referralCredit');
 
 // ══════════════════════════════════════════════════════════════════════════
 // Binance Pay Configuration
@@ -103,7 +104,7 @@ async function binanceRequest(endpoint, body) {
 /**
  * Crea una orden de pago de Binance Pay (30 días de suscripción)
  */
-async function createCheckoutSession(workspaceId, planKey, successUrl, cancelUrl) {
+async function createCheckoutSession(workspaceId, planKey, successUrl, cancelUrl, discountUSD = 0) {
   const price = PLAN_PRICES[planKey];
   if (!price) {
     throw new Error(`Invalid plan: ${planKey}`);
@@ -116,6 +117,13 @@ async function createCheckoutSession(workspaceId, planKey, successUrl, cancelUrl
 
   const owner = await db.prepare(`SELECT email, name FROM users WHERE id = ?`).get(workspace.owner_id);
 
+  // ── Referral credit: reduce order amount (minimum $0.50 to avoid gateway errors) ──
+  const discount = Math.min(Number(discountUSD) || 0, price);
+  const finalPrice = Math.max(0.5, price - discount);
+  if (discount > 0) {
+    logger.info({ workspaceId, planKey, originalPrice: price, discount, finalPrice }, 'Referral credit applied to Binance order');
+  }
+
   // Crear merchant order ID único
   const merchantTradeNo = `SV-${workspaceId}-${Date.now()}`;
 
@@ -125,7 +133,7 @@ async function createCheckoutSession(workspaceId, planKey, successUrl, cancelUrl
       terminalType: 'WEB',
     },
     merchantTradeNo: merchantTradeNo,
-    orderAmount: price,
+    orderAmount: finalPrice,
     currency: 'USDT', // Stablecoin para evitar volatilidad
     goods: {
       goodsType: '02', // Virtual goods
@@ -525,6 +533,8 @@ async function activateSubscription(workspaceId, planKey, merchantTradeNo) {
     plan.maxBandwidthGB * 1e9,
     workspaceId
   );
+  // Clear pending referral credit — discount was already applied to orderAmount at checkout
+  clearReferralCredit(workspaceId).catch(() => {});
   cache.invalidate(`sv:ws:${workspaceId}`).catch(() => {});
 
   logger.info({ workspaceId, planKey, expiryDate: new Date(expiryDate) }, 'Workspace activated via Binance Pay');

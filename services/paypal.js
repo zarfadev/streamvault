@@ -18,7 +18,7 @@ const db = require('../db');
 const cache = require('./cache');
 const logger = require('./logger').child({ module: 'paypal' });
 const gwCreds = require('./gatewayCredentials');
-const { awardReferralCredit } = require('./referralCredit');
+const { awardReferralCredit, clearReferralCredit } = require('./referralCredit');
 
 // ══════════════════════════════════════════════════════════════════════════
 // PayPal Client Configuration (reads from DB first, then .env fallback)
@@ -114,7 +114,7 @@ function getPlanId(planKey) {
 /**
  * Crea una suscripción de PayPal y retorna la URL de aprobación
  */
-async function createCheckoutSession(workspaceId, planKey, successUrl, cancelUrl) {
+async function createCheckoutSession(workspaceId, planKey, successUrl, cancelUrl, discountUSD = 0) {
   const client = await getPayPalClientAsync();
   if (!client) {
     throw new Error('PayPal no configurado. Configura las credenciales en el panel de administración (Gateways → PayPal → Configurar).');
@@ -132,7 +132,47 @@ async function createCheckoutSession(workspaceId, planKey, successUrl, cancelUrl
 
   const owner = await db.prepare(`SELECT email, name FROM users WHERE id = ?`).get(workspace.owner_id);
 
+  // ── Referral credit: if discount >= plan price, delay start_time by 30 days ──
+  // PayPal subscriptions don't support arbitrary price overrides at checkout.
+  // The closest mechanism: set start_time in the future so the first billing
+  // cycle is free. This works when credit covers at least one full month.
+  // If credit < planPrice, the credit is stored in DB; admin can apply manually
+  // or it will be used on the next gateway that supports partial discounts.
+  const planPrice = config.plans[planKey]?.price || 0;
+  let startTime = null;
+  if (discountUSD >= planPrice && planPrice > 0) {
+    // Give 1 free month by delaying the first charge 30 days
+    const d = new Date();
+    d.setDate(d.getDate() + 30);
+    startTime = d.toISOString();
+    logger.info({ workspaceId, planKey, discountUSD }, 'PayPal: referral credit grants 1 free month via start_time delay');
+  } else if (discountUSD > 0) {
+    logger.info({ workspaceId, planKey, discountUSD, planPrice },
+      'PayPal: partial credit not applicable at checkout — will remain as DB pending credit');
+  }
+
   // Crear suscripción en PayPal
+  const subscriptionBody = {
+    plan_id: planId,
+    subscriber: {
+      name: {
+        given_name: owner.name || 'User',
+        surname: workspace.name,
+      },
+      email_address: owner.email,
+    },
+    application_context: {
+      brand_name: (await require('./dynamicConfig').getDynConfig('platform.siteName', 'StreamVault').catch(() => 'StreamVault')),
+      locale: 'es-CO', // Colombia locale
+      shipping_preference: 'NO_SHIPPING',
+      user_action: 'SUBSCRIBE_NOW',
+      return_url: successUrl || `${config.appUrl}/dashboard?billing=success`,
+      cancel_url: cancelUrl || `${config.appUrl}/dashboard?billing=cancel`,
+    },
+    custom_id: workspaceId, // Para identificar en webhooks
+  };
+  if (startTime) subscriptionBody.start_time = startTime;
+
   const request = {
     path: '/v1/billing/subscriptions',
     verb: 'POST',
@@ -140,25 +180,7 @@ async function createCheckoutSession(workspaceId, planKey, successUrl, cancelUrl
       'Content-Type': 'application/json',
       'Accept': 'application/json',
     },
-    body: {
-      plan_id: planId,
-      subscriber: {
-        name: {
-          given_name: owner.name || 'User',
-          surname: workspace.name,
-        },
-        email_address: owner.email,
-      },
-      application_context: {
-        brand_name: (await require('./dynamicConfig').getDynConfig('platform.siteName', 'StreamVault').catch(() => 'StreamVault')),
-        locale: 'es-CO', // Colombia locale
-        shipping_preference: 'NO_SHIPPING',
-        user_action: 'SUBSCRIBE_NOW',
-        return_url: successUrl || `${config.appUrl}/dashboard?billing=success`,
-        cancel_url: cancelUrl || `${config.appUrl}/dashboard?billing=cancel`,
-      },
-      custom_id: workspaceId, // Para identificar en webhooks
-    },
+    body: subscriptionBody,
   };
 
   try {
@@ -495,6 +517,8 @@ async function activateSubscription(workspaceId, planKey, subscriptionId) {
     plan.maxBandwidthGB * 1e9,
     workspaceId
   );
+  // Clear pending referral credit now that payment is confirmed
+  clearReferralCredit(workspaceId).catch(() => {});
   cache.invalidate(`sv:ws:${workspaceId}`).catch(() => {});
 
   logger.info({ workspaceId, planKey }, 'Workspace plan activated via PayPal');

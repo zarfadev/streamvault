@@ -293,12 +293,18 @@ router.post('/checkout', rateLimit(10, 3_600_000), authenticate, resolveWorkspac
     const cancelUrl  = isSafeRedirectUrl(req.body.cancelUrl)
       ? req.body.cancelUrl  : `${config.appUrl}/dashboard?checkout=cancel`;
 
+    // ── Referral credit: auto-apply pending USD credit to this checkout ──
+    // The credit is set when the user clicks "Aplicar descuento" on the referrals section.
+    // We pass it to the gateway which handles it as a discount (gateway-specific logic).
+    const pendingCredit = Number(req.workspace.referral_credit_usd ?? 0);
+
     const session = await paymentGateway.createCheckoutSession(
       req.workspace.id,
       plan,
       provider,
       successUrl,
-      cancelUrl
+      cancelUrl,
+      pendingCredit   // discountUSD — each gateway applies it in its own way
     );
 
     res.json({
@@ -657,30 +663,41 @@ router.post('/referrals/redeem', rateLimit(5, 3_600_000), authenticate, resolveW
 
     const now = Math.floor(Date.now() / 1000);
 
-    // Consume ALL credits at once (redeem everything)
+    // Store credit as a pending USD balance in the workspace —
+    // it will be automatically applied on the next checkout (any gateway).
+    // Add to any existing pending credit (don't overwrite if they already had some).
     await db.prepare(
-      `UPDATE workspaces SET free_months_remaining = 0, updated_at = ? WHERE id = ?`
-    ).run(now, ws.id);
+      `UPDATE workspaces
+       SET free_months_remaining = 0,
+           referral_credit_usd   = COALESCE(referral_credit_usd, 0) + ?,
+           updated_at            = ?
+       WHERE id = ?`
+    ).run(totalCreditUSD, now, ws.id);
 
-    // Apply as Stripe one-time invoice credit (balance credit = negative balance on customer)
+    // For Stripe: ALSO apply a balance transaction immediately so existing subscribers
+    // see the discount on their very next invoice without needing a new checkout.
     let stripeApplied = false;
-    let stripeError = null;
     try {
-      if (ws.stripe_customer_id) {
+      const customerId = ws.stripe_customer_id || ws.payment_customer_id;
+      if (customerId && ws.payment_provider === 'stripe') {
         const stripe = stripeService.getStripe();
         if (stripe) {
-          // Stripe customer balance: negative = credit to customer (reduces next invoice)
-          await stripe.customers.createBalanceTransaction(ws.stripe_customer_id, {
-            amount: -totalCreditCents,   // negative = credit
+          await stripe.customers.createBalanceTransaction(customerId, {
+            amount: -totalCreditCents,
             currency: 'usd',
-            description: `Crédito por ${creditCount} referido(s) — $${creditUSD} c/u`,
+            description: `Crédito referido: ${creditCount} × $${creditUSD}`,
           });
+          // Balance applied directly → no need to consume again at checkout for Stripe
+          // Mark credit as already consumed for Stripe subscribers
+          await db.prepare(
+            `UPDATE workspaces SET referral_credit_usd = 0, updated_at = ? WHERE id = ?`
+          ).run(now, ws.id);
           stripeApplied = true;
         }
       }
     } catch (stripeErr) {
-      stripeError = stripeErr.message;
-      logger.warn({ err: stripeError, wsId: ws.id }, 'Could not apply Stripe balance credit — credit still deducted from counter');
+      logger.warn({ err: stripeErr.message, wsId: ws.id },
+        'Stripe balance transaction failed — credit kept as pending for next checkout');
     }
 
     // Invalidate workspace cache
@@ -694,8 +711,8 @@ router.post('/referrals/redeem', rateLimit(5, 3_600_000), authenticate, resolveW
       totalCreditUSD,
       stripeApplied,
       message: stripeApplied
-        ? `¡$${totalCreditUSD} aplicados a tu cuenta! Se descontarán de tu próxima factura automáticamente.`
-        : `¡${creditCount} crédito(s) registrados! Contacta soporte para aplicar $${totalCreditUSD} a tu próximo pago.`,
+        ? `¡$${totalCreditUSD} aplicados! Se descontarán de tu próxima factura Stripe automáticamente.`
+        : `¡$${totalCreditUSD} en crédito listos! Se aplicarán automáticamente en tu próximo pago.`,
       remainingCredits: 0,
     });
   } catch (err) {
