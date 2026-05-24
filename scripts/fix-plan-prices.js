@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Fix plan prices to match payment gateway configurations
+ * Fix plan prices in system_config table
  */
 
 const db = require('../db');
@@ -14,30 +14,37 @@ async function fixPrices() {
   console.log('🔧 Actualizando precios de planes...\n');
   
   try {
-    // Get current prices
-    const plans = await db.prepare('SELECT key, name, price FROM plans WHERE key IN (?, ?)').all('pro', 'enterprise');
-    
-    console.log('Precios actuales:');
-    plans.forEach(p => {
-      console.log(`  ${p.name} (${p.key}): $${p.price}`);
-    });
-    
-    // Update prices
-    const stmt = db.prepare('UPDATE plans SET price = ? WHERE key = ?');
-    
-    for (const [key, price] of Object.entries(CORRECT_PRICES)) {
-      await stmt.run(price, key);
-      console.log(`\n✅ ${key.toUpperCase()}: $${price}`);
+    // Update plans.pro
+    const proPlan = await db.query('SELECT value FROM system_config WHERE key = $1', ['plans.pro']);
+    if (proPlan.rows.length > 0) {
+      const proData = JSON.parse(proPlan.rows[0].value);
+      console.log(`Pro actual: $${proData.price}`);
+      proData.price = CORRECT_PRICES.pro;
+      await db.query('UPDATE system_config SET value = $1 WHERE key = $2', [JSON.stringify(proData), 'plans.pro']);
+      console.log(`✅ Pro actualizado: $${CORRECT_PRICES.pro}`);
     }
     
-    // Verify
-    console.log('\n📊 Precios actualizados:');
-    const updated = await db.prepare('SELECT key, name, price FROM plans WHERE key IN (?, ?)').all('pro', 'enterprise');
-    updated.forEach(p => {
-      console.log(`  ${p.name} (${p.key}): $${p.price}`);
-    });
+    // Update plans.enterprise
+    const entPlan = await db.query('SELECT value FROM system_config WHERE key = $1', ['plans.enterprise']);
+    if (entPlan.rows.length > 0) {
+      const entData = JSON.parse(entPlan.rows[0].value);
+      console.log(`Enterprise actual: $${entData.price}`);
+      entData.price = CORRECT_PRICES.enterprise;
+      await db.query('UPDATE system_config SET value = $1 WHERE key = $2', [JSON.stringify(entData), 'plans.enterprise']);
+      console.log(`✅ Enterprise actualizado: $${CORRECT_PRICES.enterprise}`);
+    }
     
-    console.log('\n✅ Precios corregidos exitosamente!');
+    // Update consolidated plans object
+    const allPlans = await db.query('SELECT value FROM system_config WHERE key = $1', ['plans']);
+    if (allPlans.rows.length > 0) {
+      const plansData = JSON.parse(allPlans.rows[0].value);
+      plansData.pro.price = CORRECT_PRICES.pro;
+      plansData.enterprise.price = CORRECT_PRICES.enterprise;
+      await db.query('UPDATE system_config SET value = $1 WHERE key = $2', [JSON.stringify(plansData), 'plans']);
+      console.log('✅ Objeto consolidado actualizado');
+    }
+    
+    console.log('\n✅ Todos los precios corregidos exitosamente!');
     process.exit(0);
   } catch (error) {
     console.error('❌ Error:', error.message);
