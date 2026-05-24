@@ -2234,6 +2234,25 @@ function editGateway(provider) {
       const rows = cfg.vars.map(v => {
         const ok = !!pStatus[v.statusKey];
         const currentVal = maskedCreds[v.name] || '';
+        const isMode = v.name.endsWith('_MODE');
+        if (isMode) {
+          // Mode field: render as toggle between sandbox/production or sandbox/live
+          const modeOptions = v.name === 'DLOCALGO_MODE'
+            ? [{val:'sandbox',label:'Sandbox'},{val:'production',label:'Production'}]
+            : [{val:'sandbox',label:'Sandbox'},{val:'live',label:'Live'}];
+          const currentMode = currentVal ? currentVal.replace(/[^a-z]/g,'') : '';
+          return `<div class="gw-env-row" style="display:flex;flex-direction:column;gap:4px;margin-bottom:12px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span class="gw-env-status ${ok ? 'ok' : 'missing'}"></span>
+              <span class="gw-env-name" style="font-weight:600;font-size:12px;">${esc(v.name)}</span>
+              ${currentMode ? `<span style="font-size:10px;color:var(--muted);">(${esc(currentMode)})</span>` : ''}
+            </div>
+            <select id="gw-cred-${v.name}" style="font-size:12px;padding:6px 10px;width:100%;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text);">
+              <option value="">-- Sin cambios --</option>
+              ${modeOptions.map(o => `<option value="${o.val}">${o.label}</option>`).join('')}
+            </select>
+          </div>`;
+        }
         return `<div class="gw-env-row" style="display:flex;flex-direction:column;gap:4px;margin-bottom:12px;">
           <div style="display:flex;align-items:center;gap:8px;">
             <span class="gw-env-status ${ok ? 'ok' : 'missing'}"></span>
@@ -2248,18 +2267,32 @@ function editGateway(provider) {
       });
       listEl.innerHTML = rows.join('') + `
         <div style="margin-top:16px;display:flex;gap:8px;">
-          <button class="btn btn-primary btn-sm" onclick="saveGatewayCredentials('${provider}')">
-            💾 Guardar credenciales
-          </button>
+          <button class="btn btn-primary btn-sm" onclick="saveGatewayCredentials('${provider}')">Guardar credenciales</button>
           <span id="gw-save-status" style="font-size:12px;color:var(--muted);align-self:center;"></span>
         </div>
         <p style="font-size:11px;color:var(--muted);margin-top:8px;">
-          ⚡ Los cambios tienen efecto inmediato. Deja en blanco los campos que ya están configurados via .env para mantener ese valor.
+          Los cambios tienen efecto inmediato. Deja en blanco los campos que ya estan configurados via .env para mantener ese valor.
         </p>`;
     }).catch(() => {
       // Fallback: show editable form without masked values
       const rows = cfg.vars.map(v => {
         const ok = !!pStatus[v.statusKey];
+        const isMode = v.name.endsWith('_MODE');
+        if (isMode) {
+          const modeOptions = v.name === 'DLOCALGO_MODE'
+            ? [{val:'sandbox',label:'Sandbox'},{val:'production',label:'Production'}]
+            : [{val:'sandbox',label:'Sandbox'},{val:'live',label:'Live'}];
+          return `<div class="gw-env-row" style="display:flex;flex-direction:column;gap:4px;margin-bottom:12px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span class="gw-env-status ${ok ? 'ok' : 'missing'}"></span>
+              <span class="gw-env-name" style="font-weight:600;font-size:12px;">${esc(v.name)}</span>
+            </div>
+            <select id="gw-cred-${v.name}" style="font-size:12px;padding:6px 10px;width:100%;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:6px;color:var(--text);">
+              <option value="">-- Sin cambios --</option>
+              ${modeOptions.map(o => `<option value="${o.val}">${o.label}</option>`).join('')}
+            </select>
+          </div>`;
+        }
         return `<div class="gw-env-row" style="display:flex;flex-direction:column;gap:4px;margin-bottom:12px;">
           <div style="display:flex;align-items:center;gap:8px;">
             <span class="gw-env-status ${ok ? 'ok' : 'missing'}"></span>
@@ -2273,9 +2306,7 @@ function editGateway(provider) {
       });
       listEl.innerHTML = rows.join('') + `
         <div style="margin-top:16px;">
-          <button class="btn btn-primary btn-sm" onclick="saveGatewayCredentials('${provider}')">
-            💾 Guardar credenciales
-          </button>
+          <button class="btn btn-primary btn-sm" onclick="saveGatewayCredentials('${provider}')">Guardar credenciales</button>
         </div>`;
     });
   }
@@ -2333,8 +2364,8 @@ async function saveGatewayCredentials(provider) {
     });
     const data = await r.json();
     if (r.ok && data.success) {
-      toast(`✅ Credenciales de ${provider} guardadas. Efecto inmediato.`);
-      if (statusEl) { statusEl.textContent = '✅ Guardado'; statusEl.style.color = 'var(--green)'; }
+      toast(`Credenciales de ${provider} guardadas. Efecto inmediato.`);
+      if (statusEl) { statusEl.textContent = 'Guardado'; statusEl.style.color = 'var(--green)'; }
       // Clear inputs after save
       for (const key of keys) {
         const el = document.getElementById(`gw-cred-${key}`);
@@ -2344,11 +2375,11 @@ async function saveGatewayCredentials(provider) {
       setTimeout(() => loadGateways(), 500);
     } else {
       toast(data.error || 'Error al guardar', 'error');
-      if (statusEl) { statusEl.textContent = '❌ Error'; statusEl.style.color = 'var(--red)'; }
+      if (statusEl) { statusEl.textContent = 'Error'; statusEl.style.color = 'var(--red)'; }
     }
   } catch (e) {
     toast('Error de conexión: ' + e.message, 'error');
-    if (statusEl) { statusEl.textContent = '❌ Error'; statusEl.style.color = 'var(--red)'; }
+    if (statusEl) { statusEl.textContent = 'Error'; statusEl.style.color = 'var(--red)'; }
   }
 }
 
