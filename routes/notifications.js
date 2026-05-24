@@ -5,6 +5,8 @@
  * GET    /api/notifications/unread-count — unread count
  * PATCH  /api/notifications/:id/read — mark one read
  * PATCH  /api/notifications/read-all — mark all read
+ * DELETE /api/notifications/:id      — delete one notification
+ * DELETE /api/notifications          — delete all notifications for user
  */
 const express = require('express');
 const router  = express.Router();
@@ -61,6 +63,28 @@ router.patch('/:id/read', authenticate, async (req, res) => {
     res.json({ success: true });
   } catch {
     res.status(500).json({ error: 'Failed to mark notification as read' });
+  }
+});
+
+router.delete('/', authenticate, async (req, res) => {
+  try {
+    await db.prepare(`
+      DELETE FROM notifications WHERE user_id = ?
+    `).run(req.user.id);
+    res.json({ success: true });
+  } catch {
+    res.status(500).json({ error: 'Failed to clear notifications' });
+  }
+});
+
+router.delete('/:id', authenticate, async (req, res) => {
+  try {
+    await db.prepare(`
+      DELETE FROM notifications WHERE id = ? AND user_id = ?
+    `).run(req.params.id, req.user.id);
+    res.json({ success: true });
+  } catch {
+    res.status(500).json({ error: 'Failed to delete notification' });
   }
 });
 

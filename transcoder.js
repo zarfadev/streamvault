@@ -94,11 +94,23 @@ function transcodeQuality(inputPath, outputDir, preset, videoInfo, keyInfoPath, 
     // sc_threshold 0 disables mid-segment forced keyframes on scene changes —
     // critical for anime which has hundreds of cuts per minute.
     const gopSize  = Math.max(1, Math.round(sourceFps * HLS_TIME));
+    // Parse bitrate safely: '700k' → 700, '1.2m' → 1200, plain numbers also accepted
+    function parseBitrateKbps(vbrStr) {
+      const s = String(vbrStr || '0').trim().toLowerCase();
+      const num = parseFloat(s);
+      if (isNaN(num)) return 0;
+      if (s.endsWith('m')) return Math.round(num * 1000);
+      if (s.endsWith('g')) return Math.round(num * 1000000);
+      // ends with 'k' or no suffix — value is already in kbps
+      return Math.round(num);
+    }
+    const vbrKbps = parseBitrateKbps(preset.vbr);
+
     const opts = [
       `-vf scale=-2:${targetHeight}:flags=fast_bilinear`,
       `-b:v ${preset.vbr}`,
-      `-maxrate ${parseInt(preset.vbr) * 1.5}k`,
-      `-bufsize ${parseInt(preset.vbr) * 2}k`,
+      `-maxrate ${Math.round(vbrKbps * 1.5)}k`,
+      `-bufsize ${Math.round(vbrKbps * 2)}k`,
       `-b:a ${preset.abr}`,
       `-ar 48000`,
       `-pix_fmt yuv420p`,
@@ -507,6 +519,23 @@ async function processVideo(videoId, inputPath, title, options = {}) {
     await generateThumbnail(effectiveInputPath, outputDir, info.duration).catch(() => {});
     await onProgress(10);
 
+    // ── Early thumbnail S3 upload ────────────────────────────────────────────
+    // Upload thumb.jpg to S3 immediately (before encoding starts) so the CDN
+    // URL is valid during transcoding. This lets the dashboard show a thumbnail
+    // even when the API and worker run in separate containers without shared storage.
+    if (s3.isS3Enabled()) {
+      try {
+        const thumbPath = path.join(outputDir, 'thumb.jpg');
+        if (fs.existsSync(thumbPath)) {
+          const thumbCdnUrl = await s3.uploadFile(thumbPath, workspaceId, videoId, 'thumb.jpg');
+          await db.prepare(`UPDATE videos SET thumbnail_url = ? WHERE id = ?`).run(thumbCdnUrl, videoId);
+          logger.info({ videoId, thumbCdnUrl }, 'Thumbnail uploaded to S3 early');
+        }
+      } catch (e) {
+        logger.warn({ videoId, err: e.message }, 'Early thumbnail S3 upload failed — will be uploaded with full batch');
+      }
+    }
+
     const spritePromise = generateSpriteSheet(effectiveInputPath, outputDir, info.duration).catch(err =>
       logger.warn({ videoId, err: err.message }, 'Sprite sheet skipped')
     );
@@ -562,8 +591,10 @@ async function processVideo(videoId, inputPath, title, options = {}) {
     // Save HLS key immediately so the player can decrypt the primary quality
     await db.prepare(`UPDATE videos SET hls_key=?, hls_key_id=? WHERE id=?`)
       .run(hlsKey.toString('base64'), hlsKeyId, videoId);
-    try { fs.unlinkSync(keyBinPath); } catch {}
-    try { fs.unlinkSync(keyInfoPath); } catch {}
+    // NOTE: keyBinPath and keyInfoPath are intentionally NOT deleted here.
+    // They must remain on disk until ALL secondary qualities have been encoded,
+    // because transcodeQuality() references keyInfoPath for the -hls_key_info_file
+    // FFmpeg option. Deletion happens AFTER Phase 2 completes below.
 
     // If S3 is enabled, upload primary quality immediately so the video is
     // accessible even when DELETE_LOCAL_AFTER_S3=1 cleans up local files.
@@ -627,6 +658,13 @@ async function processVideo(videoId, inputPath, title, options = {}) {
           .catch(err => logger.error({ videoId, preset: preset.name, err: err.message }, 'Secondary quality transcode failed'))
       ));
     }
+
+    // ── Clean up key files now that ALL qualities are encoded ───────────────────
+    // Safe to delete here: keyInfoPath was needed by every transcodeQuality() call
+    // above (both primary and all secondary). Deleting earlier caused secondary
+    // qualities to fail with "No such file or directory" from FFmpeg.
+    try { fs.unlinkSync(keyBinPath); } catch {}
+    try { fs.unlinkSync(keyInfoPath); } catch {}
 
     await onProgress(90);
 

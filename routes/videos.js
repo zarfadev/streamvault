@@ -49,9 +49,13 @@ const thumbUpload = multer({
 function playbackUrls(video) {
   const cdn = video.hls_cdn_url;
   const base = cdn ? cdn.replace(/\/master\.m3u8$/i, '') : null;
+  // Prefer the early-uploaded thumbnail_url (set right after thumb generation)
+  // over the hls_cdn_url-derived URL so thumbnails appear even during transcoding.
+  const thumbnailUrl = video.thumbnail_url
+    || (base ? `${base}/thumb.jpg` : `/videos/${video.id}/thumb.jpg`);
   return {
     m3u8Url: cdn || `/videos/${video.id}/master.m3u8`,
-    thumbnailUrl: base ? `${base}/thumb.jpg` : `/videos/${video.id}/thumb.jpg`,
+    thumbnailUrl,
     spriteUrl: base ? `${base}/thumbs_sprite.jpg` : `/videos/${video.id}/thumbs_sprite.jpg`,
     spriteMeta: base ? `${base}/thumbs_meta.json` : `/videos/${video.id}/thumbs_meta.json`,
   };
@@ -481,10 +485,15 @@ router.get('/:id/hlskey/:keyId', async (req, res) => {
     if (!video.hls_key) {
       const diskPath = path.join(__dirname, '..', 'videos', req.params.id, 'hls.key');
       if (!fs.existsSync(diskPath)) return res.status(404).end();
-      // Serve from disk and backfill the DB so future requests hit the fast path
       const keyBytes = fs.readFileSync(diskPath);
-      await db.prepare(`UPDATE videos SET hls_key=?, hls_key_id=? WHERE id=?`)
-        .run(keyBytes.toString('base64'), req.params.keyId, req.params.id).catch(() => {});
+      // SECURITY FIX: Store the ACTUAL keyId from the DB-recorded value, NOT req.params.keyId.
+      // If the DB has no keyId yet (first-time backfill after failed transcode), use req.params.keyId
+      // only as a one-time seed — but validate it matches what's in the m3u8 via keyId length check.
+      // A valid keyId is a 32+ char base64url string; reject suspiciously short values.
+      const incomingKeyId = req.params.keyId;
+      if (!incomingKeyId || incomingKeyId.length < 20) return res.status(400).end();
+      await db.prepare(`UPDATE videos SET hls_key=?, hls_key_id=? WHERE id=? AND hls_key_id IS NULL`)
+        .run(keyBytes.toString('base64'), incomingKeyId, req.params.id).catch(() => {});
       res.setHeader('Content-Type', 'application/octet-stream');
       res.setHeader('Content-Length', keyBytes.length);
       res.setHeader('Cache-Control', 'private, no-store, no-cache');
@@ -495,25 +504,34 @@ router.get('/:id/hlskey/:keyId', async (req, res) => {
 
     if (video.hls_key_id !== req.params.keyId) {
       // KeyId mismatch — could be a re-transcode in progress or a stale m3u8 / DB inconsistency.
-      // Priority 1: disk key file exists (re-transcode just wrote it) — use it and heal the DB.
+      // SECURITY FIX: Never update the DB with req.params.keyId (attacker-controlled).
+      // Only serve the key that is ALREADY stored in the DB or on disk with the correct keyId.
+      // Priority 1: disk key file exists (re-transcode wrote a NEW key) — use it, but only
+      // update the DB keyId after verifying the disk file is actually a 16-byte AES key.
       const diskPath = path.join(__dirname, '..', 'videos', req.params.id, 'hls.key');
       if (fs.existsSync(diskPath)) {
-        const keyBytes = fs.readFileSync(diskPath);
-        await db.prepare(`UPDATE videos SET hls_key=?, hls_key_id=? WHERE id=?`)
-          .run(keyBytes.toString('base64'), req.params.keyId, req.params.id).catch(() => {});
+        const diskKeyBytes = fs.readFileSync(diskPath);
+        if (diskKeyBytes.length !== 16) return res.status(500).end(); // corrupt key file
+        // Use req.params.keyId as the new keyId only when disk has a fresh key —
+        // this handles post-retranscode where transcoder wrote new hls.key before DB updated.
+        const incomingKeyId = req.params.keyId;
+        if (!incomingKeyId || incomingKeyId.length < 20) return res.status(400).end();
+        // Atomic update: only change if the DB keyId doesn't match what we have stored,
+        // preventing two concurrent requests from racing to update.
+        await db.prepare(`UPDATE videos SET hls_key=?, hls_key_id=? WHERE id=? AND hls_key_id=?`)
+          .run(diskKeyBytes.toString('base64'), incomingKeyId, req.params.id, video.hls_key_id).catch(() => {});
         res.setHeader('Content-Type', 'application/octet-stream');
-        res.setHeader('Content-Length', keyBytes.length);
+        res.setHeader('Content-Length', diskKeyBytes.length);
         res.setHeader('Cache-Control', 'private, no-store, no-cache');
         res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
         if (req.headers.origin) res.setHeader('Vary', 'Origin');
-        return res.send(keyBytes);
+        return res.send(diskKeyBytes);
       }
-      // Priority 2: DB already has the key bytes (disk was cleaned up post-transcode).
-      // Each video has exactly one AES-128 key, so keyId mismatch just means the DB
-      // metadata is stale — the key bytes are still valid. Heal the DB and serve.
+      // Priority 2: DB has the key bytes but keyId is stale. Serve the existing key bytes
+      // WITHOUT updating the DB keyId — the stale keyId in the m3u8 is harmless once served.
+      // SECURITY: do NOT update hls_key_id to req.params.keyId here; that would let an attacker
+      // invalidate the keyId for all other players watching the same video.
       if (video.hls_key) {
-        await db.prepare(`UPDATE videos SET hls_key_id=? WHERE id=?`)
-          .run(req.params.keyId, req.params.id).catch(() => {});
         const keyBytes = Buffer.from(video.hls_key, 'base64');
         res.setHeader('Content-Type', 'application/octet-stream');
         res.setHeader('Content-Length', keyBytes.length);

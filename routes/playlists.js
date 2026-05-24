@@ -172,7 +172,15 @@ router.get('/:id/videos', ws, async (req, res) => {
       JOIN videos v ON v.id = pv.video_id
       WHERE pv.playlist_id = ? ORDER BY pv.position ASC
     `).all(req.params.id);
-    res.json(videos);
+    // Compute thumbnailUrl for each video (same logic as routes/videos.js playbackUrls)
+    const mapped = videos.map(v => {
+      const base = v.hls_cdn_url ? v.hls_cdn_url.replace(/\/master\.m3u8$/i, '') : null;
+      return {
+        ...v,
+        thumbnailUrl: v.thumbnail_url || (base ? `${base}/thumb.jpg` : `/videos/${v.id}/thumb.jpg`),
+      };
+    });
+    res.json(mapped);
   } catch (err) {
     logger.error({ err }, 'list playlist videos failed');
     res.status(500).json({ error: 'Internal server error' });

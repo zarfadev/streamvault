@@ -513,6 +513,16 @@ async function createSchema(pool) {
   await pool.query(`ALTER TABLE videos ADD COLUMN IF NOT EXISTS source_file TEXT`);
   await pool.query(`ALTER TABLE videos ADD COLUMN IF NOT EXISTS qualities_expected INTEGER DEFAULT NULL`);
 
+  // ── Early thumbnail CDN URL ────────────────────────────────────
+  // Set as soon as thumbnail is generated (before full S3 upload) so the UI
+  // can show a thumbnail during transcoding even in S3/multi-container mode.
+  await pool.query(`ALTER TABLE videos ADD COLUMN IF NOT EXISTS thumbnail_url TEXT DEFAULT NULL`);
+
+  // ── Security: password change timestamp ────────────────────────
+  // Used by middleware/auth.js to invalidate JWTs issued before a password reset.
+  // A JWT whose iat < password_changed_at is rejected immediately (no need to wait for expiry).
+  await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_changed_at BIGINT DEFAULT NULL`);
+
   // ── Seed demo account (dev / SEED_DEMO_USER=1) ─────────────────
   await seedDemo(pool);
   await applySuperAdminBootstrap(pool);
