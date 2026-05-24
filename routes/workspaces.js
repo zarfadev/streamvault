@@ -203,6 +203,8 @@ router.patch('/:workspaceId', resolveWorkspace, requireRole('owner', 'admin'), a
         'ads',
         // Player security
         'adblock_detection', 'devtools_blocker',
+        // Enterprise transcoding quality selection
+        'transcodingQualities',
         // Misc
         'customCss', 'customJs', 'streamQuality', 'maxUploadSize',
       ]);
