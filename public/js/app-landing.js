@@ -470,3 +470,47 @@ function renderPlansError() {
     </div>
   `;
 }
+
+// ─── Detección de sesión activa en páginas públicas ─────────────────────────
+// Si el usuario ya está logueado, cambia los botones del nav de
+// "Iniciar sesión / Empezar gratis" a "Ir al dashboard".
+// Aplica también a todas las páginas que usen este script.
+(function applySessionState() {
+  const token = localStorage.getItem('sv_access_token')
+    || sessionStorage.getItem('sv_access_token')
+    || localStorage.getItem('sv_token');
+  if (!token) return;
+
+  // Decode JWT to check expiry (no signature verification needed here)
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return;
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const payload = JSON.parse(atob(b64.padEnd(b64.length + (4 - b64.length % 4) % 4, '=')));
+    // If expired, don't change the UI (let them log in again)
+    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return;
+  } catch { return; }
+
+  // Swap ALL "Iniciar sesión" / "Empezar gratis" CTAs to "Ir al dashboard"
+  const dashBtn = `<a href="/dashboard" class="nav-btn-primary" style="white-space:nowrap;">Ir al dashboard →</a>`;
+
+  // Desktop nav actions
+  const navActions = document.querySelector('.nav-actions');
+  if (navActions) {
+    navActions.innerHTML = dashBtn;
+  }
+
+  // Mobile drawer actions
+  const mobileActions = document.querySelector('.nav-mobile-actions');
+  if (mobileActions) {
+    mobileActions.innerHTML = `<a href="/dashboard" class="nav-btn-primary">Ir al dashboard →</a>`;
+  }
+
+  // Any CTA buttons with register links on the page
+  document.querySelectorAll(
+    '#hero-register-btn, #drawer-register-btn, #sv-save-btn, #cta-register-btn'
+  ).forEach(el => {
+    el.href = '/dashboard';
+    el.textContent = 'Ir al dashboard →';
+  });
+})();
