@@ -186,7 +186,9 @@ router.get('/subscription', authenticate, resolveWorkspace, async (req, res) => 
 router.post('/checkout', rateLimit(10, 3_600_000), authenticate, resolveWorkspace, requireRole('owner'), async (req, res) => {
   try {
     const { plan } = req.body;
-    let { provider } = req.body;
+    // Support both 'provider' (legacy) and 'gateway' (new frontend)
+    let { provider, gateway } = req.body;
+    provider = provider || gateway;
 
     if (!plan || !config.plans[plan]) {
       return res.status(400).json({ error: 'Plan inválido. Opciones: starter, pro, enterprise' });

@@ -1,0 +1,2 @@
+ERROR: Cannot connect to the Docker daemon at unix:///Users/miguel/.docker/run/docker.sock. Is the docker daemon running?
+Cannot connect to the Docker daemon at unix:///Users/miguel/.docker/run/docker.sock. Is the docker daemon running?
