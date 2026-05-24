@@ -119,16 +119,18 @@ async function saveCredentials(provider, credentials) {
     if (row?.value) allStored = JSON.parse(row.value);
   } catch {}
 
-  // Encrypt non-empty values
-  const encrypted = {};
+  // Encrypt non-empty values and MERGE with existing provider credentials
+  // (empty fields keep their existing value - don't overwrite with blank)
+  const existingProvider = allStored[provider] || {};
+  const merged = { ...existingProvider }; // start with existing encrypted values
   for (const [key, val] of Object.entries(credentials || {})) {
     if (val && val.trim()) {
-      encrypted[key] = encrypt(val.trim());
+      merged[key] = encrypt(val.trim()); // only update non-empty fields
     }
-    // If empty, don't store (will fallback to .env)
+    // If empty string, keep existing value (don't delete it)
   }
 
-  allStored[provider] = encrypted;
+  allStored[provider] = merged;
 
   // Save to DB
   const nowUnix = Math.floor(Date.now() / 1000);
