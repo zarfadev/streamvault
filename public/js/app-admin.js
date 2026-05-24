@@ -1734,6 +1734,7 @@ const PLAN_FEATURES = [
   { key: 'subtitleTracks',  label: 'Pistas de Subtítulos IA',       type: 'bool' },
   { key: 'multiAudio',      label: 'Múltiples pistas de audio',     type: 'bool' },
   { key: 'multiWorkspace',  label: 'Múltiples espacios de trabajo', type: 'bool' },
+  { key: 'customDomain',   label: 'Dominio personalizado embed',   type: 'bool' },
 ];
 
 let _plansData = null; // Datos cargados de /api/plans
