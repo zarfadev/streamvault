@@ -1199,9 +1199,15 @@ searchInput.addEventListener('input', (e) => {
 
 // Nav auth detection
 (function(){
-  const t = localStorage.getItem('sv_access_token') || localStorage.getItem('sv_token');
+  const t = localStorage.getItem('sv_access_token') || sessionStorage.getItem('sv_access_token') || localStorage.getItem('sv_token') || localStorage.getItem('sv_refresh_token') || sessionStorage.getItem('sv_refresh_token');
   if (t) {
-    document.getElementById('api-nav-dash').style.display = 'inline-flex';
+    const dash = document.getElementById('api-nav-dash');
+    if (dash) {
+      let r = '';
+      try { r = JSON.parse(localStorage.getItem('sv_user') || sessionStorage.getItem('sv_user') || '{}')?.platform_role || ''; } catch {}
+      if (r === 'super_admin') dash.href = '/admin';
+      dash.style.display = 'inline-flex';
+    }
   } else {
     document.getElementById('api-nav-login').style.display = 'inline-flex';
     document.getElementById('api-nav-register').style.display = 'inline-flex';

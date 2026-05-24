@@ -196,7 +196,7 @@ footer { text-align: center; padding: 40px; font-size: 13px; color: var(--muted)
 <script src="/js/cookie-banner.js"></script>
 <script>
 fetch('/api/settings').then(r=>r.json()).then(s=>{const n=s.siteName||'StreamVault';document.title='GDPR — Protección de Datos — '+n;document.getElementById('sv-copy').textContent='© '+new Date().getFullYear()+' '+n+'. Todos los derechos reservados.';document.querySelectorAll('[data-brand-name]').forEach(el=>{el.textContent=n;});if(s.supportEmail){document.querySelectorAll('[data-contact-email]').forEach(el=>{el.href='mailto:'+s.supportEmail;el.textContent=s.supportEmail;});}}).catch(()=>{document.getElementById('sv-copy').textContent='© '+new Date().getFullYear()+' StreamVault. Todos los derechos reservados.';});
-(function(){const t=localStorage.getItem('sv_access_token')||localStorage.getItem('sv_token');document.getElementById(t?'nav-dash':'nav-login').style.display='inline-flex';})();
+(function(){const t=localStorage.getItem('sv_access_token')||sessionStorage.getItem('sv_access_token')||localStorage.getItem('sv_token')||localStorage.getItem('sv_refresh_token')||sessionStorage.getItem('sv_refresh_token');const dash=document.getElementById('nav-dash');if(t&&dash){let r='';try{r=JSON.parse(localStorage.getItem('sv_user')||sessionStorage.getItem('sv_user')||'{}')?.platform_role||'';}catch{}if(r==='super_admin')dash.href='/admin';dash.style.display='inline-flex';}else{document.getElementById('nav-login').style.display='inline-flex';}})();
 </script>
 </body>
 </html>

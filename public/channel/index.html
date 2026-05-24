@@ -471,9 +471,16 @@ init();
 
 // Auth-aware nav
 (function(){
-  const token = localStorage.getItem('sv_access_token') || localStorage.getItem('sv_token');
-  document.getElementById('nav-dashboard').style.display = token ? '' : 'none';
-  document.getElementById('nav-login').style.display = token ? 'none' : '';
+  const token = localStorage.getItem('sv_access_token') || sessionStorage.getItem('sv_access_token') || localStorage.getItem('sv_token') || localStorage.getItem('sv_refresh_token') || sessionStorage.getItem('sv_refresh_token');
+  const dash = document.getElementById('nav-dashboard');
+  if (token && dash) {
+    let r = '';
+    try { r = JSON.parse(localStorage.getItem('sv_user') || sessionStorage.getItem('sv_user') || '{}')?.platform_role || ''; } catch {}
+    if (r === 'super_admin') dash.href = '/admin';
+    dash.style.display = '';
+  } else {
+    document.getElementById('nav-login').style.display = '';
+  }
 })();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>

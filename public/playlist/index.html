@@ -278,9 +278,16 @@ let currentIdx = 0;
 let autoplayEnabled = true;
 
 // Auth-aware nav
-const _token = localStorage.getItem('sv_access_token') || localStorage.getItem('sv_token');
-if (_token) document.getElementById('nav-dashboard').style.display = 'flex';
-else document.getElementById('nav-login').style.display = 'flex';
+(function(){
+  const _token = localStorage.getItem('sv_access_token') || sessionStorage.getItem('sv_access_token') || localStorage.getItem('sv_token') || localStorage.getItem('sv_refresh_token') || sessionStorage.getItem('sv_refresh_token');
+  const dash = document.getElementById('nav-dashboard');
+  if (_token && dash) {
+    let r = '';
+    try { r = JSON.parse(localStorage.getItem('sv_user') || sessionStorage.getItem('sv_user') || '{}')?.platform_role || ''; } catch {}
+    if (r === 'super_admin') dash.href = '/admin';
+    dash.style.display = 'flex';
+  } else { document.getElementById('nav-login').style.display = 'flex'; }
+})();
 
 // Autoplay toggle
 const autoplayToggle = document.getElementById('autoplay-toggle');

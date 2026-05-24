@@ -307,8 +307,14 @@ nav {
 
 <script>
 (function(){
-  const t = localStorage.getItem('sv_access_token') || localStorage.getItem('sv_token');
-  document.getElementById(t ? 'nav-dash' : 'nav-login').style.display = 'inline-flex';
+  const t = localStorage.getItem('sv_access_token') || sessionStorage.getItem('sv_access_token') || localStorage.getItem('sv_token') || localStorage.getItem('sv_refresh_token') || sessionStorage.getItem('sv_refresh_token');
+  const dash = document.getElementById('nav-dash');
+  if (t && dash) {
+    let r = '';
+    try { r = JSON.parse(localStorage.getItem('sv_user') || sessionStorage.getItem('sv_user') || '{}')?.platform_role || ''; } catch {}
+    if (r === 'super_admin') dash.href = '/admin';
+    dash.style.display = 'inline-flex';
+  } else { document.getElementById('nav-login').style.display = 'inline-flex'; }
 })();
 fetch('/api/settings').then(r=>r.json()).then(s=>{const n=s.siteName||'StreamVault';document.title=n+' — Estado del Sistema';document.getElementById('st-footer-year').textContent='© '+new Date().getFullYear()+' '+n;}).catch(()=>{document.getElementById('st-footer-year').textContent='© '+new Date().getFullYear()+' StreamVault';});
 

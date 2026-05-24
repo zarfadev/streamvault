@@ -178,9 +178,17 @@ fetch('/api/settings').then(r=>r.json()).then(s=>{
 <script>
 const BASE = location.origin;
 const videoId = location.pathname.match(/\/download\/([^/?#]+)/)?.[1];
-const token = localStorage.getItem('sv_access_token') || localStorage.getItem('sv_token');
-if (token) document.getElementById('nav-dash').style.display = 'inline-flex';
-else document.getElementById('nav-login').style.display = 'inline-flex';
+const token = localStorage.getItem('sv_access_token') || sessionStorage.getItem('sv_access_token') || localStorage.getItem('sv_token');
+(function(){
+  const _navToken = token || localStorage.getItem('sv_refresh_token') || sessionStorage.getItem('sv_refresh_token');
+  const dash = document.getElementById('nav-dash');
+  if (_navToken && dash) {
+    let r = '';
+    try { r = JSON.parse(localStorage.getItem('sv_user') || sessionStorage.getItem('sv_user') || '{}')?.platform_role || ''; } catch {}
+    if (r === 'super_admin') dash.href = '/admin';
+    dash.style.display = 'inline-flex';
+  } else { document.getElementById('nav-login').style.display = 'inline-flex'; }
+})();
 
 /* ── Helpers ── */
 const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -265,11 +273,11 @@ async function init(){
 
       <!-- Hero: thumbnail + info -->
       <div class="video-hero fade-in">
-        <div class="hero-bg" style="background-image:url('${BASE}/videos/${videoId}/thumb.jpg')"></div>
+        <div class="hero-bg" style="background-image:url('${v.thumbnailUrl||`${BASE}/videos/${videoId}/thumb.jpg`}')"></div>
         <div class="hero-bg-overlay"></div>
         <div class="hero-thumb">
           <a href="/watch/${videoId}" class="hero-thumb-link" target="_blank">
-            <img src="${BASE}/videos/${videoId}/thumb.jpg" alt="${esc(v.title)}" onerror="this.style.opacity='.15'">
+            <img src="${v.thumbnailUrl||`${BASE}/videos/${videoId}/thumb.jpg`}" alt="${esc(v.title)}" onerror="this.style.opacity='.15'">
             <div class="hero-thumb-overlay">
               <div class="hero-play-circle">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="white" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg>

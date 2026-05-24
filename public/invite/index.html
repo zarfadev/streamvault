@@ -122,7 +122,9 @@ body {
 
 <script>
 const token    = window.location.pathname.split('/').filter(Boolean).pop();
-const authToken = localStorage.getItem('sv_access_token') || localStorage.getItem('sv_token') || '';
+const authToken = localStorage.getItem('sv_access_token') || sessionStorage.getItem('sv_access_token') || localStorage.getItem('sv_token') || '';
+// Any session token (including refresh) means user is logged in
+const _hasSession = authToken || localStorage.getItem('sv_refresh_token') || sessionStorage.getItem('sv_refresh_token') || '';
 
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
@@ -153,7 +155,7 @@ async function init() {
   }
 
   // Show login prompt if not authenticated
-  if (!authToken) {
+  if (!_hasSession) {
     const redirectUrl = encodeURIComponent(window.location.pathname);
     document.getElementById('login-link').href = `/login?redirect=${redirectUrl}`;
     document.getElementById('login-prompt').style.display = 'block';
