@@ -1380,6 +1380,7 @@ nav {
 <footer class="sv-footer">
   <a href="/" style="font-family:var(--mono);font-weight:700;color:var(--accent2);font-size:14px;">Stream<span style="color:var(--muted);font-weight:400;">Vault</span></a>
   <div style="display:flex;gap:16px;flex-wrap:wrap;">
+    <a href="/referidos">Referidos</a>
     <a href="/privacy">Privacidad</a>
     <a href="/terms">Términos</a>
     <a href="/cookies">Cookies</a>
@@ -1387,7 +1388,7 @@ nav {
     <a href="/status">Estado</a>
     <a href="/api-docs">API</a>
   </div>
-  <span id="st-footer-year">© 2026 StreamVault</span>
+  <span id="st-footer-year">© 2026 StreamVault · <a href="https://myscreators.com" target="_blank" rel="noopener" style="color:var(--muted);">Una marca de M&amp;S Creators S.A.S.</a></span>
 </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"
@@ -1408,9 +1409,9 @@ fetch('/api/settings').then(r=>r.json()).then(s=>{
   document.querySelector('meta[property="og:title"]')?.setAttribute('content', n + ' — Video Streaming Profesional');
   document.querySelector('meta[property="og:url"]')?.setAttribute('content', location.href);
   document.querySelector('meta[property="og:image"]')?.setAttribute('content', location.origin + '/og.png');
-  document.getElementById('st-footer-year').textContent = '© ' + new Date().getFullYear() + ' ' + n;
+  document.getElementById('st-footer-year').innerHTML = '© ' + new Date().getFullYear() + ' ' + n + ' · <a href="https://myscreators.com" target="_blank" rel="noopener" style="color:var(--muted);">Una marca de M&amp;S Creators S.A.S.</a>';
   document.querySelectorAll('[data-brand-name]').forEach(el => { el.textContent = n; });
-}).catch(() => { document.getElementById('st-footer-year').textContent = '© ' + new Date().getFullYear() + ' StreamVault'; });
+}).catch(() => { document.getElementById('st-footer-year').innerHTML = '© ' + new Date().getFullYear() + ' StreamVault · <a href="https://myscreators.com" target="_blank" rel="noopener" style="color:var(--muted);">Una marca de M&amp;S Creators S.A.S.</a>'; });
 
 // ─── Enable smooth scroll only for anchor clicks, not page loads ────────────
 document.addEventListener('click', function(e) {

@@ -295,6 +295,7 @@ nav {
 <footer class="sv-footer">
   <a href="/" style="font-family:var(--mono);font-weight:700;color:var(--accent2);font-size:14px;">Stream<span style="color:var(--muted);font-weight:400;">Vault</span></a>
   <div style="display:flex;gap:16px;flex-wrap:wrap;">
+    <a href="/referidos">Referidos</a>
     <a href="/privacy">Privacidad</a>
     <a href="/terms">Términos</a>
     <a href="/cookies">Cookies</a>
@@ -302,7 +303,7 @@ nav {
     <a href="/status">Estado</a>
     <a href="/api-docs">API</a>
   </div>
-  <span id="st-footer-year">© 2026 StreamVault</span>
+  <span id="st-footer-year">© 2026 StreamVault · <a href="https://myscreators.com" target="_blank" rel="noopener" style="color:var(--muted);">Una marca de M&amp;S Creators S.A.S.</a></span>
 </footer>
 
 <script>
@@ -316,7 +317,7 @@ nav {
     dash.style.display = 'inline-flex';
   } else { document.getElementById('nav-login').style.display = 'inline-flex'; }
 })();
-fetch('/api/settings').then(r=>r.json()).then(s=>{const n=s.siteName||'StreamVault';document.title=n+' — Estado del Sistema';document.getElementById('st-footer-year').textContent='© '+new Date().getFullYear()+' '+n;}).catch(()=>{document.getElementById('st-footer-year').textContent='© '+new Date().getFullYear()+' StreamVault';});
+fetch('/api/settings').then(r=>r.json()).then(s=>{const n=s.siteName||'StreamVault';document.title=n+' — Estado del Sistema';document.getElementById('st-footer-year').innerHTML='© '+new Date().getFullYear()+' '+n+' · <a href="https://myscreators.com" target="_blank" rel="noopener" style="color:var(--muted);">Una marca de M&amp;S Creators S.A.S.</a>';}).catch(()=>{document.getElementById('st-footer-year').innerHTML='© '+new Date().getFullYear()+' StreamVault · <a href="https://myscreators.com" target="_blank" rel="noopener" style="color:var(--muted);">Una marca de M&amp;S Creators S.A.S.</a>';});
 
 let countdownVal = 30;
 let countdownTimer = null;

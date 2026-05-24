@@ -134,11 +134,21 @@ footer { text-align: center; padding: 40px; font-size: 13px; color: var(--muted)
   <p style="font-size:13px;"><a href="/privacy">Política de Privacidad</a> · <a href="/cookies">Política de Cookies</a> · <a href="/gdpr">GDPR</a> · <a href="mailto:legal@streamvault.link" data-contact-email>legal@streamvault.link</a></p>
 </div>
 
-<footer id="sv-copy">© 2026 StreamVault. Todos los derechos reservados.</footer>
+<footer style="text-align:center;padding:28px 40px 36px;font-size:13px;color:var(--muted);border-top:1px solid var(--border);margin-top:auto;">
+  <div style="margin-bottom:12px;display:flex;gap:14px;justify-content:center;flex-wrap:wrap;">
+    <a href="/referidos" style="color:var(--muted);">Referidos</a>
+    <a href="/privacy" style="color:var(--muted);">Privacidad</a>
+    <a href="/terms" style="color:var(--muted);">Términos</a>
+    <a href="/cookies" style="color:var(--muted);">Cookies</a>
+    <a href="/gdpr" style="color:var(--muted);">GDPR</a>
+    <a href="/status" style="color:var(--muted);">Estado</a>
+  </div>
+  <p id="sv-copy">© 2026 StreamVault · <a href="https://myscreators.com" target="_blank" rel="noopener" style="color:var(--muted);">Una marca de M&amp;S Creators S.A.S.</a></p>
+</footer>
 
 <script src="/js/cookie-banner.js"></script>
 <script>
-fetch('/api/settings').then(r=>r.json()).then(s=>{const n=s.siteName||'StreamVault';document.title=(document.title.includes('Términos')?'Términos de Uso — ':'Política de Privacidad — ')+n;document.getElementById('sv-copy').textContent='© '+new Date().getFullYear()+' '+n+'. Todos los derechos reservados.';document.querySelectorAll('[data-brand-name]').forEach(el=>{el.textContent=n;});if(s.supportEmail){document.querySelectorAll('[data-contact-email]').forEach(el=>{el.href='mailto:'+s.supportEmail;el.textContent=s.supportEmail;});}}).catch(()=>{document.getElementById('sv-copy').textContent='© '+new Date().getFullYear()+' StreamVault. Todos los derechos reservados.';});
+fetch('/api/settings').then(r=>r.json()).then(s=>{const n=s.siteName||'StreamVault';document.title=(document.title.includes('Términos')?'Términos de Uso — ':'Política de Privacidad — ')+n;document.getElementById('sv-copy').innerHTML='© '+new Date().getFullYear()+' '+n+' &middot; <a href="https://myscreators.com" target="_blank" rel="noopener" style="color:var(--muted);">Una marca de M&amp;S Creators S.A.S.</a>';document.querySelectorAll('[data-brand-name]').forEach(el=>{el.textContent=n;});if(s.supportEmail){document.querySelectorAll('[data-contact-email]').forEach(el=>{el.href='mailto:'+s.supportEmail;el.textContent=s.supportEmail;});}}).catch(()=>{document.getElementById('sv-copy').innerHTML='© '+new Date().getFullYear()+' StreamVault &middot; <a href="https://myscreators.com" target="_blank" rel="noopener" style="color:var(--muted);">Una marca de M&amp;S Creators S.A.S.</a>';});
 (function(){const t=localStorage.getItem('sv_access_token')||sessionStorage.getItem('sv_access_token')||localStorage.getItem('sv_token')||localStorage.getItem('sv_refresh_token')||sessionStorage.getItem('sv_refresh_token');const dash=document.getElementById('nav-dash');if(t&&dash){let r='';try{r=JSON.parse(localStorage.getItem('sv_user')||sessionStorage.getItem('sv_user')||'{}')?.platform_role||'';}catch{}if(r==='super_admin')dash.href='/admin';dash.style.display='inline-flex';}else{document.getElementById('nav-login').style.display='inline-flex';}})();
 </script>
 </body>
