@@ -185,6 +185,14 @@ router.get('/', async (req, res) => {
     const folderFilter = req.query.folder_id; // 'none' = no folder, uuid = specific folder
     const tagFilter = req.query.tag ? String(req.query.tag).slice(0, 50).trim().toLowerCase() : null;
 
+    // SECURITY: authenticated users MUST supply X-Workspace-Id.
+    // Without it, req.workspace is null and the fallback path exposes all
+    // public videos from every workspace — a multi-tenancy leak.
+    // Unauthenticated requests (watch page, embed) legitimately hit the public path.
+    if (req.user && !req.workspace) {
+      return res.status(400).json({ error: 'X-Workspace-Id header required for authenticated requests' });
+    }
+
     let videos;
     if (req.workspace) {
       const clauses = ['workspace_id = ?'];

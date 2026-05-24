@@ -88,7 +88,13 @@
     }
 
     function authHeaders() {
-      return authToken ? { 'Authorization': `Bearer ${authToken}`, 'x-workspace-id': authWorkspace?.id || '' } : {};
+      if (!authToken) return {};
+      const headers = { 'Authorization': `Bearer ${authToken}` };
+      // Only set workspace header when it's a valid non-empty string — an empty
+      // string is falsy on the server and causes the public-feed path to activate,
+      // exposing all public videos from every workspace (multi-tenancy leak).
+      if (authWorkspace?.id) headers['x-workspace-id'] = authWorkspace.id;
+      return headers;
     }
 
     let refreshInFlight = null;
@@ -2771,6 +2777,9 @@ function doLogout() {
     let loadVideosInProgress = false;
     
     async function loadVideos(page = 1) {
+      // Never fetch videos without a workspace — the API would return all public
+      // videos from every workspace (multi-tenancy leak).
+      if (!authWorkspace?.id) return;
       if (loadVideosInProgress) return;
       loadVideosInProgress = true;
       try {
