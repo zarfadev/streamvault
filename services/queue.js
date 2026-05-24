@@ -322,8 +322,7 @@ async function startWorker(concurrency = 2) {
     if (job.attemptsMade >= (job.opts?.attempts || 3)) {
       const db   = require('../db');
       const fs   = require('fs');
-      const s3Storage = require('./s3Storage');
-      const { videoId, inputPath, s3SourceKey } = job.data || {};
+      const { videoId, inputPath, s3SourceKey, title } = job.data || {};
       if (videoId) {
         // Delete local upload file if it still exists (no s3SourceKey = local mode)
         // S3 source is kept so the user can trigger a manual retry from the dashboard.
@@ -334,6 +333,26 @@ async function startWorker(concurrency = 2) {
           `UPDATE videos SET status='error', transcoding_pct=NULL, updated_at=FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT WHERE id=?`
         ).run(videoId).catch(e => logger.error({ e: e.message, videoId }, 'Failed to mark video as error'));
         logger.info({ videoId }, 'Marked video as error after all retries exhausted');
+
+        // Notify the workspace owner by email
+        try {
+          const { sendTranscodeError } = require('./email');
+          const videoRow = await db.prepare(
+            `SELECT v.title, w.owner_id FROM videos v
+             LEFT JOIN workspaces w ON w.id = v.workspace_id
+             WHERE v.id = ?`
+          ).get(videoId);
+          const videoTitle = videoRow?.title || title || 'Sin título';
+          if (videoRow?.owner_id) {
+            const owner = await db.prepare(`SELECT email FROM users WHERE id = ?`).get(videoRow.owner_id);
+            if (owner?.email) {
+              await sendTranscodeError(owner.email, videoTitle);
+              logger.info({ videoId, email: owner.email }, 'Transcode failure email sent');
+            }
+          }
+        } catch (emailErr) {
+          logger.warn({ err: emailErr.message, videoId }, 'Failed to send transcode failure email');
+        }
       }
     }
   });

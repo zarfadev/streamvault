@@ -295,6 +295,56 @@ async function main() {
   cleanupAuditLog();
   setInterval(cleanupAuditLog, 24 * 60 * 60 * 1000); // every 24 hours
 
+  // ── Video expiry enforcement — runs every 5 min ──────────────────────────
+  // Marks videos as 'expired' when their expires_at timestamp has passed.
+  // This is separate from the anonymous cleanup (which deletes them outright).
+  async function enforceVideoExpiry() {
+    if (_shuttingDown) return;
+    try {
+      const result = await db.pool.query(
+        `UPDATE videos
+         SET status = 'expired', updated_at = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT
+         WHERE status IN ('ready', 'scheduled')
+           AND expires_at IS NOT NULL
+           AND expires_at <= FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT
+         RETURNING id, title`
+      );
+      if (result.rows.length > 0) {
+        logger.info({ expired: result.rows.map(r => r.id) }, `Marked ${result.rows.length} video(s) as expired`);
+      }
+    } catch (e) {
+      logger.error({ err: e.message }, 'Video expiry enforcement failed');
+    }
+  }
+  enforceVideoExpiry();
+  setInterval(enforceVideoExpiry, 5 * 60 * 1000); // every 5 minutes
+
+  // ── Storage counter reconciliation — runs every 6 hours ──────────────────
+  // Recalculates storage_used_bytes from actual video sizes to fix drift
+  // caused by crashes mid-upload or out-of-band file changes.
+  async function reconcileStorage() {
+    if (_shuttingDown) return;
+    try {
+      const result = await db.pool.query(
+        `UPDATE workspaces w
+         SET storage_used_bytes = COALESCE((
+           SELECT SUM(COALESCE(size, 0))
+           FROM videos
+           WHERE workspace_id = w.id
+             AND status NOT IN ('deleted', 'expired')
+         ), 0)
+         WHERE w.id IS NOT NULL
+         RETURNING id`
+      );
+      if (result.rows.length > 0) {
+        logger.info({ workspaces: result.rows.length }, 'Storage counter reconciliation complete');
+      }
+    } catch (e) {
+      logger.error({ err: e.message }, 'Storage reconciliation failed');
+    }
+  }
+  setInterval(reconcileStorage, 6 * 60 * 60 * 1000); // every 6 hours
+
   // ── Stuck video watchdog — runs every 30 min ──────────────────────────────
   // If a video stays in 'transcoding' or 'downloading' for > 2 hours the
   // worker likely crashed mid-job without updating the DB. Mark as error so

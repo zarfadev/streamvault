@@ -3,13 +3,17 @@ const BASE = location.origin;
 const _vidMatch = location.pathname.match(/\/watch\/([^/?#]+)/);
 const videoId = _vidMatch ? _vidMatch[1] : null;
 
-// Check for active session in either localStorage (remember-me ON) or sessionStorage
-// (remember-me OFF same tab), plus the refresh token which is always stored in
-// localStorage so cross-tab navigation correctly detects the session.
-const _token = localStorage.getItem('sv_access_token') || sessionStorage.getItem('sv_access_token')
-             || localStorage.getItem('sv_token')
-             || localStorage.getItem('sv_refresh_token') || sessionStorage.getItem('sv_refresh_token');
-if (_token) document.getElementById('nav-dashboard').style.display = 'flex';
+// For API auth: only use access tokens (signed with jwtSecret).
+// Refresh tokens are signed with a different secret and will be rejected by authenticate middleware.
+const _accessToken = localStorage.getItem('sv_access_token') || sessionStorage.getItem('sv_access_token')
+                   || localStorage.getItem('sv_token');
+
+// For nav display: also check refresh token in localStorage (always stored there for cross-tab detection,
+// even when remember-me=OFF). Presence means user has an active session in another tab.
+const _hasSession = !!(_accessToken
+                   || localStorage.getItem('sv_refresh_token')
+                   || sessionStorage.getItem('sv_refresh_token'));
+if (_hasSession) document.getElementById('nav-dashboard').style.display = 'flex';
 else document.getElementById('nav-login').style.display = 'flex';
 
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -97,7 +101,7 @@ async function init(){
   try{
     const unlock=sessionStorage.getItem(`sv_unlock_${videoId}`);
     const qs=unlock?`?unlock=${unlock}`:'';
-    const headers=_token?{'Authorization':'Bearer '+_token}:{};
+    const headers=_accessToken?{'Authorization':'Bearer '+_accessToken}:{};
     const r=await fetch(`${BASE}/api/videos/${videoId}${qs}`,{headers});
     if(!r.ok){
       const err=await r.json().catch(()=>({}));
@@ -115,14 +119,15 @@ async function init(){
     const v=await r.json();
     document.title=`${v.title} — ${window._svSiteName||'StreamVault'}`;
 
-    // Load related videos in background
+    // Load related videos — scoped to same workspace so cross-tenant content never leaks.
+    // Pass X-Workspace-Id so the API filters by workspace; public videos only (no auth).
     let related=[];
     if(v.workspace_id){
       try{
-        const rr=await fetch(`${BASE}/api/videos?limit=10`);
+        const rr=await fetch(`${BASE}/api/videos?limit=10`,{headers:{'X-Workspace-Id':v.workspace_id}});
         if(rr.ok){
           const rd=await rr.json();
-          related=(rd.videos||[]).filter(rv=>rv.id!==videoId&&rv.status==='ready').slice(0,7);
+          related=(rd.videos||[]).filter(rv=>rv.id!==videoId&&rv.status==='ready'&&(rv.visibility==='public'||!rv.visibility)).slice(0,7);
         }
       }catch{}
     }
