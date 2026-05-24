@@ -8,6 +8,7 @@ const config    = require('./config');
 const database  = require('./db');
 const logger    = require('./services/logger').child({ module: 'server' });
 const rateLimit = require('./middleware/rateLimit');
+const s3        = require('./services/s3Storage');
 
 // ─── Advanced Security Modules ────────────────────────────────
 const advancedRateLimit = require('./middleware/advancedRateLimit');
@@ -152,8 +153,8 @@ app.use(['/embed', '/embed-playlist', '/player', '/playlist', '/view'], (req, re
 // Raw body parser for Stripe webhooks (must be before express.json)
 app.use('/api/billing/webhooks', express.raw({ type: 'application/json' }));
 
-// JSON body parser — limit to 1MB for API endpoints (10MB was excessive and enables DoS)
-app.use(express.json({ limit: '10mb' }));
+// JSON body parser — limit to 1MB for API endpoints (prevents DoS via large payloads)
+app.use(express.json({ limit: '1mb' }));
 // URL-encoded body (for forms)
 app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 
@@ -162,7 +163,13 @@ app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 // /metrics/stream is exempt here — it uses a short-lived SSE token validated inside the handler.
 const authMiddleware = require('./middleware/auth');
 const { errorHandler } = require('./middleware/errorHandler');
-app.use('/api/admin', (req, res, next) => {
+
+// Admin-specific rate limiter: 60 req/min per IP.
+// Much tighter than the global 500 req/min — admin endpoints are sensitive
+// and should never be hit by automation or brute-force scanners.
+const adminRateLimit = rateLimit(60, 60_000);
+
+app.use('/api/admin', adminRateLimit, (req, res, next) => {
   if (req.path === '/metrics/stream') return next();
   authMiddleware.superAdminAuth(req, res, next);
 });
@@ -557,7 +564,41 @@ app.get('/api/videos/:id/credits', async (req, res) => {
 });
 
 app.use('/api/videos', require('./routes/videos'));
-app.use('/api/upload', rateLimit(10, 60_000), upload.single('video'), require('./routes/upload'));
+// ─── Pre-upload quota check — runs BEFORE multer writes any bytes to disk ────
+// Without this, a user could fill the server's disk with a 10 GB file even if
+// their workspace quota is 100 MB. Content-Length is not 100% reliable (clients
+// can lie or omit it), but it catches the majority of over-quota attempts cheaply.
+async function preUploadQuotaCheck(req, res, next) {
+  // Only check authenticated uploads with a workspace
+  if (!req.user || !req.headers['x-workspace-id']) return next();
+
+  const contentLength = parseInt(req.headers['content-length'] || '0', 10);
+  if (!contentLength || isNaN(contentLength) || contentLength <= 0) return next();
+
+  try {
+    const ws = await database.prepare(
+      `SELECT max_storage_bytes, storage_used_bytes FROM workspaces WHERE id = ? LIMIT 1`
+    ).get(req.headers['x-workspace-id']);
+
+    if (!ws) return next(); // workspace will be validated later by resolveWorkspace
+
+    const maxBytes = Number(ws.max_storage_bytes) || 0;
+    if (maxBytes <= 0) return next(); // unlimited or not configured
+
+    const usedBytes = Number(ws.storage_used_bytes) || 0;
+    if (usedBytes + contentLength > maxBytes) {
+      const maxGB = (maxBytes / 1e9).toFixed(1);
+      return res.status(403).json({
+        error: `Storage limit reached (${maxGB} GB). Upgrade your plan for more storage.`,
+        code: 'LIMIT_STORAGE',
+      });
+    }
+  } catch { /* ignore — real check happens after multer */ }
+
+  next();
+}
+
+app.use('/api/upload', rateLimit(10, 60_000), preUploadQuotaCheck, upload.single('video'), require('./routes/upload'));
 // /api/admin is already protected by superAdminAuth middleware registered above
 app.use('/api/admin', require('./routes/admin'));
 

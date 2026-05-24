@@ -115,11 +115,20 @@ async function authenticate(req, res, next) {
     }
 
     const user = await db.prepare(
-      `SELECT id, email, name, channel_name, username, avatar_url, created_at, COALESCE(platform_role, 'user') as platform_role FROM users WHERE id = ?`
+      `SELECT id, email, name, channel_name, username, avatar_url, created_at, password_changed_at, COALESCE(platform_role, 'user') as platform_role FROM users WHERE id = ?`
     ).get(decoded.userId);
     if (!user) {
       return res.status(401).json({ error: 'User not found' });
     }
+
+    // ── Password-change invalidation ─────────────────────────────────────────
+    // If the user changed/reset their password after this token was issued,
+    // reject it so stolen tokens become useless immediately after a reset.
+    // decoded.iat is seconds since epoch (set by jsonwebtoken automatically).
+    if (user.password_changed_at && decoded.iat && decoded.iat < user.password_changed_at) {
+      return res.status(401).json({ error: 'Token invalidated by password change. Please log in again.', code: 'PASSWORD_CHANGED' });
+    }
+
     req.user = user;
     req.tokenJti = decoded.jti || null; // Store jti for potential revocation on logout
     next();

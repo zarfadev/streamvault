@@ -44,6 +44,22 @@ if (hideCtrl) {
   document.getElementById('player-wrap').classList.add('controls-hidden');
 }
 
+// ─── Safe postMessage helper ──────────────────────────────────
+// Sends events only to the embedding page's origin.
+// Uses document.referrer as the target origin when available,
+// falling back to '*' only when the referrer is unknown (e.g. same-origin embeds).
+// This prevents leaking playback state (position, videoId) to hostile pages.
+function _pmSend(msg) {
+  if (window === window.parent) return; // not in iframe
+  try {
+    let targetOrigin = '*';
+    if (document.referrer) {
+      try { targetOrigin = new URL(document.referrer).origin; } catch { targetOrigin = '*'; }
+    }
+    window.parent.postMessage(msg, targetOrigin);
+  } catch {}
+}
+
 // ─── State ─────────────────────────────────────────────────────
 let hls           = null;
 let levels        = [];
@@ -596,7 +612,7 @@ video.addEventListener('play', () => {
     fetch(`${BASE}/api/videos/${videoId}/views`, { method: 'POST' }).catch(() => {});
   }
   trackEvent('play');
-  try { if (window !== window.parent) window.parent.postMessage({ type: 'sv:play', videoId, currentTime: video.currentTime }, '*'); } catch {}
+  _pmSend({ type: 'sv:play', videoId, currentTime: video.currentTime });
 });
 video.addEventListener('pause', () => {
   updatePlayIcon(false);
@@ -605,14 +621,12 @@ video.addEventListener('pause', () => {
     trackEvent('pause');
     if (video.currentTime > 5) saveProgress(Math.floor(video.currentTime));
   }
-  try { if (window !== window.parent) window.parent.postMessage({ type: 'sv:pause', videoId, currentTime: video.currentTime }, '*'); } catch {}
+  _pmSend({ type: 'sv:pause', videoId, currentTime: video.currentTime });
 });
 video.addEventListener('ended', () => {
   freezePlayerChromeVisible();
   trackEvent('end');
-  try {
-    if (window !== window.parent) window.parent.postMessage({ type: 'sv:ended', videoId }, '*');
-  } catch {}
+  _pmSend({ type: 'sv:ended', videoId });
 });
 video.addEventListener('seeked',  () => { trackEvent('seek'); if (video.currentTime > 5) saveProgress(Math.floor(video.currentTime)); });
 window.addEventListener('pagehide', () => { if (video.currentTime > 5) saveProgress(Math.floor(video.currentTime)); });
@@ -638,7 +652,7 @@ video.addEventListener('timeupdate', () => {
   // Emit sv:timeupdate to parent once per second (not every animation frame)
   if (pos !== _pmLastTimeSent) {
     _pmLastTimeSent = pos;
-    try { if (window !== window.parent) window.parent.postMessage({ type: 'sv:timeupdate', videoId, currentTime: video.currentTime, duration: video.duration || 0 }, '*'); } catch {}
+    _pmSend({ type: 'sv:timeupdate', videoId, currentTime: video.currentTime, duration: video.duration || 0 });
   }
   // Skip intro button
   if (_introEnd > 0) {
@@ -1809,7 +1823,28 @@ function _showBanner(adsCfg) {
   banner.style.cssText = `position:absolute;${pos === 'top' ? 'top:0' : 'bottom:52px'};left:0;right:0;z-index:30;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:space-between;padding:8px 12px;gap:10px;`;
   const content = document.createElement('div');
   content.style.cssText = 'flex:1;font-size:13px;color:#fff;';
-  content.innerHTML = adsCfg.bannerHtml;
+  // SECURITY: sanitizar bannerHtml antes de inyectarlo al DOM.
+  // Un workspace comprometido podría enviar HTML con <script> o manejadores inline.
+  (function setBannerSafe(html, el) {
+    try {
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      doc.querySelectorAll('script,iframe,object,embed,form,meta,link').forEach(n => n.remove());
+      doc.querySelectorAll('*').forEach(node => {
+        for (const attr of [...node.attributes]) {
+          if (/^on/i.test(attr.name) || (attr.name === 'href' && /^javascript:/i.test(attr.value.trim()))) {
+            node.removeAttribute(attr.name);
+          }
+        }
+      });
+      const frag = document.createDocumentFragment();
+      for (const child of doc.body.childNodes) {
+        frag.appendChild(document.importNode(child, true));
+      }
+      el.appendChild(frag);
+    } catch (_) {
+      el.textContent = html;
+    }
+  })(adsCfg.bannerHtml, content);
   const closeBtn = document.createElement('button');
   closeBtn.textContent = '×';
   closeBtn.style.cssText = 'background:none;border:none;color:rgba(255,255,255,.6);font-size:18px;cursor:pointer;padding:0 4px;flex-shrink:0;';

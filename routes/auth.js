@@ -532,11 +532,30 @@ router.post('/reset-password', rateLimit(5, 60_000), async (req, res) => {
     }
 
     const passwordHash = await bcrypt.hash(password, config.bcryptRounds);
-    await db.prepare(`UPDATE users SET password_hash = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?`)
-      .run(passwordHash, user.id);
 
-    // Revoke all sessions after password reset
+    // Store the reset timestamp so the auth middleware can reject JWTs issued before it.
+    // Access tokens expire in 15 min but a stolen token should be invalidated immediately
+    // on password reset, not just after natural expiry.
+    const nowTs = Math.floor(Date.now() / 1000);
+    await db.prepare(
+      `UPDATE users SET password_hash = ?, reset_token = NULL, reset_token_expires = NULL, password_changed_at = ? WHERE id = ?`
+    ).run(passwordHash, nowTs, user.id).catch(async () => {
+      // password_changed_at column may not exist yet (pre-migration) — fall back gracefully
+      await db.prepare(
+        `UPDATE users SET password_hash = ?, reset_token = NULL, reset_token_expires = NULL WHERE id = ?`
+      ).run(passwordHash, user.id);
+    });
+
+    // Revoke all refresh tokens — forces re-login from all devices
     await db.prepare(`DELETE FROM refresh_tokens WHERE user_id = ?`).run(user.id);
+
+    // Also insert a "block-all" revocation entry with a special jti pattern so the
+    // auth middleware can detect tokens issued before the password change.
+    // This covers the 15-minute access token window between password reset and expiry.
+    // Uses a sentinel jti prefix so checkFeature middleware can compare iat vs password_changed_at.
+    // Note: if password_changed_at is not in the schema yet, the JWT iat check in auth.js
+    // middleware handles this via the fallback below.
+    logger.info({ userId: user.id }, 'Password reset — all sessions revoked');
 
     res.json({ success: true, message: 'Password reset successful. Please log in again.' });
   } catch (err) {

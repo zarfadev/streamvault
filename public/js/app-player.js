@@ -2613,9 +2613,32 @@ function _showBanner(adsCfg) {
   
   const content = document.createElement('div');
   content.style.cssText = 'flex:1;font-size:13px;color:#fff;';
-  // SECURITY: usar innerHTML solo con contenido del admin (confiable), no del usuario
-  // El bannerHtml viene de la configuración del workspace (solo el owner puede editarlo)
-  content.innerHTML = adsCfg.bannerHtml;
+  // SECURITY: bannerHtml puede contener scripts maliciosos si la cuenta del workspace
+  // es comprometida. Usamos DOMParser para extraer solo texto/enlaces seguros, rechazando
+  // etiquetas <script>, manejadores on*, y URIs javascript:.
+  (function setBannerSafe(html, el) {
+    try {
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      // Eliminar todos los scripts y elementos peligrosos
+      doc.querySelectorAll('script,iframe,object,embed,form,meta,link').forEach(n => n.remove());
+      // Eliminar atributos de eventos inline (onclick, onerror, etc.)
+      doc.querySelectorAll('*').forEach(node => {
+        for (const attr of [...node.attributes]) {
+          if (/^on/i.test(attr.name) || (attr.name === 'href' && /^javascript:/i.test(attr.value.trim()))) {
+            node.removeAttribute(attr.name);
+          }
+        }
+      });
+      // Importar el body sanitizado al documento actual
+      const frag = document.createDocumentFragment();
+      for (const child of doc.body.childNodes) {
+        frag.appendChild(document.importNode(child, true));
+      }
+      el.appendChild(frag);
+    } catch (_) {
+      el.textContent = html; // fallback ultra-seguro: texto plano
+    }
+  })(adsCfg.bannerHtml, content);
 
   const closeBtn = document.createElement('button');
   closeBtn.textContent = '×';
