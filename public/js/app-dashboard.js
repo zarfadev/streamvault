@@ -5711,24 +5711,28 @@ function doLogout() {
           if (converted) converted.textContent = refs.converted ?? 0;
           if (pending) pending.textContent = (refs.total - refs.converted) > 0 ? (refs.total - refs.converted) : 0;
 
-          // Credit balance
-          const creditBalance = refs.creditBalance ?? 0;
-          const creditBlock = document.getElementById('referral-credit-block');
-          const creditEl = document.getElementById('ref-credit-balance');
-          if (creditEl) creditEl.textContent = creditBalance;
-          if (creditBlock) {
-            // Show the credit block always (even at 0 so users know how the system works)
-            creditBlock.style.display = 'block';
-          }
-          // Disable redeem button if no credits or no paid plan
+          // Credit balance — show as dollar amount using configured credit value
+          const creditCount  = refs.creditBalance ?? 0;
+          // creditUSD is included in billingStatus once loaded; default $10
+          const creditUSD    = billingStatus?.referralCreditUSD ?? 10;
+          const totalUSD     = creditCount * creditUSD;
+          const creditBlock  = document.getElementById('referral-credit-block');
+          const creditUSDEl  = document.getElementById('ref-credit-usd');
+          const breakdownEl  = document.getElementById('ref-credit-breakdown');
+          if (creditUSDEl)  creditUSDEl.textContent  = '$' + totalUSD.toFixed(0);
+          if (breakdownEl)  breakdownEl.textContent  = creditCount > 0
+            ? `(${creditCount} × $${creditUSD} por referido)`
+            : `$${creditUSD} por cada referido que pague`;
+          if (creditBlock)  creditBlock.style.display = 'block';
+          // Disable redeem button if no credits or on starter
           const redeemBtn = document.getElementById('ref-redeem-btn');
           if (redeemBtn) {
             const hasPaidPlan = authWorkspace && authWorkspace.plan !== 'starter';
-            redeemBtn.disabled = creditBalance <= 0 || !hasPaidPlan;
-            redeemBtn.title = creditBalance <= 0
-              ? 'No tienes créditos disponibles'
+            redeemBtn.disabled = creditCount <= 0 || !hasPaidPlan;
+            redeemBtn.title = creditCount <= 0
+              ? 'Aún no tienes créditos — invita amigos'
               : !hasPaidPlan
-                ? 'Necesitas un plan de pago para canjear créditos'
+                ? 'Necesitas un plan de pago para aplicar créditos'
                 : '';
           }
         }
@@ -5737,8 +5741,9 @@ function doLogout() {
 
     async function redeemReferralCredit() {
       const btn = document.getElementById('ref-redeem-btn');
-      const btnInner = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg> Canjear mes gratis';
-      if (btn) { btn.disabled = true; btn.innerHTML = 'Canjeando...'; }
+      const btnSVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>';
+      const btnInner = btnSVG + ' Aplicar descuento';
+      if (btn) { btn.disabled = true; btn.innerHTML = 'Aplicando...'; }
       try {
         const r = await apiFetch(`${BASE}/api/billing/referrals/redeem`, {
           method: 'POST',
@@ -5746,14 +5751,14 @@ function doLogout() {
         });
         const d = await r.json();
         if (!r.ok) throw new Error(d.error || 'Error al canjear crédito');
-        toast(d.message || '¡Crédito canjeado!', 'success');
-        // Update balance in UI
-        const creditEl = document.getElementById('ref-credit-balance');
-        if (creditEl) creditEl.textContent = d.remainingCredits ?? 0;
-        if (btn) {
-          btn.innerHTML = btnInner;
-          btn.disabled = (d.remainingCredits ?? 0) <= 0;
-        }
+        toast(d.message || '¡Crédito aplicado!', 'success');
+        // Zero out the balance in UI
+        const creditUSDEl = document.getElementById('ref-credit-usd');
+        const breakdownEl = document.getElementById('ref-credit-breakdown');
+        const creditUSD   = billingStatus?.referralCreditUSD ?? 10;
+        if (creditUSDEl) creditUSDEl.textContent = '$0';
+        if (breakdownEl) breakdownEl.textContent = `$${creditUSD} por cada referido que pague`;
+        if (btn) { btn.innerHTML = btnInner; btn.disabled = true; btn.title = 'Aún no tienes créditos — invita amigos'; }
       } catch (e) {
         toast(e.message || 'Error al canjear crédito', 'error');
         if (btn) { btn.disabled = false; btn.innerHTML = btnInner; }
@@ -7133,12 +7138,12 @@ function doLogout() {
           `${maxStorage} de almacenamiento`,
           `${maxBandwidth} de ancho de banda`,
           planData.features?.subtitles ? 'Transcripciones automáticas con IA' : null,
-          planData.features?.analytics ? 'Analytics avanzados' : 'Analytics básicos',
-          planData.features?.apiAccess ? 'Acceso API completo' : null,
+          planData.features?.analytics === 'full' ? 'Analytics avanzados (geolocalización, retención)' : 'Analytics básicos',
+          planData.features?.apiAccess ? 'Acceso API + webhooks completos' : null,
+          planData.features?.customDomain ? 'Dominio personalizado' : null,
           plan === 'enterprise' ? 'Workspaces ilimitados' : plan === 'pro' ? 'Hasta 3 workspaces' : null,
           plan === 'enterprise' ? 'Miembros ilimitados' : plan === 'pro' ? '5 miembros por workspace' : null,
-          plan === 'enterprise' ? 'SLA garantizado' : null,
-          plan === 'enterprise' ? 'Soporte dedicado 24/7' : plan === 'pro' ? 'Soporte prioritario' : null,
+          plan === 'enterprise' ? 'SLA garantizado + soporte dedicado 24/7' : plan === 'pro' ? 'Soporte prioritario' : null,
           plan === 'enterprise' ? 'Onboarding personalizado' : null,
         ].filter(Boolean);
       } else {

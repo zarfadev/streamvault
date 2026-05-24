@@ -353,7 +353,39 @@ router.get('/portal', authenticate, resolveWorkspace, requireRole('owner'), asyn
 router.get('/status', authenticate, resolveWorkspace, async (req, res) => {
   try {
     const ws = req.workspace;
-    const planConfig = config.plans[ws.plan] || config.plans.starter;
+    const dynCfg = require('../services/dynamicConfig');
+
+    // ── Merge plan data: DB (admin-configured) overrides config.js defaults ──
+    // Admin panel saves to system_config via keys like 'plans.pro', 'plans.enterprise'.
+    // config.js has static defaults. DB takes precedence so admin price changes work.
+    async function getMergedPlan(key) {
+      const staticPlan = config.plans[key] || {};
+      const dbPlan = await dynCfg.getDynConfig(`plans.${key}`, null).catch(() => null);
+      if (!dbPlan || typeof dbPlan !== 'object') return staticPlan;
+      // DB plan may store features differently — normalize
+      const dbFeatures = dbPlan.features || {};
+      return {
+        ...staticPlan,
+        name:           dbPlan.name           || staticPlan.name,
+        price:          dbPlan.price          ?? staticPlan.price,
+        maxVideos:      dbPlan.maxVideos       ?? staticPlan.maxVideos,
+        maxStorageGB:   dbPlan.maxStorageGB    ?? staticPlan.maxStorageGB,
+        maxBandwidthGB: dbPlan.maxBandwidthGB  ?? staticPlan.maxBandwidthGB,
+        embed:          dbFeatures.embed       || staticPlan.embed,
+        analytics:      dbFeatures.analytics   || staticPlan.analytics,
+        subtitles:      dbFeatures.subtitles   ?? staticPlan.subtitles,
+        apiAccess:      dbFeatures.apiAccess   ?? staticPlan.apiAccess,
+        customDomain:   dbFeatures.customDomain ?? false,
+      };
+    }
+
+    const [planConfig, allMergedPlans] = await Promise.all([
+      getMergedPlan(ws.plan).then(p => p || config.plans.starter),
+      Promise.all(Object.keys(config.plans).map(async key => ({
+        key,
+        ...(await getMergedPlan(key)),
+      }))),
+    ]);
 
     let videoCount = { count: 0 };
     try {
@@ -378,6 +410,9 @@ router.get('/status', authenticate, resolveWorkspace, async (req, res) => {
     } catch (e) {
       logger.warn({ err: e.message }, 'getEnabledGateways failed');
     }
+
+    // Referral credit config: admin sets how many USD each credit is worth
+    const referralCreditUSD = await dynCfg.getDynConfig('referrals.creditUSD', 10).catch(() => 10);
 
     let metadata = {};
     try { metadata = ws.payment_metadata ? JSON.parse(ws.payment_metadata) : {}; } catch {}
@@ -411,19 +446,22 @@ router.get('/status', authenticate, resolveWorkspace, async (req, res) => {
         analytics: planConfig.analytics,
         subtitles: planConfig.subtitles,
         apiAccess: planConfig.apiAccess,
+        customDomain: planConfig.customDomain,
       },
-      availablePlans: Object.entries(config.plans).map(([key, p]) => ({
-        key,
-        name: p.name,
-        price: p.price,
-        maxVideos: p.maxVideos,
-        maxStorageGB: p.maxStorageGB,
+      referralCreditUSD,
+      availablePlans: allMergedPlans.map(p => ({
+        key:            p.key,
+        name:           p.name,
+        price:          p.price,
+        maxVideos:      p.maxVideos,
+        maxStorageGB:   p.maxStorageGB,
         maxBandwidthGB: p.maxBandwidthGB,
         features: {
-          embed: p.embed,
-          analytics: p.analytics,
-          subtitles: p.subtitles,
-          apiAccess: p.apiAccess,
+          embed:        p.embed,
+          analytics:    p.analytics,
+          subtitles:    p.subtitles,
+          apiAccess:    p.apiAccess,
+          customDomain: p.customDomain,
         },
       })),
       enabledGateways,
@@ -581,11 +619,18 @@ router.post('/webhooks', (req, res, next) => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════
-// POST /referrals/redeem — Apply 1 referral credit month to current workspace
+// POST /referrals/redeem — Redeem all referral credits as a Stripe discount
+//
+// Each "credit" = a configurable USD amount (admin sets referrals.creditUSD,
+// default $10). All accumulated credits are redeemed at once as a one-time
+// invoice credit on the next Stripe billing cycle.
+// This is profitable: if Pro=$10/mo and creditUSD=$2, referrer gets $2 off
+// their next payment ($8 revenue vs $0) instead of a full free month.
 // ══════════════════════════════════════════════════════════════════════════
 router.post('/referrals/redeem', rateLimit(5, 3_600_000), authenticate, resolveWorkspace, requireRole('owner'), async (req, res) => {
   try {
     const ws = req.workspace;
+    const dynCfg = require('../services/dynamicConfig');
 
     // Check that the current user is the workspace owner
     const ownerRow = await db.prepare(
@@ -596,69 +641,66 @@ router.post('/referrals/redeem', rateLimit(5, 3_600_000), authenticate, resolveW
       return res.status(403).json({ error: 'Solo el propietario puede canjear créditos' });
     }
 
-    const balance = Number(ownerRow.free_months_remaining ?? 0);
-    if (balance <= 0) {
+    const creditCount = Number(ownerRow.free_months_remaining ?? 0);
+    if (creditCount <= 0) {
       return res.status(400).json({ error: 'No tienes créditos de referidos disponibles' });
     }
 
-    // Must have an active paid subscription to apply a free month
     if (ws.plan === 'starter') {
-      return res.status(400).json({ error: 'Necesitas un plan de pago activo para aplicar créditos' });
+      return res.status(400).json({ error: 'Necesitas un plan de pago activo para canjear créditos' });
     }
+
+    // Credit value in USD per referral — set by admin in system_config (referrals.creditUSD)
+    const creditUSD = await dynCfg.getDynConfig('referrals.creditUSD', 10).catch(() => 10);
+    const totalCreditUSD = creditCount * Number(creditUSD);
+    const totalCreditCents = Math.round(totalCreditUSD * 100);
 
     const now = Math.floor(Date.now() / 1000);
 
-    // Decrement the credit balance
+    // Consume ALL credits at once (redeem everything)
     await db.prepare(
-      `UPDATE workspaces
-       SET free_months_remaining = free_months_remaining - 1,
-           updated_at = ?
-       WHERE id = ? AND free_months_remaining > 0`
+      `UPDATE workspaces SET free_months_remaining = 0, updated_at = ? WHERE id = ?`
     ).run(now, ws.id);
 
-    // Try to extend the subscription on Stripe by exactly 1 calendar month
-    let extended = false;
-    let newPeriodEnd = null;
+    // Apply as Stripe one-time invoice credit (balance credit = negative balance on customer)
+    let stripeApplied = false;
+    let stripeError = null;
     try {
-      if (ws.payment_provider === 'stripe' && ws.stripe_subscription_id) {
+      if (ws.stripe_customer_id) {
         const stripe = stripeService.getStripe();
         if (stripe) {
-          const sub = await stripe.subscriptions.retrieve(ws.stripe_subscription_id);
-          const currentEnd = sub.current_period_end; // Unix timestamp
-          // Add exactly 1 calendar month using JS Date arithmetic
-          const d = new Date(currentEnd * 1000);
-          d.setMonth(d.getMonth() + 1);
-          newPeriodEnd = Math.floor(d.getTime() / 1000);
-          await stripe.subscriptions.update(ws.stripe_subscription_id, {
-            trial_end: newPeriodEnd,
-            proration_behavior: 'none',
+          // Stripe customer balance: negative = credit to customer (reduces next invoice)
+          await stripe.customers.createBalanceTransaction(ws.stripe_customer_id, {
+            amount: -totalCreditCents,   // negative = credit
+            currency: 'usd',
+            description: `Crédito por ${creditCount} referido(s) — $${creditUSD} c/u`,
           });
-          extended = true;
+          stripeApplied = true;
         }
       }
     } catch (stripeErr) {
-      logger.warn({ err: stripeErr.message }, 'Could not extend Stripe subscription for referral credit — credit deducted anyway');
+      stripeError = stripeErr.message;
+      logger.warn({ err: stripeError, wsId: ws.id }, 'Could not apply Stripe balance credit — credit still deducted from counter');
     }
 
     // Invalidate workspace cache
     cache.invalidate(`sv:ws:${ws.id}`).catch(() => {});
 
-    logger.info({ userId: req.user.id, wsId: ws.id, stripeExtended: extended, newPeriodEnd }, 'Referral credit redeemed');
-
-    const nextDate = newPeriodEnd
-      ? new Date(newPeriodEnd * 1000).toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' })
-      : null;
+    logger.info({ userId: req.user.id, wsId: ws.id, creditCount, totalCreditUSD, stripeApplied }, 'Referral credits redeemed');
 
     res.json({
       success: true,
-      message: extended && nextDate
-        ? `¡Crédito aplicado! Tu plan está gratis hasta el ${nextDate}.`
-        : '¡Crédito registrado! Tu próxima renovación se ajustará automáticamente.',
-      remainingCredits: balance - 1,
+      creditCount,
+      totalCreditUSD,
+      stripeApplied,
+      message: stripeApplied
+        ? `¡$${totalCreditUSD} aplicados a tu cuenta! Se descontarán de tu próxima factura automáticamente.`
+        : `¡${creditCount} crédito(s) registrados! Contacta soporte para aplicar $${totalCreditUSD} a tu próximo pago.`,
+      remainingCredits: 0,
     });
   } catch (err) {
     logger.error({ err }, 'Referral redeem error');
-    res.status(500).json({ error: 'Error al canjear crédito' });
+    res.status(500).json({ error: 'Error al canjear créditos' });
   }
 });
 
