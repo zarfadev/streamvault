@@ -134,9 +134,19 @@ async function resolveFeature(featureName, workspace) {
   // Soportar tanto el formato canónico (apiKeysEnabled) como el legado (apiKeys)
   // para compatibilidad con datos anteriores en la DB
   const legacyKey = featureName; // nombre corto sin 'Enabled' (ej: 'apiKeys', 'webhooks')
-  const featureValue = planFeatures[canonicalKey] !== undefined
+  let featureValue = planFeatures[canonicalKey] !== undefined
     ? planFeatures[canonicalKey]
     : planFeatures[legacyKey]; // fallback al nombre corto legado
+
+  // If the feature key was never explicitly saved in the plan DB config (undefined),
+  // fall back to the hardcoded defaults so adding new features doesn't silently deny
+  // access to plans that haven't re-saved their config through the admin panel.
+  if (featureValue === undefined) {
+    const defaults = PLAN_FEATURE_DEFAULTS[planName] || {};
+    featureValue = defaults[canonicalKey] !== undefined
+      ? defaults[canonicalKey]
+      : defaults[legacyKey];
+  }
 
   const planEnabled =
     featureValue === true ||

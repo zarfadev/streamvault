@@ -1192,6 +1192,8 @@ const FEATURE_DEFS = [
     {value:'unbranded', label:'Unbranded (sin logo plataforma)'},
     {value:'custom', label:'Custom (dominio personalizado)'}
   ]},
+  { key:'customDomainEnabled',    label:'Dominio personalizado embed', desc:'Player embebido desde dominio propio (solo Enterprise)' },
+  { key:'multiWorkspaceEnabled',  label:'Multi-workspace', desc:'Crear múltiples workspaces por cuenta' },
 ];
 // Estado de features jerárquicos
 let _globalFeaturesState = {};
