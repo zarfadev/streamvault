@@ -155,7 +155,9 @@ function generateMasterPlaylist(outputDir, qualities) {
   const bitrateMap = { '360p':800000,'480p':1400000,'720p':2800000,'1080p':5000000,'1440p':10000000,'4k':20000000 };
   const resMap = { '360p':'640x360','480p':'854x480','720p':'1280x720','1080p':'1920x1080','1440p':'2560x1440','4k':'3840x2160' };
   const lines = ['#EXTM3U','#EXT-X-VERSION:3'];
-  for (const q of qualities) {
+  // Sort by bandwidth ascending per HLS spec §4.3.4.2
+  const sorted = [...qualities].sort((a, b) => (bitrateMap[a] || 0) - (bitrateMap[b] || 0));
+  for (const q of sorted) {
     lines.push(`#EXT-X-STREAM-INF:BANDWIDTH=${bitrateMap[q]},RESOLUTION=${resMap[q]},NAME="${q}"`);
     lines.push(`${q}/index.m3u8`);
   }

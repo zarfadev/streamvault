@@ -2946,8 +2946,11 @@ function doLogout() {
                         <a class="vt-icon-btn" href="${BASE}/watch/${v.id}" target="_blank" rel="noopener" title="Ver en watch page">
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
                         </a>
-                        ${isReady ? `<button class="vt-icon-btn" onclick="copyLink('${v.id}','embed')" title="Copiar embed">
+                        ${isReady ? `<button class="vt-icon-btn" onclick="copyLink('${v.id}','embed')" title="Copiar código embed (iframe)">
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                        </button>
+                        <button class="vt-icon-btn" onclick="copyLink('${v.id}','embed-url')" title="Copiar URL embed directa (sin iframe)">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
                         </button>` : ''}
                       ` : ''}
                       ${v.status === 'error' && (authWorkspace?.role === 'owner' || authWorkspace?.role === 'admin') ? `
@@ -2976,7 +2979,11 @@ function doLogout() {
                           </button>` : ''}
                           ${_cachedFeatures?.embedEnabled !== false ? `<button onclick="closeMoreMenu('lt-${v.id}');copyLink('${v.id}','embed')">
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-                            Copiar embed
+                            Copiar embed (iframe)
+                          </button>
+                          <button onclick="closeMoreMenu('lt-${v.id}');copyLink('${v.id}','embed-url')">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+                            URL embed directa
                           </button>` : ''}
                           ${_cachedFeatures?.downloadLinksEnabled !== false ? `<button onclick="closeMoreMenu('lt-${v.id}');window.open('${BASE}/download/${v.id}','_blank','noopener,noreferrer')">
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -3138,7 +3145,11 @@ function doLogout() {
                 </button>` : ''}
                 ${_cachedFeatures?.embedEnabled !== false ? `<button onclick="closeMoreMenu('${v.id}');copyLink('${v.id}','embed')">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-                  Copiar embed
+                  Copiar embed (iframe)
+                </button>
+                <button onclick="closeMoreMenu('${v.id}');copyLink('${v.id}','embed-url')">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+                  URL embed directa
                 </button>` : ''}
                 ${_cachedFeatures?.downloadLinksEnabled !== false ? `<button onclick="closeMoreMenu('${v.id}');window.open('${BASE}/download/${v.id}','_blank','noopener,noreferrer')">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -3477,26 +3488,32 @@ function doLogout() {
       window.open(`${BASE}/watch/${_previewVideoId}`, '_blank', 'noopener,noreferrer');
     }
 
-    function copyLink(id, type) {
-      const v = (allVideosCache || []).find(x => x.id === id);
-      if (type === 'embed') {
-        // Use verified custom domain if configured, otherwise fall back to platform origin
-        const src = `${getEmbedBase()}/embed/${id}`;
-        const code = `<iframe src="${src}" width="640" height="360" frameborder="0" allowfullscreen></iframe>`;
-        navigator.clipboard.writeText(code).then(() => toast('Código embed copiado'));
-        return;
-      }
-      if (type === 'short') {
-        const url = v?.short_code ? `${BASE}/v/${v.short_code}` : `${BASE}/watch/${id}`;
-        navigator.clipboard.writeText(url).then(() => toast('Short link copiado'));
-        return;
-      }
-      const m3u8 = v?.m3u8Url && (v.m3u8Url.startsWith('http') || v.m3u8Url.startsWith('//'))
-        ? v.m3u8Url
-        : `${BASE}/videos/${id}/master.m3u8`;
-      const url = type === 'm3u8' ? m3u8 : `${BASE}/watch/${id}`;
-      navigator.clipboard.writeText(url).then(() => toast(`${type === 'm3u8' ? 'HLS .m3u8' : 'Link'} copiado`));
-    }
+function copyLink(id, type) {
+  const v = (allVideosCache || []).find(x => x.id === id);
+  if (type === 'embed') {
+    // Use verified custom domain if configured, otherwise fall back to platform origin
+    const src = `${getEmbedBase()}/embed/${id}`;
+    const code = `<iframe src="${src}" width="640" height="360" frameborder="0" allowfullscreen></iframe>`;
+    navigator.clipboard.writeText(code).then(() => toast('Código embed copiado'));
+    return;
+  }
+  if (type === 'embed-url') {
+    // URL directa del embed (sin iframe) — útil para apps externas, CMS, etc.
+    const src = `${getEmbedBase()}/embed/${id}`;
+    navigator.clipboard.writeText(src).then(() => toast('URL embed copiada'));
+    return;
+  }
+  if (type === 'short') {
+    const url = v?.short_code ? `${BASE}/v/${v.short_code}` : `${BASE}/watch/${id}`;
+    navigator.clipboard.writeText(url).then(() => toast('Short link copiado'));
+    return;
+  }
+  const m3u8 = v?.m3u8Url && (v.m3u8Url.startsWith('http') || v.m3u8Url.startsWith('//'))
+    ? v.m3u8Url
+    : `${BASE}/videos/${id}/master.m3u8`;
+  const url = type === 'm3u8' ? m3u8 : `${BASE}/watch/${id}`;
+  navigator.clipboard.writeText(url).then(() => toast(`${type === 'm3u8' ? 'HLS .m3u8' : 'Link'} copiado`));
+}
 
     async function deleteVideo(id) { const title = (allVideosCache.find(x => x.id === id))?.title || 'este video';
       const ok = await confirmModal('¿Eliminar video?', `¿Estás seguro de que deseas eliminar "${title}"? Esta acción no se puede deshacer.`, 'Eliminar', 'Cancelar', true);

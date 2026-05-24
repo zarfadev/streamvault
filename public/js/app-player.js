@@ -38,6 +38,8 @@ function hlsXhrSetup(xhr, url) {
 let videoData = null, hls = null, levels = [], currentLevel = -1;
 let currentSpeed = 1, hideUiTimer = null, spriteMeta = null, spriteImg = null;
 let audioTracks = [], currentAudioTrack = -1;
+// Flag: HLS manifest parsed — quality button/settings gear only visible after this
+let _manifestReady = false;
 let settingsView = 'main'; // 'main'|'quality'|'audio'|'subtitles'|'speed'
 let ccLang = null, subtitlesList = [];
 let _progressTimer = null, lastProgressPos = -15, lastEventMs = 0;
@@ -1326,6 +1328,7 @@ function initHls(m3u8Url) {
       levels = hls.levels;
       audioTracks = hls.audioTracks;
       currentAudioTrack = hls.audioTrack;
+      _manifestReady = true; // HLS ready — now safe to show quality button and settings gear
       // Show settings gear only after HLS manifest is ready (has actual menu content)
       const sbtn = document.getElementById('settings-btn');
       if (sbtn) sbtn.style.display = '';
