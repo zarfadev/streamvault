@@ -2029,13 +2029,15 @@ async function loadGateways() {
 function renderGatewayWebhooks(providers, status) {
   const tbody = document.getElementById('gw-webhooks-tbody');
   if (!tbody) return;
-  const modeLabel = m => m === 'live'
-    ? `<span class="gw-mode-badge gw-mode-live">Live</span>`
+  // 'live' = Stripe/PayPal/Binance, 'production' = dLocal Go
+  const modeLabel = m => (m === 'live' || m === 'production')
+    ? `<span class="gw-mode-badge gw-mode-live">Live / Prod</span>`
     : `<span class="gw-mode-badge gw-mode-sandbox">Sandbox</span>`;
   const rows = providers.map(p => {
     const s = status[p] || {};
     const name = p.charAt(0).toUpperCase() + p.slice(1);
-    const webhookOk = s.hasWebhookSecret || s.hasWebhookId;
+    // dLocal Go: webhook uses API key + secret (no separate webhook secret needed)
+    const webhookOk = s.hasWebhookSecret || s.hasWebhookId || (p === 'dlocalgo' && s.configured);
     const pricesOk  = s.hasPriceIds || s.hasPlanIds || s.hasPrices;
     return `<tr>
       <td style="font-weight:600;">${name}</td>
@@ -2084,9 +2086,11 @@ function updateGatewayStatus(provider, status) {
   credsEl.innerHTML = checks.map(c => _gwCredRow(c.ok, c.label)).join('');
 
   // Append mode badge for gateways that have one
+  // dLocal Go uses 'production', Stripe/PayPal/Binance use 'live'
   if (status.mode && (provider === 'paypal' || provider === 'binance' || provider === 'dlocalgo')) {
-    const modeCls = status.mode === 'live' ? 'gw-mode-live' : 'gw-mode-sandbox';
-    const modeLabel = status.mode === 'live' ? 'Live' : 'Sandbox';
+    const isLive = status.mode === 'live' || status.mode === 'production';
+    const modeCls = isLive ? 'gw-mode-live' : 'gw-mode-sandbox';
+    const modeLabel = isLive ? (status.mode === 'production' ? 'Production' : 'Live') : 'Sandbox';
     credsEl.insertAdjacentHTML('beforeend',
       `<span class="gw-mode-badge ${modeCls}" style="margin-top:6px;">${modeLabel}</span>`);
   }
