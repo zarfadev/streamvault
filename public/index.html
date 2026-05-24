@@ -1699,14 +1699,24 @@ document.addEventListener("DOMContentLoaded", () => {
     // .sv-globe-right is position:relative — tooltip is absolute within it
     var rightEl = el.parentElement;
 
+    // Convert ISO-2 country code to Unicode emoji flag (renders instantly, no HTTP)
+    function isoToFlag(code) {
+      if (!code || code.length !== 2) return '';
+      var OFFSET = 0x1F1E6 - 65; // 'A' = 65
+      return Array.from(code.toUpperCase()).map(function(c) {
+        return String.fromCodePoint(c.charCodeAt(0) + OFFSET);
+      }).join('');
+    }
+
     function showTip(d) {
       if (!tip || !rightEl) return;
-      var flagHtml = d.iso
-        ? '<img src="https://flagcdn.com/w40/' + d.iso + '.png" width="21" height="14" style="border-radius:2px;box-shadow:0 1px 3px rgba(0,0,0,.5);margin-right:5px;vertical-align:middle;" alt="' + (d.country||'') + '">'
-        : '';
+      var flag = d.iso ? isoToFlag(d.iso) : '';
       tip.innerHTML =
         '<strong style="display:block;font-size:13px;line-height:1.3;margin-bottom:3px">' + d.n + '</strong>' +
-        '<span style="font-size:11px;opacity:.8;font-weight:400;display:flex;align-items:center;">' + flagHtml + d.country + '</span>';
+        '<span style="font-size:11px;opacity:.8;font-weight:400;">' +
+          (flag ? '<span style="font-size:14px;margin-right:5px;vertical-align:middle;">' + flag + '</span>' : '') +
+          d.country +
+        '</span>';
       var cRect = rightEl.getBoundingClientRect();
       var gRect = el.getBoundingClientRect();
       // Position relative to .sv-globe-right
