@@ -166,6 +166,14 @@ services:
     image: streamvault:local
     container_name: streamvault_worker
     command: node worker.js
+    # Override the Dockerfile HEALTHCHECK (which pings port 3000) because the
+    # worker process doesn't start an HTTP server — it only consumes Bull queues.
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -x node || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     volumes:
       - ./:/app
       - /app/node_modules
