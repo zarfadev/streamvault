@@ -1600,7 +1600,20 @@ router.delete('/:id/thumbnail', authenticate, async (req, res) => {
     await new Promise((resolve, reject) =>
       execFile('ffmpeg', ['-y', '-i', hlsPath, '-ss', '00:00:05', '-vframes', '1', '-q:v', '2', thumbPath], (err) => err ? reject(err) : resolve())
     );
-    res.json({ success: true });
+    let regenCdnUrl = null;
+    if (s3.isS3Enabled() && fs.existsSync(thumbPath)) {
+      try {
+        regenCdnUrl = await s3.uploadFile(thumbPath, video.workspace_id, video.id, 'thumb.jpg');
+        await db.prepare(`UPDATE videos SET thumbnail_url = ? WHERE id = ?`).run(regenCdnUrl, video.id);
+      } catch (e) {
+        logger.warn({ videoId: video.id, err: e.message }, 'Regen thumb S3 upload failed');
+      }
+    } else {
+      // Clear any stale thumbnail_url so it falls back to local
+      await db.prepare(`UPDATE videos SET thumbnail_url = NULL WHERE id = ?`).run(video.id);
+    }
+    const thumbnailUrl = regenCdnUrl || `/videos/${video.id}/thumb.jpg`;
+    res.json({ success: true, thumbnailUrl });
   } catch (err) {
     logger.error({ err }, 'Thumbnail delete error');
     res.status(500).json({ error: 'Failed to regenerate thumbnail' });
@@ -1644,8 +1657,17 @@ router.post('/:id/thumbnail/tmdb', authenticate, async (req, res) => {
     const thumbPath = path.join(videoDir, 'thumb.jpg');
     const buf = Buffer.from(await imgRes.arrayBuffer());
     fs.writeFileSync(thumbPath, buf);
-    await db.prepare(`UPDATE videos SET updated_at = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT WHERE id = ?`).run(video.id);
-    res.json({ success: true, thumbnailUrl: `/videos/${video.id}/thumb.jpg` });
+    let thumbCdnUrl = null;
+    if (s3.isS3Enabled()) {
+      try {
+        thumbCdnUrl = await s3.uploadFile(thumbPath, video.workspace_id, video.id, 'thumb.jpg');
+      } catch (e) {
+        logger.warn({ videoId: video.id, err: e.message }, 'TMDB thumb S3 upload failed — serving local');
+      }
+    }
+    await db.prepare(`UPDATE videos SET thumbnail_url = ?, updated_at = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT WHERE id = ?`).run(thumbCdnUrl || null, video.id);
+    const thumbnailUrl = thumbCdnUrl || `/videos/${video.id}/thumb.jpg`;
+    res.json({ success: true, thumbnailUrl });
   } catch (err) {
     logger.error({ err }, 'TMDB thumbnail error');
     res.status(500).json({ error: 'Failed to set TMDB poster' });

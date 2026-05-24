@@ -117,7 +117,7 @@ function renderList() {
   document.getElementById('pl-list').innerHTML = videos.map((v, i) => `
     <div class="pl-item${i === 0 ? ' active' : ''}" id="pi-${i}" onclick="playVideo(${i})">
       <span class="pl-item-num">${i === 0 ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><polygon points="5 3 19 12 5 21 5 3"/></svg>' : i + 1}</span>
-      <img class="pl-item-thumb" src="${BASE}/videos/${esc(v.id)}/thumb.jpg" alt="" loading="lazy" onerror="this.style.opacity='.2'">
+      <img class="pl-item-thumb" src="${v.thumbnailUrl||`${BASE}/videos/${esc(v.id)}/thumb.jpg`}" alt="" loading="lazy" onerror="this.style.opacity='.2'">
       <div class="pl-item-body">
         <div class="pl-item-title" title="${esc(v.title)}">${esc(v.title)}</div>
         ${v.duration ? `<div class="pl-item-dur">${fmtDur(v.duration)}</div>` : ''}

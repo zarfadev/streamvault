@@ -60,7 +60,7 @@ router.get('/:slug', async (req, res) => {
     const displayName = ws.channel_name || ws.name || 'StreamVault Channel';
 
     const videos = await db.prepare(
-      `SELECT id, title, description, duration, size, created_at, updated_at, qualities, thumbnail
+      `SELECT id, title, description, duration, size, created_at, updated_at, qualities, hls_cdn_url, thumbnail_url
        FROM videos
        WHERE workspace_id = ? AND visibility = 'public' AND status = 'ready' AND (dmca_suspended IS NULL OR dmca_suspended = FALSE)
        ORDER BY created_at DESC
@@ -82,8 +82,9 @@ router.get('/:slug', async (req, res) => {
 
     const items = videos.map(v => {
       const watchUrl  = `${base}/watch/${v.id}`;
-      const thumbUrl  = v.thumbnail || `${base}/videos/${v.id}/thumb.jpg`;
-      const videoUrl  = `${base}/videos/${v.id}/master.m3u8`; // HLS playlist as enclosure
+      const cdnBase   = v.hls_cdn_url ? v.hls_cdn_url.replace(/\/master\.m3u8$/i, '') : null;
+      const thumbUrl  = v.thumbnail_url || (cdnBase ? `${cdnBase}/thumb.jpg` : `${base}/videos/${v.id}/thumb.jpg`);
+      const videoUrl  = v.hls_cdn_url || `${base}/videos/${v.id}/master.m3u8`; // HLS playlist as enclosure
       const sizeBytes = v.size || 0;
       const title     = esc(v.title || 'Untitled');
       const desc      = esc(v.description || '');

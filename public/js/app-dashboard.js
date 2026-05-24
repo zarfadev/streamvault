@@ -2898,6 +2898,10 @@ function doLogout() {
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
                         </button>` : ''}
                       ` : ''}
+                      ${v.status === 'error' && (authWorkspace?.role === 'owner' || authWorkspace?.role === 'admin') ? `
+                      <button class="vt-icon-btn" onclick="retryVideo('${v.id}')" title="Reintentar transcodificación" style="color:var(--red);">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+                      </button>` : ''}
                       ${(authWorkspace?.role === 'owner' || authWorkspace?.role === 'admin') ? `
                       <button class="vt-icon-btn" onclick="openEditModal('${v.id}')" title="Editar">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -2938,6 +2942,15 @@ function doLogout() {
                           ${_cachedFeatures?.tracksEnabled !== false ? `<button onclick="closeMoreMenu('lt-${v.id}');openTracksModal('${v.id}')">
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
                             Pistas y subtítulos
+                          </button>` : ''}
+                          <div class="more-menu-divider"></div>
+                          ${(authWorkspace?.role === 'owner' || authWorkspace?.role === 'admin') ? `<button onclick="closeMoreMenu('lt-${v.id}');retranscodeVideo('${v.id}')">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+                            Re-transcodificar
+                          </button>` : ''}
+                          ${(authWorkspace?.role === 'owner' || authWorkspace?.role === 'admin') ? `<button class="more-menu-danger" onclick="closeMoreMenu('lt-${v.id}');deleteVideo('${v.id}')">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+                            Eliminar video
                           </button>` : ''}
                         </div>
                       </div>
@@ -3611,11 +3624,14 @@ function doLogout() {
       document.getElementById('edit-thumb-current').src = preview.src;
     }
 
-    function updateEditThumbUI(videoId) {
+    function updateEditThumbUI(videoId, thumbUrl) {
       const cur = document.getElementById('edit-thumb-current');
       if (cur) {
         const ts = Date.now();
-        cur.src = `/videos/${videoId}/thumb.jpg?_=${ts}`;
+        // Prefer the explicitly passed URL (from API response), then cached, then local fallback
+        const cached = allVideosCache.find(x => x.id === videoId);
+        const src = thumbUrl || cached?.thumbnailUrl || `/videos/${videoId}/thumb.jpg`;
+        cur.src = `${src}${src.includes('?') ? '&' : '?'}_=${ts}`;
         cur.onerror = () => { cur.style.opacity = '0.3'; };
         cur.onload  = () => { cur.style.opacity = '1'; };
       }
@@ -3635,7 +3651,7 @@ function doLogout() {
         const d = await r.json().catch(() => ({}));
         if (!r.ok) { toast(d.error || 'Error', 'error'); return; }
         toast('Miniatura restaurada');
-        updateEditThumbUI(_editModalVideoId);
+        updateEditThumbUI(_editModalVideoId, d.thumbnailUrl);
       } catch { toast('Error de conexión', 'error'); }
       finally { btn.disabled = false; btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg> Eliminar'; }
     }
@@ -3656,7 +3672,7 @@ function doLogout() {
         const d = await r.json().catch(() => ({}));
         if (!r.ok) { toast(d.error || 'Error al obtener poster', 'error'); return; }
         toast('Poster de TMDB aplicado');
-        updateEditThumbUI(_editModalVideoId);
+        updateEditThumbUI(_editModalVideoId, d.thumbnailUrl);
       } catch { toast('Error de conexión', 'error'); }
       finally { btn.disabled = false; btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg> Poster TMDB'; }
     }
