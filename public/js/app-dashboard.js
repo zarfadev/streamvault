@@ -1594,9 +1594,9 @@ function doLogout() {
 
     // ── Country flag helper ───────────────────────────────────────
     function countryFlag(code) {
-      if (!code || code.length !== 2) return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>';
-      // Return 2-letter country code as text label for universal compatibility
-      return `<span style="font-size:11px;font-weight:700;color:var(--muted);font-family:var(--mono);">${code.toUpperCase()}</span>`;
+      if (!code || code.length !== 2) return '<svg width="16" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity:.4"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>';
+      const lc = code.toLowerCase();
+      return `<img src="https://flagpedia.net/data/flags/h80/${lc}.png" height="18" style="border-radius:3px;box-shadow:0 1px 4px rgba(0,0,0,.45);vertical-align:middle;display:block;" alt="${code.toUpperCase()}" onerror="this.outerHTML='<span style=\\'font-size:10px;font-weight:700;color:var(--muted);font-family:var(--mono)\\'>${code.toUpperCase()}</span>'">`;
     }
 
     function renderWorkspaceAnalytics(d) {
@@ -1744,7 +1744,7 @@ function doLogout() {
               const pct  = Math.round((c.viewers / mc) * 100);
               const rank = ['1.','2.','3.'][i] || `${i+1}.`;
               return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);">
-                <span style="font-size:18px;width:28px;text-align:center;flex-shrink:0;">${flag}</span>
+                <span style="width:28px;text-align:center;flex-shrink:0;display:flex;align-items:center;justify-content:center;">${flag}</span>
                 <div style="flex:1;min-width:0;">
                   <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
                     <span style="font-weight:600;">${esc(c.country || '?')}</span>

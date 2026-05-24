@@ -1574,70 +1574,70 @@ document.addEventListener("DOMContentLoaded", () => {
 (function() {
   var GLOBE_CDN = 'https://unpkg.com/globe.gl@2.32.2/dist/globe.gl.min.js';
 
-  // World cities with city + country labels for hover tooltip
+  // World cities with city + country labels + ISO code for flag tooltip
   var CITIES = [
     // Americas
-    {lat:40.71, lng:-74.01, s:1.0, c:0, n:'Nueva York',      country:'🇺🇸 Estados Unidos'},
-    {lat:34.05, lng:-118.24,s:0.85,c:1, n:'Los Ángeles',     country:'🇺🇸 Estados Unidos'},
-    {lat:-23.55,lng:-46.63, s:0.9, c:0, n:'São Paulo',       country:'🇧🇷 Brasil'},
-    {lat:19.43, lng:-99.13, s:0.75,c:1, n:'Ciudad de México',country:'🇲🇽 México'},
-    {lat:-34.60,lng:-58.38, s:0.65,c:0, n:'Buenos Aires',    country:'🇦🇷 Argentina'},
-    {lat:41.88, lng:-87.63, s:0.7, c:1, n:'Chicago',         country:'🇺🇸 Estados Unidos'},
-    {lat:43.65, lng:-79.38, s:0.65,c:0, n:'Toronto',         country:'🇨🇦 Canadá'},
-    {lat:25.77, lng:-80.19, s:0.6, c:1, n:'Miami',           country:'🇺🇸 Estados Unidos'},
-    {lat:-12.05,lng:-77.04, s:0.55,c:0, n:'Lima',            country:'🇵🇪 Perú'},
-    {lat:4.71,  lng:-74.07, s:0.5, c:1, n:'Bogotá',          country:'🇨🇴 Colombia'},
-    {lat:-33.45,lng:-70.67, s:0.55,c:0, n:'Santiago',        country:'🇨🇱 Chile'},
-    {lat:45.50, lng:-73.57, s:0.5, c:1, n:'Montreal',        country:'🇨🇦 Canadá'},
-    {lat:47.61, lng:-122.33,s:0.6, c:0, n:'Seattle',         country:'🇺🇸 Estados Unidos'},
-    {lat:37.77, lng:-122.42,s:0.65,c:1, n:'San Francisco',   country:'🇺🇸 Estados Unidos'},
+    {lat:40.71, lng:-74.01, s:1.0, c:0, n:'Nueva York',      country:'Estados Unidos', iso:'us'},
+    {lat:34.05, lng:-118.24,s:0.85,c:1, n:'Los Ángeles',     country:'Estados Unidos', iso:'us'},
+    {lat:-23.55,lng:-46.63, s:0.9, c:0, n:'São Paulo',       country:'Brasil',         iso:'br'},
+    {lat:19.43, lng:-99.13, s:0.75,c:1, n:'Ciudad de México',country:'México',         iso:'mx'},
+    {lat:-34.60,lng:-58.38, s:0.65,c:0, n:'Buenos Aires',    country:'Argentina',      iso:'ar'},
+    {lat:41.88, lng:-87.63, s:0.7, c:1, n:'Chicago',         country:'Estados Unidos', iso:'us'},
+    {lat:43.65, lng:-79.38, s:0.65,c:0, n:'Toronto',         country:'Canadá',         iso:'ca'},
+    {lat:25.77, lng:-80.19, s:0.6, c:1, n:'Miami',           country:'Estados Unidos', iso:'us'},
+    {lat:-12.05,lng:-77.04, s:0.55,c:0, n:'Lima',            country:'Perú',           iso:'pe'},
+    {lat:4.71,  lng:-74.07, s:0.5, c:1, n:'Bogotá',          country:'Colombia',       iso:'co'},
+    {lat:-33.45,lng:-70.67, s:0.55,c:0, n:'Santiago',        country:'Chile',          iso:'cl'},
+    {lat:45.50, lng:-73.57, s:0.5, c:1, n:'Montreal',        country:'Canadá',         iso:'ca'},
+    {lat:47.61, lng:-122.33,s:0.6, c:0, n:'Seattle',         country:'Estados Unidos', iso:'us'},
+    {lat:37.77, lng:-122.42,s:0.65,c:1, n:'San Francisco',   country:'Estados Unidos', iso:'us'},
     // Europe
-    {lat:51.51, lng:-0.13,  s:1.0, c:1, n:'Londres',         country:'🇬🇧 Reino Unido'},
-    {lat:48.86, lng:2.35,   s:0.9, c:0, n:'París',           country:'🇫🇷 Francia'},
-    {lat:52.52, lng:13.40,  s:0.8, c:1, n:'Berlín',          country:'🇩🇪 Alemania'},
-    {lat:40.42, lng:-3.70,  s:0.75,c:0, n:'Madrid',          country:'🇪🇸 España'},
-    {lat:41.90, lng:12.50,  s:0.7, c:1, n:'Roma',            country:'🇮🇹 Italia'},
-    {lat:52.37, lng:4.90,   s:0.7, c:0, n:'Ámsterdam',       country:'🇳🇱 Países Bajos'},
-    {lat:55.75, lng:37.62,  s:0.8, c:1, n:'Moscú',           country:'🇷🇺 Rusia'},
-    {lat:41.01, lng:28.96,  s:0.75,c:0, n:'Estambul',        country:'🇹🇷 Turquía'},
-    {lat:52.23, lng:21.01,  s:0.55,c:1, n:'Varsovia',        country:'🇵🇱 Polonia'},
-    {lat:59.33, lng:18.07,  s:0.6, c:0, n:'Estocolmo',       country:'🇸🇪 Suecia'},
-    {lat:38.72, lng:-9.14,  s:0.55,c:1, n:'Lisboa',          country:'🇵🇹 Portugal'},
-    {lat:48.21, lng:16.37,  s:0.6, c:0, n:'Viena',           country:'🇦🇹 Austria'},
-    {lat:47.38, lng:8.54,   s:0.6, c:1, n:'Zúrich',          country:'🇨🇭 Suiza'},
-    {lat:53.34, lng:-6.27,  s:0.55,c:0, n:'Dublín',          country:'🇮🇪 Irlanda'},
-    {lat:50.85, lng:4.35,   s:0.5, c:1, n:'Bruselas',        country:'🇧🇪 Bélgica'},
-    {lat:55.68, lng:12.57,  s:0.5, c:0, n:'Copenhague',      country:'🇩🇰 Dinamarca'},
+    {lat:51.51, lng:-0.13,  s:1.0, c:1, n:'Londres',         country:'Reino Unido',    iso:'gb'},
+    {lat:48.86, lng:2.35,   s:0.9, c:0, n:'París',           country:'Francia',        iso:'fr'},
+    {lat:52.52, lng:13.40,  s:0.8, c:1, n:'Berlín',          country:'Alemania',       iso:'de'},
+    {lat:40.42, lng:-3.70,  s:0.75,c:0, n:'Madrid',          country:'España',         iso:'es'},
+    {lat:41.90, lng:12.50,  s:0.7, c:1, n:'Roma',            country:'Italia',         iso:'it'},
+    {lat:52.37, lng:4.90,   s:0.7, c:0, n:'Ámsterdam',       country:'Países Bajos',   iso:'nl'},
+    {lat:55.75, lng:37.62,  s:0.8, c:1, n:'Moscú',           country:'Rusia',          iso:'ru'},
+    {lat:41.01, lng:28.96,  s:0.75,c:0, n:'Estambul',        country:'Turquía',        iso:'tr'},
+    {lat:52.23, lng:21.01,  s:0.55,c:1, n:'Varsovia',        country:'Polonia',        iso:'pl'},
+    {lat:59.33, lng:18.07,  s:0.6, c:0, n:'Estocolmo',       country:'Suecia',         iso:'se'},
+    {lat:38.72, lng:-9.14,  s:0.55,c:1, n:'Lisboa',          country:'Portugal',       iso:'pt'},
+    {lat:48.21, lng:16.37,  s:0.6, c:0, n:'Viena',           country:'Austria',        iso:'at'},
+    {lat:47.38, lng:8.54,   s:0.6, c:1, n:'Zúrich',          country:'Suiza',          iso:'ch'},
+    {lat:53.34, lng:-6.27,  s:0.55,c:0, n:'Dublín',          country:'Irlanda',        iso:'ie'},
+    {lat:50.85, lng:4.35,   s:0.5, c:1, n:'Bruselas',        country:'Bélgica',        iso:'be'},
+    {lat:55.68, lng:12.57,  s:0.5, c:0, n:'Copenhague',      country:'Dinamarca',      iso:'dk'},
     // Asia
-    {lat:35.69, lng:139.69, s:1.0, c:0, n:'Tokio',           country:'🇯🇵 Japón'},
-    {lat:19.08, lng:72.88,  s:0.9, c:1, n:'Bombay',          country:'🇮🇳 India'},
-    {lat:39.91, lng:116.39, s:0.9, c:0, n:'Pekín',           country:'🇨🇳 China'},
-    {lat:31.23, lng:121.47, s:0.85,c:1, n:'Shanghái',        country:'🇨🇳 China'},
-    {lat:37.57, lng:126.98, s:0.8, c:0, n:'Seúl',            country:'🇰🇷 Corea del Sur'},
-    {lat:13.75, lng:100.52, s:0.75,c:1, n:'Bangkok',         country:'🇹🇭 Tailandia'},
-    {lat:1.35,  lng:103.82, s:0.8, c:0, n:'Singapur',        country:'🇸🇬 Singapur'},
-    {lat:-6.21, lng:106.85, s:0.75,c:1, n:'Yakarta',         country:'🇮🇩 Indonesia'},
-    {lat:25.04, lng:121.56, s:0.7, c:0, n:'Taipéi',          country:'🇹🇼 Taiwán'},
-    {lat:25.20, lng:55.27,  s:0.8, c:1, n:'Dubái',           country:'🇦🇪 Emiratos Árabes'},
-    {lat:28.63, lng:77.22,  s:0.85,c:0, n:'Nueva Delhi',     country:'🇮🇳 India'},
-    {lat:22.32, lng:114.17, s:0.8, c:1, n:'Hong Kong',       country:'🇭🇰 Hong Kong'},
-    {lat:14.60, lng:121.00, s:0.65,c:0, n:'Manila',          country:'🇵🇭 Filipinas'},
-    {lat:33.69, lng:51.42,  s:0.6, c:1, n:'Teherán',         country:'🇮🇷 Irán'},
-    {lat:24.69, lng:46.72,  s:0.7, c:0, n:'Riad',            country:'🇸🇦 Arabia Saudí'},
-    {lat:3.14,  lng:101.69, s:0.7, c:1, n:'Kuala Lumpur',    country:'🇲🇾 Malasia'},
-    {lat:15.56, lng:32.53,  s:0.45,c:0, n:'Jartum',          country:'🇸🇩 Sudán'},
+    {lat:35.69, lng:139.69, s:1.0, c:0, n:'Tokio',           country:'Japón',          iso:'jp'},
+    {lat:19.08, lng:72.88,  s:0.9, c:1, n:'Bombay',          country:'India',          iso:'in'},
+    {lat:39.91, lng:116.39, s:0.9, c:0, n:'Pekín',           country:'China',          iso:'cn'},
+    {lat:31.23, lng:121.47, s:0.85,c:1, n:'Shanghái',        country:'China',          iso:'cn'},
+    {lat:37.57, lng:126.98, s:0.8, c:0, n:'Seúl',            country:'Corea del Sur',  iso:'kr'},
+    {lat:13.75, lng:100.52, s:0.75,c:1, n:'Bangkok',         country:'Tailandia',      iso:'th'},
+    {lat:1.35,  lng:103.82, s:0.8, c:0, n:'Singapur',        country:'Singapur',       iso:'sg'},
+    {lat:-6.21, lng:106.85, s:0.75,c:1, n:'Yakarta',         country:'Indonesia',      iso:'id'},
+    {lat:25.04, lng:121.56, s:0.7, c:0, n:'Taipéi',          country:'Taiwán',         iso:'tw'},
+    {lat:25.20, lng:55.27,  s:0.8, c:1, n:'Dubái',           country:'Emiratos Árabes',iso:'ae'},
+    {lat:28.63, lng:77.22,  s:0.85,c:0, n:'Nueva Delhi',     country:'India',          iso:'in'},
+    {lat:22.32, lng:114.17, s:0.8, c:1, n:'Hong Kong',       country:'Hong Kong',      iso:'hk'},
+    {lat:14.60, lng:121.00, s:0.65,c:0, n:'Manila',          country:'Filipinas',      iso:'ph'},
+    {lat:33.69, lng:51.42,  s:0.6, c:1, n:'Teherán',         country:'Irán',           iso:'ir'},
+    {lat:24.69, lng:46.72,  s:0.7, c:0, n:'Riad',            country:'Arabia Saudí',   iso:'sa'},
+    {lat:3.14,  lng:101.69, s:0.7, c:1, n:'Kuala Lumpur',    country:'Malasia',        iso:'my'},
+    {lat:15.56, lng:32.53,  s:0.45,c:0, n:'Jartum',          country:'Sudán',          iso:'sd'},
     // Africa
-    {lat:6.45,  lng:3.39,   s:0.7, c:1, n:'Lagos',           country:'🇳🇬 Nigeria'},
-    {lat:30.04, lng:31.24,  s:0.7, c:0, n:'El Cairo',        country:'🇪🇬 Egipto'},
-    {lat:-1.29, lng:36.82,  s:0.55,c:1, n:'Nairobi',         country:'🇰🇪 Kenia'},
-    {lat:-26.20,lng:28.04,  s:0.65,c:0, n:'Johannesburgo',   country:'🇿🇦 Sudáfrica'},
-    {lat:33.99, lng:-6.85,  s:0.5, c:1, n:'Rabat',           country:'🇲🇦 Marruecos'},
-    {lat:-4.32, lng:15.32,  s:0.45,c:0, n:'Kinshasa',        country:'🇨🇩 Congo'},
-    {lat:5.57,  lng:-0.20,  s:0.5, c:1, n:'Accra',           country:'🇬🇭 Ghana'},
+    {lat:6.45,  lng:3.39,   s:0.7, c:1, n:'Lagos',           country:'Nigeria',        iso:'ng'},
+    {lat:30.04, lng:31.24,  s:0.7, c:0, n:'El Cairo',        country:'Egipto',         iso:'eg'},
+    {lat:-1.29, lng:36.82,  s:0.55,c:1, n:'Nairobi',         country:'Kenia',          iso:'ke'},
+    {lat:-26.20,lng:28.04,  s:0.65,c:0, n:'Johannesburgo',   country:'Sudáfrica',      iso:'za'},
+    {lat:33.99, lng:-6.85,  s:0.5, c:1, n:'Rabat',           country:'Marruecos',      iso:'ma'},
+    {lat:-4.32, lng:15.32,  s:0.45,c:0, n:'Kinshasa',        country:'Congo',          iso:'cd'},
+    {lat:5.57,  lng:-0.20,  s:0.5, c:1, n:'Accra',           country:'Ghana',          iso:'gh'},
     // Oceania
-    {lat:-33.87,lng:151.21, s:0.8, c:0, n:'Sídney',          country:'🇦🇺 Australia'},
-    {lat:-37.81,lng:144.96, s:0.7, c:1, n:'Melbourne',       country:'🇦🇺 Australia'},
-    {lat:-36.85,lng:174.76, s:0.5, c:0, n:'Auckland',        country:'🇳🇿 Nueva Zelanda'}
+    {lat:-33.87,lng:151.21, s:0.8, c:0, n:'Sídney',          country:'Australia',      iso:'au'},
+    {lat:-37.81,lng:144.96, s:0.7, c:1, n:'Melbourne',       country:'Australia',      iso:'au'},
+    {lat:-36.85,lng:174.76, s:0.5, c:0, n:'Auckland',        country:'Nueva Zelanda',  iso:'nz'}
   ];
 
   var PURPLE  = 'rgba(196,181,253,1.0)';  // bright lavender — visible on night texture
@@ -1701,9 +1701,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function showTip(d) {
       if (!tip || !rightEl) return;
+      var flagHtml = d.iso
+        ? '<img src="https://flagpedia.net/data/flags/h80/' + d.iso + '.png" height="14" style="border-radius:2px;box-shadow:0 1px 3px rgba(0,0,0,.5);vertical-align:middle;margin-right:5px;" alt="' + (d.country||'') + '">'
+        : '';
       tip.innerHTML =
         '<strong style="display:block;font-size:13px;line-height:1.3;margin-bottom:3px">' + d.n + '</strong>' +
-        '<span style="font-size:11px;opacity:.8;font-weight:400">' + d.country + '</span>';
+        '<span style="font-size:11px;opacity:.8;font-weight:400;display:flex;align-items:center;">' + flagHtml + d.country + '</span>';
       var cRect = rightEl.getBoundingClientRect();
       var gRect = el.getBoundingClientRect();
       // Position relative to .sv-globe-right
