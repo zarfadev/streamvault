@@ -1595,8 +1595,9 @@ function doLogout() {
     // ── Country flag helper ───────────────────────────────────────
     function countryFlag(code) {
       if (!code || code.length !== 2) return '<svg width="16" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity:.4"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>';
-      const lc = code.toLowerCase();
-      return `<img src="https://flagpedia.net/data/flags/h80/${lc}.png" height="18" style="border-radius:3px;box-shadow:0 1px 4px rgba(0,0,0,.45);vertical-align:middle;display:block;" alt="${code.toUpperCase()}" onerror="this.outerHTML='<span style=\\'font-size:10px;font-weight:700;color:var(--muted);font-family:var(--mono)\\'>${code.toUpperCase()}</span>'">`;
+      var lc = code.toLowerCase();
+      // flagcdn.com — CDN oficial, imágenes w40 = 40×27 px, sin CORS, sin rate limit
+      return '<img src="https://flagcdn.com/w40/' + lc + '.png" width="27" height="18" style="border-radius:3px;box-shadow:0 1px 4px rgba(0,0,0,.45);display:block;" alt="' + code.toUpperCase() + '">';
     }
 
     function renderWorkspaceAnalytics(d) {
