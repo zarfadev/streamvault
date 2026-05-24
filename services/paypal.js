@@ -18,6 +18,7 @@ const db = require('../db');
 const cache = require('./cache');
 const logger = require('./logger').child({ module: 'paypal' });
 const gwCreds = require('./gatewayCredentials');
+const { awardReferralCredit } = require('./referralCredit');
 
 // ══════════════════════════════════════════════════════════════════════════
 // PayPal Client Configuration (reads from DB first, then .env fallback)
@@ -370,18 +371,11 @@ async function processWebhookEvent(event) {
         
         await activateSubscription(customId, planKey, subscriptionId);
         
-        // ── REFERRAL CREDIT: Actualizar credited_at cuando el referido compra ──
+        // ── REFERRAL CREDIT: award 1 free month to referrer on first purchase ──
         if (ws?.owner_id && fromPlan === 'starter') {
-          // Es la primera compra (upgrade desde starter) → marcar como convertido
-          try {
-            await db.prepare(
-              `UPDATE referrals SET credited_at = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT 
-               WHERE referred_id = ? AND credited_at IS NULL`
-            ).run(ws.owner_id);
-            logger.info({ userId: ws.owner_id }, 'Referral conversion credited (PayPal)');
-          } catch (refErr) {
-            logger.error({ err: refErr.message }, 'Failed to credit referral (PayPal)');
-          }
+          awardReferralCredit(ws.owner_id).catch(err =>
+            logger.error({ err: err.message }, 'awardReferralCredit (PayPal) failed')
+          );
         }
       }
       break;

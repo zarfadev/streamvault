@@ -580,4 +580,78 @@ router.post('/webhooks', (req, res, next) => {
   );
 });
 
+// ══════════════════════════════════════════════════════════════════════════
+// POST /referrals/redeem — Apply 1 referral credit month to current workspace
+// ══════════════════════════════════════════════════════════════════════════
+router.post('/referrals/redeem', rateLimit(5, 3_600_000), authenticate, resolveWorkspace, requireRole('owner'), async (req, res) => {
+  try {
+    const ws = req.workspace;
+
+    // Check that the current user is the workspace owner
+    const ownerRow = await db.prepare(
+      `SELECT free_months_remaining FROM workspaces WHERE id = ? AND owner_id = ?`
+    ).get(ws.id, req.user.id);
+
+    if (!ownerRow) {
+      return res.status(403).json({ error: 'Solo el propietario puede canjear créditos' });
+    }
+
+    const balance = Number(ownerRow.free_months_remaining ?? 0);
+    if (balance <= 0) {
+      return res.status(400).json({ error: 'No tienes créditos de referidos disponibles' });
+    }
+
+    // Must have an active paid subscription to apply a free month
+    if (ws.plan === 'starter') {
+      return res.status(400).json({ error: 'Necesitas un plan de pago activo para aplicar créditos' });
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+
+    // Decrement the credit balance
+    await db.prepare(
+      `UPDATE workspaces
+       SET free_months_remaining = free_months_remaining - 1,
+           updated_at = ?
+       WHERE id = ? AND free_months_remaining > 0`
+    ).run(now, ws.id);
+
+    // Try to extend the subscription on Stripe if applicable
+    let extended = false;
+    try {
+      if (ws.payment_provider === 'stripe' && ws.stripe_subscription_id) {
+        const stripe = stripeService.getStripe();
+        if (stripe) {
+          const sub = await stripe.subscriptions.retrieve(ws.stripe_subscription_id);
+          const currentEnd = sub.current_period_end;
+          // Extend by 1 month (30 days in seconds)
+          await stripe.subscriptions.update(ws.stripe_subscription_id, {
+            trial_end: currentEnd + 30 * 24 * 3600,
+            proration_behavior: 'none',
+          });
+          extended = true;
+        }
+      }
+    } catch (stripeErr) {
+      logger.warn({ err: stripeErr.message }, 'Could not extend Stripe subscription for referral credit — credit deducted anyway');
+    }
+
+    // Invalidate workspace cache
+    cache.invalidate(`sv:ws:${ws.id}`).catch(() => {});
+
+    logger.info({ userId: req.user.id, wsId: ws.id, stripeExtended: extended }, 'Referral credit redeemed');
+
+    res.json({
+      success: true,
+      message: extended
+        ? '¡Crédito aplicado! Tu suscripción se extendió 30 días gratis.'
+        : '¡Crédito registrado! Tu próxima renovación se ajustará automáticamente.',
+      remainingCredits: balance - 1,
+    });
+  } catch (err) {
+    logger.error({ err }, 'Referral redeem error');
+    res.status(500).json({ error: 'Error al canjear crédito' });
+  }
+});
+
 module.exports = router;

@@ -42,6 +42,8 @@
     let authWorkspace = null;
     let authWorkspaces = [];
     let allVideosCache = [];
+    // Billing status cache — populated by loadUpgradePlans(); used by updateUpgradePlanDetails()
+    let billingStatus = null;
     let _libView = localStorage.getItem('sv_lib_view') || 'list';
     let _pageLimit = parseInt(localStorage.getItem('sv_lib_limit') || '20');
     let _searchTimer;
@@ -5701,8 +5703,53 @@ function doLogout() {
           if (total) total.textContent = refs.total ?? 0;
           if (converted) converted.textContent = refs.converted ?? 0;
           if (pending) pending.textContent = (refs.total - refs.converted) > 0 ? (refs.total - refs.converted) : 0;
+
+          // Credit balance
+          const creditBalance = refs.creditBalance ?? 0;
+          const creditBlock = document.getElementById('referral-credit-block');
+          const creditEl = document.getElementById('ref-credit-balance');
+          if (creditEl) creditEl.textContent = creditBalance;
+          if (creditBlock) {
+            // Show the credit block always (even at 0 so users know how the system works)
+            creditBlock.style.display = 'block';
+          }
+          // Disable redeem button if no credits or no paid plan
+          const redeemBtn = document.getElementById('ref-redeem-btn');
+          if (redeemBtn) {
+            const hasPaidPlan = authWorkspace && authWorkspace.plan !== 'starter';
+            redeemBtn.disabled = creditBalance <= 0 || !hasPaidPlan;
+            redeemBtn.title = creditBalance <= 0
+              ? 'No tienes créditos disponibles'
+              : !hasPaidPlan
+                ? 'Necesitas un plan de pago para canjear créditos'
+                : '';
+          }
         }
       } catch (e) { console.warn('[StreamVault] Error loading referral stats:', e); }
+    }
+
+    async function redeemReferralCredit() {
+      const btn = document.getElementById('ref-redeem-btn');
+      if (btn) { btn.disabled = true; btn.textContent = 'Canjeando...'; }
+      try {
+        const r = await apiFetch(`${BASE}/api/billing/referrals/redeem`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || 'Error al canjear crédito');
+        toast(d.message || '¡Crédito canjeado!', 'success');
+        // Update balance in UI
+        const creditEl = document.getElementById('ref-credit-balance');
+        if (creditEl) creditEl.textContent = d.remainingCredits ?? 0;
+        if (btn) {
+          btn.textContent = '🎁 Canjear mes gratis';
+          btn.disabled = (d.remainingCredits ?? 0) <= 0;
+        }
+      } catch (e) {
+        toast(e.message || 'Error al canjear crédito', 'error');
+        if (btn) { btn.disabled = false; btn.textContent = '🎁 Canjear mes gratis'; }
+      }
     }
 
     function copyReferralCode() {
@@ -5975,6 +6022,7 @@ function doLogout() {
         const r = await apiFetch(`${BASE}/api/billing/status`);
         if (!r.ok) { card.style.display = 'none'; return; }
         const data = await r.json();
+        billingStatus = data; // cache for updateUpgradePlanDetails()
         const currentPlan = data.plan || 'starter';
         const plans = (data.availablePlans || []).filter(p => p.key !== currentPlan && p.key !== 'starter');
         if (!plans.length) { card.style.display = 'none'; return; }
@@ -7163,8 +7211,15 @@ function doLogout() {
     }
 
     // Cargar gateways al abrir el modal de upgrade
-    window.openUpgradeModal = function() {
+    window.openUpgradeModal = async function() {
       openModal('upgrade-modal-overlay');
+      // Fetch billing status first so updateUpgradePlanDetails has live prices
+      if (!billingStatus) {
+        try {
+          const r = await apiFetch(`${BASE}/api/billing/status`);
+          if (r.ok) billingStatus = await r.json();
+        } catch {}
+      }
       loadAvailableGateways();
       updateUpgradePlanDetails();
     };

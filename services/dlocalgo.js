@@ -28,6 +28,7 @@ const logger = require('./logger').child({ module: 'dlocalgo' });
 const invoiceService = require('./invoices');
 const emailService = require('./email');
 const gwCreds = require('./gatewayCredentials');
+const { awardReferralCredit } = require('./referralCredit');
 
 // ══════════════════════════════════════════════════════════════════════════
 // Configuration (reads from DB first, then .env fallback)
@@ -390,22 +391,18 @@ async function processWebhookEvent(event) {
       const fromPlan = workspace.plan;
       await activateSubscription(workspaceId, planKey, paymentId);
 
-      // ── REFERRAL CREDIT: Actualizar credited_at cuando el referido compra ──
+      // ── REFERRAL CREDIT: award 1 free month to referrer on first purchase ──
       if (fromPlan === 'starter') {
-        // Es la primera compra (upgrade desde starter) → marcar como convertido
         try {
           const ownerR = await db.query(`SELECT owner_id FROM workspaces WHERE id = $1`, [workspaceId]);
           const ownerId = ownerR.rows[0]?.owner_id;
           if (ownerId) {
-            await db.query(
-              `UPDATE referrals SET credited_at = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT 
-               WHERE referred_id = $1 AND credited_at IS NULL`,
-              [ownerId]
+            awardReferralCredit(ownerId).catch(err =>
+              logger.error({ err: err.message }, 'awardReferralCredit (dLocal Go) failed')
             );
-            logger.info({ userId: ownerId }, 'Referral conversion credited (dLocal Go)');
           }
         } catch (refErr) {
-          logger.error({ err: refErr.message }, 'Failed to credit referral (dLocal Go)');
+          logger.error({ err: refErr.message }, 'Failed to look up owner for referral credit (dLocal Go)');
         }
       }
 

@@ -639,7 +639,7 @@ router.post('/request-verification', rateLimit(3, 300_000), async (req, res) => 
 
 router.get('/me', authenticate, async (req, res) => {
   try {
-    const [workspaces, userRow, refStats] = await Promise.all([
+    const [workspaces, userRow, refStats, creditRow] = await Promise.all([
       db.prepare(`
         SELECT w.id, w.name, w.slug, w.plan, w.avatar_url, wm.role
         FROM workspaces w
@@ -653,6 +653,12 @@ router.get('/me', authenticate, async (req, res) => {
           COUNT(*)                                              AS total,
           COUNT(*) FILTER (WHERE credited_at IS NOT NULL)      AS converted
         FROM referrals WHERE referrer_id = ?
+      `).get(req.user.id),
+      // Credit balance: free months earned by referring others (on user's primary workspace)
+      db.prepare(`
+        SELECT free_months_remaining FROM workspaces
+        WHERE owner_id = ?
+        ORDER BY created_at ASC LIMIT 1
       `).get(req.user.id),
     ]);
 
@@ -671,6 +677,7 @@ router.get('/me', authenticate, async (req, res) => {
       referrals: {
         total:     Number(refStats?.total     ?? 0),
         converted: Number(refStats?.converted ?? 0),
+        creditBalance: Number(creditRow?.free_months_remaining ?? 0),
       },
     });
   } catch (err) {

@@ -3707,7 +3707,7 @@
               </button>
             </div>
           </div>
-          <div id="referral-stats" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">
+          <div id="referral-stats" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;">
             <div style="background:var(--surface2);border-radius:8px;padding:12px 14px;text-align:center;border:1px solid var(--border);">
               <div style="font-family:var(--mono);font-size:22px;font-weight:700;color:var(--accent2);" id="ref-total">—</div>
               <div style="font-size:11px;color:var(--muted);margin-top:3px;">Referidos totales</div>
@@ -3719,6 +3719,22 @@
             <div style="background:var(--surface2);border-radius:8px;padding:12px 14px;text-align:center;border:1px solid var(--border);">
               <div style="font-family:var(--mono);font-size:22px;font-weight:700;color:var(--amber);" id="ref-pending">—</div>
               <div style="font-size:11px;color:var(--muted);margin-top:3px;">Pendientes</div>
+            </div>
+          </div>
+          <!-- Referral credit balance + redeem -->
+          <div id="referral-credit-block" style="display:none;background:linear-gradient(135deg,rgba(34,211,165,0.08),rgba(124,108,250,0.08));border:1px solid rgba(34,211,165,0.25);border-radius:10px;padding:14px 18px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+              <div>
+                <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:4px;">Crédito disponible</div>
+                <div style="display:flex;align-items:baseline;gap:6px;">
+                  <span style="font-family:var(--mono);font-size:28px;font-weight:700;color:var(--green);" id="ref-credit-balance">0</span>
+                  <span style="font-size:13px;color:var(--muted);">mes(es) gratis</span>
+                </div>
+                <div style="font-size:11px;color:var(--muted);margin-top:3px;">Por cada referido que pague, ganas 1 mes gratis.</div>
+              </div>
+              <button class="btn btn-primary" style="padding:9px 18px;font-size:13px;" id="ref-redeem-btn" onclick="redeemReferralCredit()">
+                🎁 Canjear mes gratis
+              </button>
             </div>
           </div>
         </div>
@@ -4868,7 +4884,7 @@
   </div>
 
   <script src="../js/toast.js" integrity="sha384-NOlrAhsJK/ux0DquI1zmOgS8Cs9AZPo8L+h9cRBWrHtqgd++igVHeJh8U7MwFSS4" crossorigin="anonymous" defer></script>
-  <script src="../js/app-dashboard.js?v=2026.05.24c" defer></script>
+  <script src="../js/app-dashboard.js?v=2026.05.24d" defer></script>
 
   <!-- Onboarding wizard modal -->
   <div id="onboarding-overlay" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.65);align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);transition:opacity .28s;">

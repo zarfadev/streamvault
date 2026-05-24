@@ -4,6 +4,7 @@ const cache = require('./cache');
 const logger = require('./logger').child({ module: 'stripe' });
 const invoiceService = require('./invoices');
 const emailService = require('./email');
+const { awardReferralCredit } = require('./referralCredit');
 
 let _stripe = null;
 function getStripe() {
@@ -141,20 +142,12 @@ async function processWebhookEvent(event) {
             subscriptionId: session.subscription,
           });
           
-          // ── REFERRAL CREDIT: Actualizar credited_at cuando el referido compra ──
+          // ── REFERRAL CREDIT: award 1 free month to referrer on first purchase ──
           const ownerId = ws.rows[0]?.owner_id;
           if (ownerId && fromPlan === 'starter') {
-            // Es la primera compra (upgrade desde starter) → marcar como convertido
-            try {
-              await db.query(
-                `UPDATE referrals SET credited_at = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT 
-                 WHERE referred_id = $1 AND credited_at IS NULL`,
-                [ownerId]
-              );
-              logger.info({ userId: ownerId }, 'Referral conversion credited');
-            } catch (refErr) {
-              logger.error({ err: refErr.message }, 'Failed to credit referral');
-            }
+            awardReferralCredit(ownerId).catch(err =>
+              logger.error({ err: err.message }, 'awardReferralCredit (Stripe) failed')
+            );
           }
           
           // Enviar email de activación

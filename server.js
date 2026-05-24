@@ -101,6 +101,13 @@ app.use((req, res, next) => {
   // worker-src blob: required for HLS.js transmuxing worker.
   const _cdnUrl = process.env.CLOUDFRONT_BASE_URL || process.env.CDN_BASE_URL || '';
   const cdnOrigins = _cdnUrl ? new URL(_cdnUrl).origin : '';
+  // APP_URL origin: player/embed served from a custom domain must be able to connect
+  // back to the main API (for m3u8 playlists, HLS keys, token refresh, etc.).
+  const _appOrigin = (() => {
+    const u = process.env.APP_URL;
+    if (!u) return '';
+    try { return new URL(u).origin; } catch { return ''; }
+  })();
 
   const cspDirectives = [
     "default-src 'self'",
@@ -135,9 +142,10 @@ app.use((req, res, next) => {
     "media-src 'self' blob: https: http:",
     // cdn.jsdelivr.net for HLS.js; imasdk.googleapis.com for Chromecast
     // cloudflareinsights.com for Cloudflare beacon reporting
-    // *.streamvault.link + custom domains: player in embed makes XHR back to API
+    // _appOrigin: custom-domain embeds must connect back to main API + CDN
     [
       "connect-src 'self'",
+      _appOrigin,
       cdnOrigins,
       'cdn.jsdelivr.net',
       'unpkg.com',
