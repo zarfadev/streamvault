@@ -160,6 +160,43 @@ async function uploadVideoDirectory(localDir, workspaceId, videoId) {
 }
 
 /**
+ * Upload a single quality subdirectory (e.g. "720p/") to S3.
+ * Used for incremental uploads after each secondary quality finishes encoding,
+ * so quality segments are safely in S3 even if the final uploadVideoDirectory fails.
+ *
+ * Uploads to: {keyPrefix}/{workspaceId}/{videoId}/{quality}/
+ */
+async function uploadQualityDir(qualityDir, workspaceId, videoId, quality) {
+  if (!fs.existsSync(qualityDir)) return;
+  const { Upload } = require('@aws-sdk/lib-storage');
+
+  const keyPrefix = [cfg.s3KeyPrefix || 'streamvault', workspaceId, videoId, quality]
+    .filter(Boolean).join('/');
+
+  const files = walkDir(qualityDir);
+  for (const filePath of files) {
+    const relative    = path.relative(qualityDir, filePath);
+    if (S3_EXCLUDED_FILES.has(path.basename(filePath))) continue;
+    const key         = `${keyPrefix}/${relative}`;
+    const contentType = mimeFor(filePath);
+
+    const upload = new Upload({
+      client: getClient(),
+      params: {
+        Bucket:      cfg.s3Bucket,
+        Key:         key,
+        Body:        fs.createReadStream(filePath),
+        ContentType: contentType,
+      },
+      partSize:    8 * 1024 * 1024,
+      queueSize:   4,
+      leavePartsOnError: false,
+    });
+    await upload.done();
+  }
+}
+
+/**
  * Delete all S3 objects that start with a given prefix.
  */
 async function deleteObjectsWithPrefix(prefix) {
@@ -369,6 +406,7 @@ module.exports = {
   headBucket,
   uploadFile,
   uploadVideoDirectory,
+  uploadQualityDir,
   uploadSourceFile,
   downloadSourceFile,
   deleteObject,

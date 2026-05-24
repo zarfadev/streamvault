@@ -661,9 +661,19 @@ async function processVideo(videoId, inputPath, title, options = {}) {
             await db.prepare(`UPDATE videos SET qualities=? WHERE id=?`).run(JSON.stringify(done), videoId);
             await rebuildMasterPlaylist(videoId, done).catch(() => {});
             logger.info({ videoId, quality: name, total: done.length }, 'Secondary quality ready');
-            // Skip incremental S3 update: the final S3 sync (after all secondaries + sprite)
-            // uploads the complete directory anyway. Fire-and-forget incremental uploads
-            // race with DELETE_LOCAL_AFTER_S3 cleanup and cause spurious ENOENT errors.
+            // Upload each secondary quality to S3 immediately so the segments
+            // are safely stored even if the final uploadVideoDirectory fails
+            // for large videos (OOM, network timeout, etc.).
+            // We don't update hls_cdn_url or master.m3u8 here — only segments.
+            if (s3.isS3Enabled()) {
+              const qualDir = path.join(outputDir, name);
+              try {
+                await s3.uploadQualityDir(qualDir, workspaceId, videoId, name);
+                logger.info({ videoId, quality: name }, 'Secondary quality uploaded to S3 incrementally');
+              } catch (e) {
+                logger.warn({ videoId, quality: name, err: e.message }, 'Incremental S3 upload for secondary quality failed — will retry in final sync');
+              }
+            }
           })
           .catch(err => logger.error({ videoId, preset: preset.name, err: err.message }, 'Secondary quality transcode failed'))
       ));
