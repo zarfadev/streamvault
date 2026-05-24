@@ -25,11 +25,18 @@ router.get('/:id/embed', async (req, res) => {
     if (wsSettings.playlistsPublic === false) {
       return res.status(404).json({ error: 'Playlist not found or private' });
     }
-    const videos = await db.prepare(`
-      SELECT v.id, v.title, v.duration, v.hls_cdn_url, v.thumbnail FROM playlist_videos pv
+    const rawVideos = await db.prepare(`
+      SELECT v.id, v.title, v.duration, v.hls_cdn_url, v.thumbnail_url FROM playlist_videos pv
       JOIN videos v ON v.id = pv.video_id
       WHERE pv.playlist_id = ? AND v.status = 'ready' AND (v.dmca_suspended IS NULL OR v.dmca_suspended = FALSE) ORDER BY pv.position ASC
     `).all(req.params.id);
+    const videos = rawVideos.map(v => {
+      const base = v.hls_cdn_url ? v.hls_cdn_url.replace(/\/master\.m3u8$/i, '') : null;
+      return {
+        ...v,
+        thumbnailUrl: v.thumbnail_url || (base ? `${base}/thumb.jpg` : `/videos/${v.id}/thumb.jpg`),
+      };
+    });
     res.json({ ...pl, videos });
   } catch (err) {
     logger.error({ err }, 'embed playlist failed');

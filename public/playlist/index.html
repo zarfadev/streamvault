@@ -407,7 +407,7 @@ function renderList() {
     <div class="pl-item${i === currentIdx ? ' active' : ''}" id="pl-item-${i}" onclick="playVideo(${i})">
       <span class="pl-item-num">${i === currentIdx ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><polygon points="5 3 19 12 5 21 5 3"/></svg>' : i + 1}</span>
       <div class="pl-item-thumb-wrap">
-        <img class="pl-item-thumb" src="/videos/${esc(v.id)}/thumb.jpg" alt="" loading="lazy" onerror="this.style.opacity='.15'">
+        <img class="pl-item-thumb" src="${v.thumbnailUrl||`/videos/${esc(v.id)}/thumb.jpg`}" alt="" loading="lazy" onerror="this.style.opacity='.15'">
         ${v.duration ? `<span class="pl-item-thumb-dur">${fmtDur(v.duration)}</span>` : ''}
         ${i === currentIdx ? `<div class="pl-item-playing"><svg width="16" height="16" viewBox="0 0 24 24" fill="white" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>` : ''}
       </div>

@@ -4342,12 +4342,23 @@ function doLogout() {
         const maxVid = Number(u.maxVideos);
         const vidUsed = Number(u.videos) || 0;
         const vidMax  = maxVid < 0 ? '<span style="color:var(--green);"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M18.178 8c5.096 0 5.096 8 0 8-5.095 0-7.133-8-12.739-8-4.585 0-4.585 8 0 8 5.606 0 7.644-8 12.74-8z"/></svg></span>' : (maxVid || '—');
+        const planLower = (ws.plan || 'starter').toLowerCase();
+        const qualityMap = {
+          starter: { label: 'Hasta 720p', tip: 'Sube a Pro para 1080p', color: 'var(--muted)' },
+          pro:     { label: 'Hasta 1080p', tip: 'Sube a Enterprise para 1440p / 4K', color: 'var(--green)' },
+          enterprise: { label: '1440p / 4K personalizable', tip: '', color: 'var(--amber)' },
+        };
+        const qi = qualityMap[planLower] || qualityMap.starter;
         document.getElementById('plan-usage-body').innerHTML =
           usageBar(u.storageUsedBytes || 0, u.maxStorageBytes ?? -1, 'Almacenamiento') +
           usageBar(u.bandwidthUsedBytes || 0, u.maxBandwidthBytes ?? -1, 'Ancho de banda este mes') +
           `<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--muted);padding-top:4px;">
             <span>Videos</span>
             <span style="color:var(--text);">${vidUsed} / ${vidMax}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--muted);padding-top:4px;" ${qi.tip ? `title="${qi.tip}"` : ''}>
+            <span>Calidad de transcodificación</span>
+            <span style="color:${qi.color};font-weight:600;">${qi.label}</span>
           </div>`;
         // Update sidebar footer
         const sbPlan = document.getElementById('sidebar-plan-badge');

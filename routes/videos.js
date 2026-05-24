@@ -1553,8 +1553,22 @@ router.post('/:id/thumbnail', authenticate, thumbUpload.single('thumbnail'), asy
       fs.renameSync(req.file.path, finalPath);
     }
 
-    await db.prepare(`UPDATE videos SET updated_at = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT WHERE id = ?`).run(video.id);
-    res.json({ success: true, thumbnailUrl: `/videos/${video.id}/thumb.jpg` });
+    // Sync custom thumbnail to S3 immediately so CDN serves the new image
+    let thumbCdnUrl = null;
+    if (s3.isS3Enabled()) {
+      try {
+        thumbCdnUrl = await s3.uploadFile(finalPath, video.workspace_id, video.id, 'thumb.jpg');
+      } catch (e) {
+        logger.warn({ videoId: video.id, err: e.message }, 'Custom thumbnail S3 upload failed — serving locally');
+      }
+    }
+
+    await db.prepare(
+      `UPDATE videos SET thumbnail_url = ?, updated_at = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT WHERE id = ?`
+    ).run(thumbCdnUrl || null, video.id);
+
+    const thumbnailUrl = thumbCdnUrl || `/videos/${video.id}/thumb.jpg`;
+    res.json({ success: true, thumbnailUrl });
   } catch (err) {
     logger.error({ err }, 'Thumbnail upload error');
     try { if (req.file?.path) fs.unlinkSync(req.file.path); } catch {}
