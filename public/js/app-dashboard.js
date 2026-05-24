@@ -160,8 +160,21 @@
     }
 
 function doLogout() {
+      // Call server to invalidate refresh token (prevents session reuse)
+      const rt = localStorage.getItem('sv_refresh_token') || sessionStorage.getItem('sv_refresh_token') || localStorage.getItem('sv_refresh');
+      if (rt) {
+        fetch(`${BASE}/auth/logout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(authToken ? { Authorization: 'Bearer ' + authToken } : {}) },
+          body: JSON.stringify({ refreshToken: rt }),
+        }).catch(() => {});
+      }
+      // Clear all tokens from BOTH localStorage AND sessionStorage
       authToken = ''; authUser = null; authWorkspace = null;
-      ['sv_access_token', 'sv_token', 'sv_refresh_token', 'sv_refresh'].forEach(k => localStorage.removeItem(k));
+      ['sv_access_token', 'sv_token', 'sv_refresh_token', 'sv_refresh'].forEach(k => {
+        localStorage.removeItem(k);
+        sessionStorage.removeItem(k);
+      });
       window.location.href = '/login';
     }
 
