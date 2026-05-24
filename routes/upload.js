@@ -30,13 +30,19 @@ const MAGIC_SIGS = [
   { offset: 0,  bytes: [0x30, 0x26, 0xB2, 0x75]  }, // WMV / ASF
 ];
 
-function validateMagicBytes(filePath) {
+// Async version — reads only the first ~34 bytes using non-blocking fs.read
+// to validate magic bytes without blocking the event loop.
+async function validateMagicBytes(filePath) {
   try {
     const needed = Math.max(...MAGIC_SIGS.map(s => s.offset + s.bytes.length));
     const buf = Buffer.alloc(needed);
-    const fd = fs.openSync(filePath, 'r');
-    const bytesRead = fs.readSync(fd, buf, 0, needed, 0);
-    fs.closeSync(fd);
+    const fh = await fs.promises.open(filePath, 'r');
+    let bytesRead = 0;
+    try {
+      ({ bytesRead } = await fh.read(buf, 0, needed, 0));
+    } finally {
+      await fh.close();
+    }
     return MAGIC_SIGS.some(sig => {
       const end = sig.offset + sig.bytes.length;
       if (bytesRead < end) return false;
@@ -129,9 +135,9 @@ router.post('/', optionalAuth, (req, res, next) => {
 }, async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
-  // Magic byte validation — rejects files where the binary signature doesn't
-  // match any known video/audio format, regardless of declared MIME type.
-  if (!validateMagicBytes(req.file.path)) {
+  // Magic byte validation — async, non-blocking read of first ~34 bytes.
+  const magicOk = await validateMagicBytes(req.file.path);
+  if (!magicOk) {
     fs.unlink(req.file.path, () => {});
     return res.status(422).json({ error: 'El archivo no es un formato de video/audio válido.', code: 'INVALID_MAGIC_BYTES' });
   }
@@ -221,51 +227,86 @@ router.post('/', optionalAuth, (req, res, next) => {
         .run(req.file.size, workspaceId);
     }
 
-    // If S3 is configured, upload the raw source file so workers on any server can access it.
-    // On S3 upload success the local temp file is deleted; on failure we keep it as fallback.
-    let s3SourceKey = null;
-    if (s3.isS3Enabled()) {
-      try {
-        s3SourceKey = await s3.uploadSourceFile(req.file.path, workspaceId, id);
-        fs.unlink(req.file.path, () => {});
-        logger.info({ videoId: id, s3SourceKey }, 'Source file uploaded to S3');
-      } catch (s3Err) {
-        logger.warn({ err: s3Err.message, videoId: id }, 'S3 source upload failed — falling back to local path');
-        s3SourceKey = null;
+    // ── Fast path: respond to the client immediately ──────────────────────────
+    // For large files (1-10 GB), waiting for S3 upload before responding would
+    // block the client for minutes. Instead we:
+    //   1. Respond immediately with the video ID (status = 'queued')
+    //   2. Upload to S3 in background
+    //   3. Queue the transcode job AFTER S3 upload completes (so the worker gets the S3 key)
+    //
+    // The dashboard polls /api/videos/:id every few seconds and will see the
+    // status change from 'queued' → 'transcoding' → 'ready' in real time.
+
+    const localPath = req.file.path;
+    const plan = req.workspace?.plan || 'starter';
+
+    if (!s3.isS3Enabled()) {
+      // No S3 — queue job immediately with local path
+      const sourceFile = localPath;
+      db.prepare(`UPDATE videos SET source_file=? WHERE id=?`).run(sourceFile, id).catch(() => {});
+      const { inline } = await addTranscodeJob({ videoId: id, inputPath: localPath, s3SourceKey: null, title, workspaceId, plan });
+      db.prepare(`UPDATE videos SET status='transcoding', transcoding_pct=0 WHERE id=?`).run(id).catch(() => {});
+      if (inline) {
+        processVideo(id, localPath, title, {
+          workspaceId, s3SourceKey: null,
+          onProgress: async (pct) => {
+            await db.prepare(`UPDATE videos SET transcoding_pct=? WHERE id=?`).run(pct, id).catch(() => {});
+          },
+        }).then(() => {
+          db.prepare(`UPDATE videos SET transcoding_pct=NULL WHERE id=?`).run(id).catch(() => {});
+        }).catch(err => logger.error({ err }, 'Transcoding error'));
       }
+    } else {
+      // S3 enabled — respond immediately, upload in background, then queue transcode
+      db.prepare(`UPDATE videos SET source_file=? WHERE id=?`).run(localPath, id).catch(() => {});
+
+      // Fire-and-forget: upload to S3 then queue transcoding
+      (async () => {
+        try {
+          const s3SourceKey = await s3.uploadSourceFile(localPath, workspaceId, id);
+          fs.unlink(localPath, () => {});
+          logger.info({ videoId: id, s3SourceKey }, 'Source uploaded to S3 — queuing transcode');
+          // Update source_file to S3 key so retry works
+          await db.prepare(`UPDATE videos SET source_file=? WHERE id=?`).run(s3SourceKey, id).catch(() => {});
+          // Now queue the transcode job with the S3 key
+          const { inline } = await addTranscodeJob({ videoId: id, inputPath: null, s3SourceKey, title, workspaceId, plan });
+          db.prepare(`UPDATE videos SET status='transcoding', transcoding_pct=0 WHERE id=?`).run(id).catch(() => {});
+          if (inline) {
+            processVideo(id, null, title, {
+              workspaceId, s3SourceKey,
+              onProgress: async (pct) => {
+                await db.prepare(`UPDATE videos SET transcoding_pct=? WHERE id=?`).run(pct, id).catch(() => {});
+              },
+            }).then(() => {
+              db.prepare(`UPDATE videos SET transcoding_pct=NULL WHERE id=?`).run(id).catch(() => {});
+            }).catch(err => logger.error({ err }, 'Inline transcoding error'));
+          }
+        } catch (s3Err) {
+          logger.warn({ err: s3Err.message, videoId: id }, 'S3 upload failed — falling back to local queue');
+          // Fallback: queue with local path (file still on disk since we only delete on success)
+          db.prepare(`UPDATE videos SET source_file=? WHERE id=?`).run(localPath, id).catch(() => {});
+          const { inline } = await addTranscodeJob({ videoId: id, inputPath: localPath, s3SourceKey: null, title, workspaceId, plan }).catch(() => ({ inline: false }));
+          db.prepare(`UPDATE videos SET status='transcoding', transcoding_pct=0 WHERE id=?`).run(id).catch(() => {});
+          if (inline) {
+            processVideo(id, localPath, title, {
+              workspaceId, s3SourceKey: null,
+              onProgress: async (pct) => {
+                await db.prepare(`UPDATE videos SET transcoding_pct=? WHERE id=?`).run(pct, id).catch(() => {});
+              },
+            }).then(() => {
+              db.prepare(`UPDATE videos SET transcoding_pct=NULL WHERE id=?`).run(id).catch(() => {});
+            }).catch(err => logger.error({ err }, 'Fallback transcoding error'));
+          }
+        }
+      })().catch(err => logger.error({ err, videoId: id }, 'Background S3+transcode pipeline error'));
     }
 
-    // Store source file reference for retry (local path or S3 key, whichever is available)
-    const sourceFile = s3SourceKey || req.file.path;
-    db.prepare(`UPDATE videos SET source_file=? WHERE id=?`).run(sourceFile, id).catch(() => {});
-
-    const payload = { videoId: id, inputPath: req.file.path, s3SourceKey, title, workspaceId, plan: req.workspace?.plan || 'starter' };
-    const { inline } = await addTranscodeJob(payload);
-
-    // Mark as transcoding immediately so the dashboard shows a spinner + 0%
-    // instead of "En cola". The DB was inserted with status='queued'; flip it
-    // now before responding so the first poll the client does sees progress.
-    db.prepare(`UPDATE videos SET status='transcoding', transcoding_pct=0 WHERE id=?`).run(id).catch(() => {});
-
-    if (inline) {
-      processVideo(id, req.file.path, title, {
-        workspaceId,
-        s3SourceKey,
-        onProgress: async (pct) => {
-          await db.prepare(`UPDATE videos SET transcoding_pct = ? WHERE id = ?`).run(pct, id).catch(() => {});
-        },
-      }).then(() => {
-        db.prepare(`UPDATE videos SET transcoding_pct = NULL WHERE id = ?`).run(id).catch(() => {});
-      }).catch(err => {
-        logger.error({ err }, 'Transcoding error');
-      });
-    }
-
+    // Respond immediately — client does not wait for S3 upload
     res.json({
       id,
       shortCode,
       shortUrl: shortCode ? `/v/${shortCode}` : null,
-      message: inline ? 'Upload received, transcoding started' : 'Upload received, transcode job queued',
+      message: 'Upload received, processing queued',
       watchUrl: `/watch/${id}`,
       m3u8Url: `/videos/${id}/master.m3u8`,
     });
