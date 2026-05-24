@@ -233,7 +233,7 @@ router.post('/login', rateLimit(10, 60_000), async (req, res) => {
 
     // Login normal sin 2FA
     const workspaces = await db.prepare(`
-      SELECT w.id, w.name, w.slug, w.plan, w.avatar_url, wm.role
+      SELECT w.id, w.name, w.slug, w.plan, w.avatar_url, w.custom_embed_domain, w.custom_domain_verified, wm.role
       FROM workspaces w
       JOIN workspace_members wm ON w.id = wm.workspace_id
       WHERE wm.user_id = ?
@@ -399,7 +399,7 @@ router.post('/verify-2fa-login', rateLimit(5, 300_000), async (req, res) => {
     await lockout.clearLockout(userId, ip);
 
     const workspaces = await db.prepare(`
-      SELECT w.id, w.name, w.slug, w.plan, w.avatar_url, wm.role
+      SELECT w.id, w.name, w.slug, w.plan, w.avatar_url, w.custom_embed_domain, w.custom_domain_verified, wm.role
       FROM workspaces w
       JOIN workspace_members wm ON w.id = wm.workspace_id
       WHERE wm.user_id = ?
