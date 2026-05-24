@@ -260,7 +260,14 @@ app.use(async (req, res, next) => {
   if (!host || host === _cdMainHost || host === 'localhost' || host.endsWith('.localhost')) return next();
 
   const wsId = await lookupCustomDomain(host);
-  if (!wsId) return next(); // Unknown host — pass through (auth protects sensitive routes anyway)
+  if (!wsId) {
+    // Unknown/unregistered host pointing to this server → redirect to platform.
+    // This prevents random CNAME squatters from serving StreamVault under their domain.
+    // Exception: Let's Encrypt ACME challenges must pass through for cert provisioning.
+    if (req.path.startsWith('/.well-known/acme-challenge/')) return next();
+    const platformOrigin = process.env.APP_URL || 'https://streamvault.link';
+    return res.redirect(302, platformOrigin);
+  }
 
   // Verified custom domain — enforce allowed routes
   const p = req.path;
