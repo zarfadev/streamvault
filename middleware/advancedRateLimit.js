@@ -44,6 +44,15 @@ const userStore = new Map();         // userId → { count, firstHit }
 const blacklist = new Map();         // IP → expiryTimestamp (in-memory mirror / fallback)
 const whitelist = new Set();         // IPs confiables (admin, monitoring)
 
+// Pre-load trusted IPs from TRUSTED_IPS env var (comma-separated)
+// e.g. TRUSTED_IPS=186.85.11.203,10.0.0.1
+// These IPs bypass all rate limiting and can never be auto-blocked.
+if (process.env.TRUSTED_IPS) {
+  process.env.TRUSTED_IPS.split(',').map(ip => ip.trim()).filter(Boolean).forEach(ip => {
+    whitelist.add(ip);
+  });
+}
+
 // Configuración
 const config = {
   // Límites globales por IP — aumentado a 500 para soportar reproducciones HLS
