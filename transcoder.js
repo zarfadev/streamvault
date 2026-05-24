@@ -201,7 +201,9 @@ async function resolvePresetsForSource(videoInfo, workspaceId) {
   const tc = await getJsonConfig('transcoding', { qualities: ['360p', '480p', '720p', '1080p'] });
   const globalAllowed = new Set(Array.isArray(tc.qualities) ? tc.qualities : ['360p', '480p', '720p', '1080p']);
 
-  let maxHeight = 1080;
+  // maxHeight caps which presets are eligible per plan tier.
+  // 0 = no cap (use globalAllowed / customQualities only, bounded by source).
+  let maxHeight = 0;  // pro and above: no artificial cap beyond globalAllowed
   let customQualities = null;
 
   if (workspaceId) {
@@ -210,14 +212,17 @@ async function resolvePresetsForSource(videoInfo, workspaceId) {
       if (ws) {
         const plan = (ws.plan || 'starter').toLowerCase();
         if (plan === 'starter') {
-          maxHeight = 720;
+          maxHeight = 720; // starter capped at 720p
         } else if (plan === 'enterprise') {
           const settings = typeof ws.settings === 'string' ? JSON.parse(ws.settings || '{}') : (ws.settings || {});
           if (Array.isArray(settings.transcodingQualities) && settings.transcodingQualities.length > 0) {
+            // Enterprise workspace with explicit custom quality list — use it exclusively
             customQualities = new Set(settings.transcodingQualities);
-            maxHeight = 2160;
           }
+          // Enterprise: no height cap — allow up to 4K from globalAllowed (or customQualities)
+          maxHeight = 0;
         }
+        // pro / any other plan: maxHeight=0 means use globalAllowed without an artificial cap
       }
     } catch (err) {
       logger.warn({ workspaceId, err: err.message }, 'resolvePresetsForSource: workspace lookup failed — using defaults');
@@ -226,17 +231,26 @@ async function resolvePresetsForSource(videoInfo, workspaceId) {
 
   let presets;
   if (customQualities) {
+    // Enterprise custom list: respect workspace setting but still don't upscale past source+100
     presets = QUALITY_PRESETS.filter(p => customQualities.has(p.name) && p.height <= videoInfo.height + 100);
-  } else {
+  } else if (maxHeight > 0) {
+    // Starter (or other capped plan): globalAllowed ∩ [≤maxHeight] ∩ [≤source+100]
     presets = QUALITY_PRESETS.filter(p =>
       globalAllowed.has(p.name) &&
       p.height <= maxHeight &&
       p.height <= videoInfo.height + 100
     );
+  } else {
+    // Pro / Enterprise (no cap): globalAllowed ∩ [≤source+100]
+    presets = QUALITY_PRESETS.filter(p =>
+      globalAllowed.has(p.name) &&
+      p.height <= videoInfo.height + 100
+    );
   }
 
   if (!presets.length) {
-    const fallback = QUALITY_PRESETS.find(p => p.height <= maxHeight) || QUALITY_PRESETS[0];
+    // Safety fallback: pick the highest quality preset ≤ source resolution
+    const fallback = [...QUALITY_PRESETS].reverse().find(p => p.height <= videoInfo.height) || QUALITY_PRESETS[0];
     presets = [fallback];
   }
   return presets;

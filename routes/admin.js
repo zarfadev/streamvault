@@ -903,6 +903,13 @@ router.get('/config', superAdminAuth, async (req, res) => {
       watermarkEnabled: true,
       analyticsEnabled: true,
     }),
+    referrals: await dynCfg.getDynSection('referrals', {
+      enabled: true,
+      creditUSD: 10,
+      maxCreditsPerUser: 0,
+      minPlanToRedeem: 'pro',
+      publicPageUrl: '',
+    }),
   };
   res.json(cfg);
   } catch (e) {
@@ -913,7 +920,7 @@ router.get('/config', superAdminAuth, async (req, res) => {
 
 router.put('/config', superAdminAuth, async (req, res) => {
   const { section, data } = req.body;
-  const allowed = ['platform', 'plans', 'transcoding', 'security', 'features', 'guest_config'];
+  const allowed = ['platform', 'plans', 'transcoding', 'security', 'features', 'guest_config', 'referrals'];
   if (!allowed.includes(section)) return res.status(400).json({ error: 'Invalid section' });
   try {
     const dynCfg = require('../services/dynamicConfig');
@@ -1734,6 +1741,61 @@ router.get('/referrals', superAdminAuth, async (req, res) => {
     });
   } catch (e) {
     logger.error({ err: e.message }, 'GET admin/referrals error');
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/admin/retranscode-bulk — Re-queue all ready/error videos for a workspace (or all)
+// Admin use: after changing global transcoding quality settings, re-encode existing videos.
+router.post('/retranscode-bulk', superAdminAuth, async (req, res) => {
+  try {
+    const { workspaceId } = req.body; // optional: limit to one workspace
+    const { addTranscodeJob } = require('../services/queue');
+    const s3svc = require('../services/s3Storage');
+    const fs    = require('fs');
+
+    const where = workspaceId
+      ? `WHERE status IN ('ready','error','scheduled') AND workspace_id = $1`
+      : `WHERE status IN ('ready','error','scheduled')`;
+    const params = workspaceId ? [workspaceId] : [];
+
+    const videos = await db.prepare(
+      `SELECT id, title, source_file, workspace_id FROM videos ${where} ORDER BY created_at DESC LIMIT 200`
+    ).all(...params);
+
+    let queued = 0;
+    let skipped = 0;
+    const errors = [];
+
+    for (const video of videos) {
+      try {
+        let inputPath = null;
+        let s3SourceKey = null;
+        if (video.source_file) {
+          if (s3svc.isS3Enabled() && !require('path').isAbsolute(video.source_file)) {
+            s3SourceKey = video.source_file;
+          } else {
+            inputPath = video.source_file;
+          }
+        }
+        if (!s3SourceKey && (!inputPath || !fs.existsSync(inputPath))) {
+          skipped++;
+          continue;
+        }
+        await db.prepare(
+          `UPDATE videos SET status='transcoding', transcoding_pct=0, qualities='[]', qualities_expected=NULL, updated_at=FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT WHERE id=?`
+        ).run(video.id);
+        await addTranscodeJob({ videoId: video.id, inputPath, s3SourceKey, title: video.title, workspaceId: video.workspace_id });
+        queued++;
+      } catch (e) {
+        errors.push({ videoId: video.id, err: e.message });
+      }
+    }
+
+    logger.info({ queued, skipped, total: videos.length, workspaceId }, 'Admin bulk retranscode queued');
+    res.json({ ok: true, queued, skipped, errors: errors.length, total: videos.length });
+  } catch (e) {
+    logger.error({ err: e.message }, 'Admin bulk retranscode error');
     res.status(500).json({ error: e.message });
   }
 });

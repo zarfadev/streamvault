@@ -1110,6 +1110,11 @@ app.get('/invite/:token', (req, res) => {
   res.sendFile(path.join(__dirname, 'public/invite/index.html'));
 });
 
+// Referral program page
+app.get('/referidos', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public/referidos/index.html'));
+});
+
 // Super Admin panel
 app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'public/admin/index.html'));

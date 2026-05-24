@@ -1955,6 +1955,7 @@
         <button class="tab-btn" id="cfg-tab-platform" onclick="switchCfgTab('platform')">Plataforma</button>
         <button class="tab-btn" id="cfg-tab-security" onclick="switchCfgTab('security')">Seguridad</button>
         <button class="tab-btn" id="cfg-tab-features" onclick="switchCfgTab('features')">Features</button>
+        <button class="tab-btn" id="cfg-tab-referrals" onclick="switchCfgTab('referrals')">Referidos</button>
         <button class="tab-btn" id="cfg-tab-integrations" onclick="switchCfgTab('integrations')">Integraciones</button>
       </div>
       <!-- Transcoding -->
@@ -1976,6 +1977,68 @@
             <div class="status-row"><span>Sprites de preview</span><span class="td-mono">cada 5s</span></div>
             <div class="status-row"><span>Reintentos por job</span><span class="td-mono">3 × exponential</span></div>
             <div class="status-row"><span>Timeout máximo</span><span class="td-mono">1 hora</span></div>
+          </div>
+        </div>
+        <div class="card" style="margin-top:16px;">
+          <div class="card-title" style="display:flex;align-items:center;gap:10px;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+            Re-Transcodificar videos existentes
+          </div>
+          <p style="font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.55;">
+            Después de cambiar las calidades disponibles, los videos <strong>ya existentes</strong> no se re-procesan automáticamente.
+            Usa este botón para volver a encolar todos los videos con las nuevas calidades. Solo se procesan videos con archivo fuente disponible.
+          </p>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+            <button class="btn btn-secondary btn-sm" onclick="bulkRetranscode()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:5px;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4"/></svg>
+              Re-transcodificar todos los videos
+            </button>
+            <span id="bulk-retranscode-result" style="font-size:13px;color:var(--muted);"></span>
+          </div>
+        </div>
+      </div>
+      <!-- Referidos -->
+      <div id="cfg-referrals" style="display:none;">
+        <div class="grid2">
+          <div class="card">
+            <div class="card-title">Configuración del Programa de Referidos</div>
+            <div class="form-group">
+              <label>Crédito por referido (USD)</label>
+              <input type="number" id="ref-credit-usd" min="0" step="0.5" placeholder="10" style="width:140px;" oninput="updateReferralProfitability()">
+              <div style="font-size:12px;color:var(--muted);margin-top:4px;">
+                Cuánto descuento (en USD) recibe el referente por cada conversión. Debe ser menor al precio del plan para que sea rentable.
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Máximo de créditos por usuario</label>
+              <input type="number" id="ref-max-credits" min="0" step="1" placeholder="0 = ilimitado" style="width:140px;">
+              <div style="font-size:12px;color:var(--muted);margin-top:4px;">0 = sin límite</div>
+            </div>
+            <div class="form-group">
+              <label>Plan mínimo para canjear</label>
+              <select id="ref-min-plan" class="form-select" style="width:200px;">
+                <option value="pro">Pro</option>
+                <option value="starter">Starter</option>
+                <option value="enterprise">Enterprise</option>
+              </select>
+              <div style="font-size:12px;color:var(--muted);margin-top:4px;">Plan requerido para poder canjear el crédito acumulado.</div>
+            </div>
+            <div class="form-group">
+              <label>Programa activo</label>
+              <select id="ref-enabled" class="form-select" style="width:200px;">
+                <option value="true">Activo — los usuarios pueden referir</option>
+                <option value="false">Desactivado</option>
+              </select>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="saveReferralConfig()">Guardar configuración</button>
+          </div>
+          <div class="card">
+            <div class="card-title">Ejemplo de rentabilidad</div>
+            <div id="ref-profitability" style="font-size:13px;line-height:1.8;"></div>
+            <div class="info-box" style="margin-top:14px;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:5px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+              El crédito se aplica como descuento único en la próxima suscripción del referente. No reduce pagos futuros.
+            </div>
           </div>
         </div>
       </div>

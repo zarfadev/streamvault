@@ -7130,9 +7130,9 @@ function doLogout() {
       let price, features;
       if (planData) {
         price = planData.price === 0 ? 'Gratis' : `$${planData.price}/mes`;
-        const maxVideos   = planData.maxVideos     >= 999999 ? 'Ilimitados' : planData.maxVideos;
-        const maxStorage  = planData.maxStorageGB  >= 999999 ? 'Ilimitado'  : `${planData.maxStorageGB} GB`;
-        const maxBandwidth = planData.maxBandwidthGB >= 999999 ? 'Ilimitado' : `${planData.maxBandwidthGB} GB/mes`;
+        const maxVideos   = (planData.maxVideos < 0     || planData.maxVideos     >= 999999) ? 'Ilimitados' : planData.maxVideos;
+        const maxStorage  = (planData.maxStorageGB < 0  || planData.maxStorageGB  >= 999999) ? 'Ilimitado'  : `${planData.maxStorageGB} GB`;
+        const maxBandwidth = (planData.maxBandwidthGB < 0 || planData.maxBandwidthGB >= 999999) ? 'Ilimitado' : `${planData.maxBandwidthGB} GB/mes`;
         features = [
           `${maxVideos} videos`,
           `${maxStorage} de almacenamiento`,

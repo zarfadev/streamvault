@@ -1060,7 +1060,7 @@ async function loadAudit(page=_audPage){
 /* ─── CONFIG ─────────────────────────────────────────────────── */
 async function loadConfig(){
   const savedTab = sessionStorage.getItem('sv_admin_config_tab') || 'transcoding';
-  if (['transcoding','platform','security','features','integrations'].includes(savedTab)) {
+  if (['transcoding','platform','security','features','referrals','integrations'].includes(savedTab)) {
     switchCfgTab(savedTab, true);
   }
   
@@ -1108,9 +1108,80 @@ async function loadConfig(){
   document.getElementById('int-smtp-user').textContent=cfg.smtp?.user||'—';
   document.getElementById('int-smtp-from').textContent=cfg.smtp?.from||'—';
   document.getElementById('sec-tokens').textContent=cfg.security?.requireVideoTokens?'Sí (global)':'No (por workspace)';
+  // Referrals config
+  const ref = cfg.referrals || {};
+  const refCreditEl = document.getElementById('ref-credit-usd');
+  if (refCreditEl) refCreditEl.value = ref.creditUSD ?? 10;
+  const refMaxEl = document.getElementById('ref-max-credits');
+  if (refMaxEl) refMaxEl.value = ref.maxCreditsPerUser ?? 0;
+  const refMinPlanEl = document.getElementById('ref-min-plan');
+  if (refMinPlanEl) refMinPlanEl.value = ref.minPlanToRedeem || 'pro';
+  const refEnabledEl = document.getElementById('ref-enabled');
+  if (refEnabledEl) refEnabledEl.value = ref.enabled !== false ? 'true' : 'false';
+  updateReferralProfitability();
   // Ya se aplicó el tab al inicio — no necesitamos hacerlo de nuevo aquí
 }
-async function saveTranscoding(){ const allQ=['360p','480p','720p','1080p','1440p','4k']; const qualities=allQ.filter(q=>document.getElementById('q-'+q)?.checked); if(!qualities.length) return toast('Selecciona al menos una','error'); const r=await api('/api/admin/config',{method:'PUT',body:JSON.stringify({section:'transcoding',data:{qualities}})}); if(r.ok) toast('Guardado'); else toast('Error','error'); }
+async function saveTranscoding(){ const allQ=['360p','480p','720p','1080p','1440p','4k']; const qualities=allQ.filter(q=>document.getElementById('q-'+q)?.checked); if(!qualities.length) return toast('Selecciona al menos una','error'); const r=await api('/api/admin/config',{method:'PUT',body:JSON.stringify({section:'transcoding',data:{qualities}})}); if(r.ok) toast('Calidades guardadas — re-transcodifica videos existentes si quieres aplicarlas'); else toast('Error','error'); }
+
+async function bulkRetranscode() {
+  if (!confirm('¿Re-encolar todos los videos para transcodificar con las nuevas calidades? Solo videos con archivo fuente disponible serán procesados (máx. 200 a la vez).')) return;
+  const resultEl = document.getElementById('bulk-retranscode-result');
+  if (resultEl) resultEl.textContent = 'Enviando...';
+  try {
+    const r = await api('/api/admin/retranscode-bulk', { method: 'POST', body: JSON.stringify({}) });
+    const d = await r.json();
+    if (r.ok) {
+      if (resultEl) resultEl.textContent = `✓ ${d.queued} videos en cola, ${d.skipped} sin fuente disponible.`;
+      toast(`${d.queued} videos encolados para re-transcodificación`);
+    } else {
+      if (resultEl) resultEl.textContent = `Error: ${d.error}`;
+      toast('Error al encolar', 'error');
+    }
+  } catch (e) {
+    if (resultEl) resultEl.textContent = 'Error de conexión';
+    toast('Error de conexión', 'error');
+  }
+}
+
+function updateReferralProfitability() {
+  const creditUSD = parseFloat(document.getElementById('ref-credit-usd')?.value) || 10;
+  const el = document.getElementById('ref-profitability');
+  if (!el) return;
+  const proPlan  = 10;
+  const entPlan  = 30;
+  const refPct   = ((creditUSD / proPlan) * 100).toFixed(0);
+  const refPctE  = ((creditUSD / entPlan) * 100).toFixed(0);
+  el.innerHTML = `
+    <div style="display:grid;gap:8px;">
+      <div style="padding:10px 12px;background:var(--surface2);border-radius:8px;border:1px solid var(--border2);">
+        <div style="font-weight:600;margin-bottom:4px;">Plan Pro ($${proPlan}/mes)</div>
+        <div>Descuento referente: <strong>$${creditUSD}</strong> = ${refPct}% de una mensualidad</div>
+        <div style="color:var(--green);">Ingreso neto por conversión: <strong>$${(proPlan - creditUSD).toFixed(2)}</strong></div>
+      </div>
+      <div style="padding:10px 12px;background:var(--surface2);border-radius:8px;border:1px solid var(--border2);">
+        <div style="font-weight:600;margin-bottom:4px;">Plan Enterprise ($${entPlan}/mes)</div>
+        <div>Descuento referente: <strong>$${creditUSD}</strong> = ${refPctE}% de una mensualidad</div>
+        <div style="color:var(--green);">Ingreso neto por conversión: <strong>$${(entPlan - creditUSD).toFixed(2)}</strong></div>
+      </div>
+    </div>`;
+}
+
+async function saveReferralConfig() {
+  const creditUSD     = parseFloat(document.getElementById('ref-credit-usd')?.value) || 10;
+  const maxCredits    = parseInt(document.getElementById('ref-max-credits')?.value) || 0;
+  const minPlan       = document.getElementById('ref-min-plan')?.value || 'pro';
+  const enabled       = document.getElementById('ref-enabled')?.value !== 'false';
+  const r = await api('/api/admin/config', { method: 'PUT', body: JSON.stringify({
+    section: 'referrals',
+    data: { enabled, creditUSD, maxCreditsPerUser: maxCredits, minPlanToRedeem: minPlan }
+  })});
+  if (r.ok) {
+    toast('Configuración de referidos guardada');
+    updateReferralProfitability();
+  } else {
+    toast('Error al guardar', 'error');
+  }
+}
 
 // ── Branding del player — Preview del logo ───────────────────
 function previewPlatformLogo() {
@@ -1155,19 +1226,19 @@ async function savePlatform(){
 async function saveSecurity(){ const data={jwtExpiryHours:parseInt(document.getElementById('cfg-jwt').value)||24,refreshExpiryDays:parseInt(document.getElementById('cfg-refresh').value)||30,bcryptRounds:parseInt(document.getElementById('cfg-bcrypt').value)||12}; const r=await api('/api/admin/config',{method:'PUT',body:JSON.stringify({section:'security',data})}); if(r.ok) toast('Guardado'); else toast('Error','error'); }
 function switchCfgTab(tab, immediate = false){
   const updateDOM = () => {
-    ['transcoding','platform','security','features','integrations'].forEach(t=>{
+    ['transcoding','platform','security','features','referrals','integrations'].forEach(t=>{
       document.getElementById('cfg-'+t).style.display=t===tab?'block':'none';
       document.getElementById('cfg-tab-'+t).classList.toggle('active',t===tab);
     });
   };
-  
+
   // Ejecutar inmediatamente o en el siguiente frame para evitar parpadeo
   if (immediate) {
     updateDOM();
   } else {
     requestAnimationFrame(updateDOM);
   }
-  
+
   // Guardar la sub-pestaña en sessionStorage (síncrono, fuera de RAF)
   sessionStorage.setItem('sv_admin_config_tab', tab);
   if (tab==='features') loadFeaturesTab();
