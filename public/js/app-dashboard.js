@@ -5997,18 +5997,25 @@ function doLogout() {
       } catch { card.style.display = 'none'; }
     }
 
-    async function startCheckout(planKey) {
+    async function startCheckout(planKey, providerOverride) {
       if (!authWorkspace) return toast('Workspace requerido', 'error');
       try {
+        // Load the default gateway if not specified
+        let provider = providerOverride;
+        if (!provider) {
+          try {
+            const gwR = await apiFetch(`${BASE}/api/billing/gateways`);
+            const gws = await gwR.json();
+            const defaultGw = Array.isArray(gws) ? (gws.find(g => g.is_default) || gws[0]) : null;
+            if (defaultGw) provider = defaultGw.gateway;
+          } catch {}
+        }
         const r = await apiFetch(`${BASE}/api/billing/checkout`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ plan: planKey }),
+          body: JSON.stringify({ plan: planKey, provider }),
         });
         const d = await r.json();
         if (!r.ok) {
-          if (d.error?.includes('not configured') || d.error?.includes('Stripe not configured')) {
-            return toast('Stripe no configurado — agrega STRIPE_SECRET_KEY en .env', 'error');
-          }
           return toast(d.error || 'Error al iniciar pago', 'error');
         }
         if (d.checkoutUrl) window.location.href = d.checkoutUrl;

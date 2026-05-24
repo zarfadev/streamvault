@@ -185,7 +185,8 @@ router.get('/subscription', authenticate, resolveWorkspace, async (req, res) => 
 // ══════════════════════════════════════════════════════════════════════════
 router.post('/checkout', rateLimit(10, 3_600_000), authenticate, resolveWorkspace, requireRole('owner'), async (req, res) => {
   try {
-    const { plan, provider = 'stripe' } = req.body;
+    const { plan } = req.body;
+    let { provider } = req.body;
 
     if (!plan || !config.plans[plan]) {
       return res.status(400).json({ error: 'Plan inválido. Opciones: starter, pro, enterprise' });
@@ -258,12 +259,24 @@ router.post('/checkout', rateLimit(10, 3_600_000), authenticate, resolveWorkspac
     }
 
     // ── Planes pagos: requieren pasarela ─────────────────────────────────────
+    // Auto-select the default/first enabled gateway if none specified
+    const gateways = await paymentGateway.getEnabledGateways();
+    if (!provider) {
+      // Find the default gateway first, then any enabled one
+      const defaultGw = Object.entries(gateways).find(([, cfg]) => cfg.default && cfg.enabled);
+      const anyEnabled = Object.entries(gateways).find(([, cfg]) => cfg.enabled);
+      const selected = defaultGw || anyEnabled;
+      if (!selected) {
+        return res.status(400).json({ error: 'No hay pasarelas de pago habilitadas. Configura una en el panel de administración.' });
+      }
+      provider = selected[0];
+      logger.info({ provider, plan }, 'Auto-selected payment gateway');
+    }
+
     if (!['stripe', 'paypal', 'binance', 'dlocalgo'].includes(provider)) {
       return res.status(400).json({ error: 'Proveedor inválido. Opciones: stripe, paypal, binance, dlocalgo' });
     }
 
-    // Verificar que el proveedor esté habilitado
-    const gateways = await paymentGateway.getEnabledGateways();
     if (!gateways[provider]?.enabled) {
       return res.status(400).json({ error: `El proveedor de pago "${provider}" no está habilitado` });
     }
