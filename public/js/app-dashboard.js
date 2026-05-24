@@ -730,15 +730,26 @@ function doLogout() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ domain })
         });
-        
+
         const data = await r.json();
-        
+
         if (!r.ok) {
           toast(data.error || 'Error al verificar dominio', 'error');
           showDomainStatus(false, data.error || 'Verifica la configuración DNS');
         } else {
+          // Build a status message that includes the CNAME verification result
+          let msg = 'Dominio verificado y activo';
+          if (data.cname_ok) {
+            msg += ` — CNAME apunta correctamente a ${data.cname_expected}`;
+          } else if (data.cname_chain && data.cname_chain.length > 0) {
+            msg += ` — ⚠️ CNAME apunta a ${data.cname_chain[0]} (esperado: ${data.cname_expected})`;
+          } else {
+            msg += ` — ⚠️ Sin registro CNAME detectado (verifica que el CNAME apunte a ${data.cname_expected || 'streamvault.link'})`;
+          }
+          if (data.resolved_ip) msg += ` · IP: ${data.resolved_ip}`;
           toast('Dominio verificado correctamente', 'success');
-          showDomainStatus(true, 'Dominio verificado y activo');
+          showDomainStatus(true, msg);
+          authWorkspace.custom_domain_verified = true;
         }
       } catch (err) {
         console.error('Error verifying domain:', err);
@@ -1309,13 +1320,24 @@ function doLogout() {
       updateEmbedPreview();
     }
 
+    /**
+     * Returns the correct base URL for embed iframes:
+     * - If the workspace has a verified custom domain → use that domain (https://domain)
+     * - Otherwise → use the platform origin (BASE)
+     */
+    function getEmbedBase() {
+      const cd = authWorkspace?.custom_embed_domain;
+      const verified = !!authWorkspace?.custom_domain_verified;
+      return (cd && verified) ? `https://${cd}` : BASE;
+    }
+
     function getEmbedSrc(id) {
       const color = encodeURIComponent(document.getElementById('cfg-color-hex').value || '#7c6cfa');
       const logo = document.getElementById('cfg-logo-url').value.trim();
       // Don't embed data: URLs — they bloat the iframe src enormously.
       // The player already loads the logo from workspace settings via the API.
       const logoParam = logo && !logo.startsWith('data:') ? '&logo=' + encodeURIComponent(logo) : '';
-      return `${BASE}/embed/${id}?color=${color}${logoParam}`;
+      return `${getEmbedBase()}/embed/${id}?color=${color}${logoParam}`;
     }
 
     function buildEmbedCode(id, mode) {
@@ -3386,7 +3408,7 @@ function doLogout() {
       const v = allVideosCache.find(x => x.id === videoId);
       const title = v?.title || '';
       const watchUrl = `${BASE}/watch/${videoId}`;
-      const iframeCode = `<iframe src="${BASE}/embed/${videoId}" width="640" height="360" frameborder="0" allow="autoplay; fullscreen; picture-in-picture"></iframe>`;
+      const iframeCode = `<iframe src="${getEmbedBase()}/embed/${videoId}" width="640" height="360" frameborder="0" allow="autoplay; fullscreen; picture-in-picture"></iframe>`;
       document.getElementById('preview-title').textContent = title;
       document.getElementById('preview-iframe').src = `${BASE}/player/${videoId}?preview=1`;
       document.getElementById('preview-iframe-code').value = iframeCode;
@@ -3428,7 +3450,8 @@ function doLogout() {
     function copyLink(id, type) {
       const v = (allVideosCache || []).find(x => x.id === id);
       if (type === 'embed') {
-        const src = `${BASE}/embed/${id}`;
+        // Use verified custom domain if configured, otherwise fall back to platform origin
+        const src = `${getEmbedBase()}/embed/${id}`;
         const code = `<iframe src="${src}" width="640" height="360" frameborder="0" allowfullscreen></iframe>`;
         navigator.clipboard.writeText(code).then(() => toast('Código embed copiado'));
         return;
@@ -3652,6 +3675,11 @@ function doLogout() {
         if (!r.ok) { toast(d.error || 'Error', 'error'); return; }
         toast('Miniatura restaurada');
         updateEditThumbUI(_editModalVideoId, d.thumbnailUrl);
+        // Update cache so grid card reflects the regenerated thumbnail immediately
+        if (d.thumbnailUrl) {
+          const cached = allVideosCache.find(x => x.id === _editModalVideoId);
+          if (cached) { cached.thumbnailUrl = d.thumbnailUrl; applyLibraryFilters(); }
+        }
       } catch { toast('Error de conexión', 'error'); }
       finally { btn.disabled = false; btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg> Eliminar'; }
     }
@@ -3673,6 +3701,11 @@ function doLogout() {
         if (!r.ok) { toast(d.error || 'Error al obtener poster', 'error'); return; }
         toast('Poster de TMDB aplicado');
         updateEditThumbUI(_editModalVideoId, d.thumbnailUrl);
+        // Update cache so grid card reflects the TMDB poster immediately
+        if (d.thumbnailUrl) {
+          const cached = allVideosCache.find(x => x.id === _editModalVideoId);
+          if (cached) { cached.thumbnailUrl = d.thumbnailUrl; applyLibraryFilters(); }
+        }
       } catch { toast('Error de conexión', 'error'); }
       finally { btn.disabled = false; btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg> Poster TMDB'; }
     }
@@ -5843,12 +5876,29 @@ function doLogout() {
             body: JSON.stringify(body),
           });
           const thumbFile = document.getElementById('edit-thumb-file');
+          let newThumbUrl = null;
           if (thumbFile?.files.length) {
             const fd = new FormData();
             fd.append('thumbnail', thumbFile.files[0]);
-            await apiFetch(`/api/videos/${id}/thumbnail`, { method: 'POST', body: fd });
+            try {
+              const tr = await apiFetch(`/api/videos/${id}/thumbnail`, { method: 'POST', body: fd });
+              if (tr.ok) {
+                const td = await tr.json().catch(() => ({}));
+                newThumbUrl = td.thumbnailUrl || null;
+              }
+            } catch {}
           }
-          if (r.ok) { toast('Video actualizado'); closeModal('edit-modal-overlay'); loadVideos(); }
+          if (r.ok) {
+            toast('Video actualizado');
+            closeModal('edit-modal-overlay');
+            // Immediately update cache so the grid card reflects the new thumbnail
+            // without waiting for the loadVideos() network round-trip.
+            if (newThumbUrl) {
+              const cached = allVideosCache.find(x => x.id === id);
+              if (cached) cached.thumbnailUrl = newThumbUrl;
+            }
+            loadVideos();
+          }
           else { const d = await r.json().catch(()=>({})); toast(d.error || 'Error al actualizar', 'error'); }
         } catch { toast('Error de conexión', 'error'); }
         finally { newSaveBtn.disabled = false; newSaveBtn.textContent = 'Guardar cambios'; }

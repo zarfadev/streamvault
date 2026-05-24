@@ -1553,11 +1553,14 @@ router.post('/:id/thumbnail', authenticate, thumbUpload.single('thumbnail'), asy
       fs.renameSync(req.file.path, finalPath);
     }
 
-    // Sync custom thumbnail to S3 immediately so CDN serves the new image
+    // Sync custom thumbnail to S3 immediately so CDN serves the new image.
+    // Use a versioned filename (thumb_v{timestamp}.jpg) so CloudFront creates a
+    // fresh cache entry and doesn't serve the old cached thumb.jpg.
     let thumbCdnUrl = null;
     if (s3.isS3Enabled()) {
       try {
-        thumbCdnUrl = await s3.uploadFile(finalPath, video.workspace_id, video.id, 'thumb.jpg');
+        const s3Key = `thumb_v${Date.now()}.jpg`;
+        thumbCdnUrl = await s3.uploadFile(finalPath, video.workspace_id, video.id, s3Key);
       } catch (e) {
         logger.warn({ videoId: video.id, err: e.message }, 'Custom thumbnail S3 upload failed — serving locally');
       }
@@ -1603,7 +1606,9 @@ router.delete('/:id/thumbnail', authenticate, async (req, res) => {
     let regenCdnUrl = null;
     if (s3.isS3Enabled() && fs.existsSync(thumbPath)) {
       try {
-        regenCdnUrl = await s3.uploadFile(thumbPath, video.workspace_id, video.id, 'thumb.jpg');
+        // Versioned key so CloudFront doesn't serve the old cached thumbnail
+        const s3Key = `thumb_v${Date.now()}.jpg`;
+        regenCdnUrl = await s3.uploadFile(thumbPath, video.workspace_id, video.id, s3Key);
         await db.prepare(`UPDATE videos SET thumbnail_url = ? WHERE id = ?`).run(regenCdnUrl, video.id);
       } catch (e) {
         logger.warn({ videoId: video.id, err: e.message }, 'Regen thumb S3 upload failed');
@@ -1660,7 +1665,9 @@ router.post('/:id/thumbnail/tmdb', authenticate, async (req, res) => {
     let thumbCdnUrl = null;
     if (s3.isS3Enabled()) {
       try {
-        thumbCdnUrl = await s3.uploadFile(thumbPath, video.workspace_id, video.id, 'thumb.jpg');
+        // Versioned key so CloudFront doesn't serve the old cached thumbnail
+        const s3Key = `thumb_v${Date.now()}.jpg`;
+        thumbCdnUrl = await s3.uploadFile(thumbPath, video.workspace_id, video.id, s3Key);
       } catch (e) {
         logger.warn({ videoId: video.id, err: e.message }, 'TMDB thumb S3 upload failed — serving local');
       }

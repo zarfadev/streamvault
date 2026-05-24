@@ -108,13 +108,19 @@ function storeTokens(data, remember) {
     sessionStorage.removeItem('sv_workspace');
   } else {
     localStorage.removeItem('sv_access_token');
-    localStorage.removeItem('sv_refresh_token');
+    // Do NOT remove sv_refresh_token from localStorage here:
+    // it will be stored there anyway (see below) for cross-tab auth detection.
     localStorage.removeItem('sv_user');
     localStorage.removeItem('sv_workspace');
   }
   store.setItem('sv_access_token', data.accessToken);
   store.setItem('sv_refresh_token', data.refreshToken);
   store.setItem('sv_user', JSON.stringify(data.user));
+  // Always persist the refresh token in localStorage regardless of remember-me.
+  // This lets other tabs/pages (download, watch) detect the active session even
+  // when the access token lives only in sessionStorage (remember-me OFF).
+  // Logout always clears both storages, so no security regression.
+  if (!remember) localStorage.setItem('sv_refresh_token', data.refreshToken);
   if (data.workspaces?.length) store.setItem('sv_workspace', JSON.stringify(data.workspaces[0]));
   if (data.workspace)          store.setItem('sv_workspace', JSON.stringify(data.workspace));
 }
@@ -234,7 +240,7 @@ async function doForgot() {
 // Super admin re-login: clear session
 const sp = new URLSearchParams(window.location.search);
 if (sp.get('need_super_admin') === '1') {
-  ['sv_token', 'sv_access_token', 'sv_refresh', 'sv_refresh_token', 'sv_user', 'sv_workspace'].forEach(k => localStorage.removeItem(k));
+  ['sv_token', 'sv_access_token', 'sv_refresh', 'sv_refresh_token', 'sv_user', 'sv_workspace'].forEach(k => { localStorage.removeItem(k); sessionStorage.removeItem(k); });
   document.addEventListener('DOMContentLoaded', () => {
     const b = document.getElementById('login-alerts') || document.querySelector('.card');
     if (b) {

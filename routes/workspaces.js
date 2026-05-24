@@ -268,27 +268,45 @@ router.post('/:workspaceId/verify-domain', rateLimit(10, 60_000), resolveWorkspa
     return res.status(400).json({ error: 'Domain does not match saved domain. Save the domain first.' });
   }
 
-  // Resolve domain first and reject private/loopback IPs (SSRF prevention).
   const { promises: dns } = require('dns');
+  const appHost = (process.env.APP_URL || 'streamvault.link')
+    .replace(/^https?:\/\//, '').split('/')[0];
+
+  // ── Step 1: CNAME check ─────────────────────────────────────────
+  // Resolve CNAME chain and verify at least one hop includes the app's root domain.
+  let cnameChain = [];
+  let cnameOk = false;
+  try {
+    cnameChain = await dns.resolveCname(domain);
+    const appRootParts = appHost.split('.').slice(-2).join('.'); // e.g. "streamvault.link"
+    cnameOk = cnameChain.some(c => c.toLowerCase().includes(appRootParts));
+  } catch {
+    // No CNAME record found — might be an A record pointing to us; we'll check via IP.
+  }
+
+  // ── Step 2: IP resolution + private-IP guard (SSRF prevention) ──
   let resolvedIp;
   try {
     const result = await dns.lookup(domain);
     resolvedIp = result.address;
   } catch {
-    return res.status(400).json({ error: `Domain "${domain}" does not resolve. Check your DNS CNAME record.` });
+    return res.status(400).json({
+      error: `El dominio "${domain}" no resuelve en DNS. Agrega el registro CNAME y espera la propagación (puede tardar hasta 24h).`,
+      cname_ok: false, cname_chain: cnameChain,
+    });
   }
 
-  // Block RFC-1918, loopback, link-local, and APIPA ranges.
   const isPrivate = (ip) => /^(127\.|10\.|192\.168\.|169\.254\.)/.test(ip)
     || /^172\.(1[6-9]|2\d|3[01])\./.test(ip)
     || ip === '::1' || ip.startsWith('fd') || ip.startsWith('fc');
 
   if (isPrivate(resolvedIp)) {
-    return res.status(400).json({ error: 'Domain resolves to a private or reserved IP address.' });
+    return res.status(400).json({ error: 'El dominio apunta a una IP privada o reservada.' });
   }
 
-  // Attempt an HTTP request to the domain — if it resolves and returns any response,
-  // the DNS is pointing somewhere. Mark as verified so the embed config includes it.
+  // ── Step 3: HTTP reachability check ─────────────────────────────
+  // Even if the HTTP request fails (SSL error etc.) we mark as verified
+  // since DNS already confirmed the domain resolves to a public IP.
   try {
     const https = require('https');
     const http  = require('http');
@@ -304,17 +322,18 @@ router.post('/:workspaceId/verify-domain', rateLimit(10, 60_000), resolveWorkspa
       req2.on('timeout', () => { req2.destroy(); reject(new Error('timeout')); });
       req2.on('error', reject);
     });
+  } catch {}
 
-    await db.prepare(`UPDATE workspaces SET custom_domain_verified = TRUE, updated_at = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT WHERE id = ?`).run(ws.id);
-    cache.invalidate(`sv:ws:${ws.id}`).catch(() => {});
-    res.json({ success: true, verified: true });
-  } catch (err) {
-    // Even if the HTTP check fails (SSL error, redirect, etc.), DNS already resolved
-    // to a public IP above — treat as verified.
-    await db.prepare(`UPDATE workspaces SET custom_domain_verified = TRUE, updated_at = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT WHERE id = ?`).run(ws.id);
-    cache.invalidate(`sv:ws:${ws.id}`).catch(() => {});
-    return res.json({ success: true, verified: true });
-  }
+  await db.prepare(`UPDATE workspaces SET custom_domain_verified = TRUE, updated_at = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT WHERE id = ?`).run(ws.id);
+  cache.invalidate(`sv:ws:${ws.id}`).catch(() => {});
+  return res.json({
+    success: true,
+    verified: true,
+    cname_ok:    cnameOk,
+    cname_chain: cnameChain,
+    cname_expected: appHost,
+    resolved_ip: resolvedIp,
+  });
 });
 
 router.delete('/:workspaceId', resolveWorkspace, requireRole('owner'), async (req, res) => {

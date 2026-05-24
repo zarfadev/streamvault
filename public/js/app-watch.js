@@ -3,7 +3,12 @@ const BASE = location.origin;
 const _vidMatch = location.pathname.match(/\/watch\/([^/?#]+)/);
 const videoId = _vidMatch ? _vidMatch[1] : null;
 
-const _token = localStorage.getItem('sv_access_token') || sessionStorage.getItem('sv_access_token') || localStorage.getItem('sv_token');
+// Check for active session in either localStorage (remember-me ON) or sessionStorage
+// (remember-me OFF same tab), plus the refresh token which is always stored in
+// localStorage so cross-tab navigation correctly detects the session.
+const _token = localStorage.getItem('sv_access_token') || sessionStorage.getItem('sv_access_token')
+             || localStorage.getItem('sv_token')
+             || localStorage.getItem('sv_refresh_token') || sessionStorage.getItem('sv_refresh_token');
 if (_token) document.getElementById('nav-dashboard').style.display = 'flex';
 else document.getElementById('nav-login').style.display = 'flex';
 
