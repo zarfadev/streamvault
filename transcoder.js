@@ -858,7 +858,9 @@ async function rebuildMasterPlaylist(videoId, qualitiesOverride = null) {
 
   const audioAttr = audioTracks.length    ? ',AUDIO="audio"'    : '';
   const subsAttr  = subtitleTracks.length ? ',SUBTITLES="subs"' : '';
-  for (const q of qualities) {
+  // Sort by bandwidth ascending (HLS spec §4.3.4.2 recommends ordering from lowest to highest)
+  const sortedQualities = [...qualities].sort((a, b) => (bitrateMap[a] || 0) - (bitrateMap[b] || 0));
+  for (const q of sortedQualities) {
     lines.push(`#EXT-X-STREAM-INF:BANDWIDTH=${bitrateMap[q]},RESOLUTION=${resMap[q]},NAME="${q}"${audioAttr}${subsAttr}`);
     lines.push(`${q}/index.m3u8`);
   }
