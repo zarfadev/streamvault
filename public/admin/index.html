@@ -731,6 +731,11 @@
           <line x1="12" y1="12" x2="12" y2="16"/>
           <line x1="10" y1="14" x2="14" y2="14"/>
         </svg>Anuncios</button>
+      <button class="nav-item" data-s="ad-library" onclick="go('ad-library',this)"><svg class="nav-icon" viewBox="0 0 24 24"
+          fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <path d="M3 9h18M9 21V9"/>
+        </svg>Ad Library</button>
       <span class="nav-section-label">Sistema</span>
       <button class="nav-item" data-s="queue" onclick="go('queue',this)"><svg class="nav-icon" viewBox="0 0 24 24"
           fill="none" stroke="currentColor" stroke-width="2">
@@ -2390,6 +2395,202 @@
 
     <div id="s-ads-config" style="display:none;"></div>
 
+    <!-- ═══ AD LIBRARY ══════════════════════════════════════════════ -->
+    <div id="s-ad-library" style="display:none;">
+      <div class="page-header">
+        <div class="page-title-row">
+          <h1 class="page-title">Ad Library</h1>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-ghost btn-sm" onclick="loadAdLibrary()">Actualizar</button>
+            <button class="btn btn-primary btn-sm" onclick="openAdCreativeModal()">+ Nuevo creativo</button>
+          </div>
+        </div>
+        <p class="page-sub">Biblioteca de anuncios: VAST (video propio o externo), banners HTML y popups. Úsalos como Platform Ads o guárdalos para futuras colaboraciones.</p>
+      </div>
+
+      <!-- Info card con el concepto VAST URL -->
+      <div class="info-box" style="margin-bottom:20px;">
+        <strong>🎯 Cómo usar:</strong>
+        Crea un creativo tipo <em>VAST Video</em> y copia su URL VAST generada. Pégala en
+        <strong>Anuncios → Platform Ads → VAST Tag URL</strong>. El player la consumirá
+        automáticamente como pre/mid/post-roll. Para banners y popups, usa el botón
+        <em>"Usar como Platform Ad"</em> directo desde esta lista.
+      </div>
+
+      <!-- Lista de creativos -->
+      <div class="card">
+        <div class="card-title">Creativos guardados</div>
+        <div class="table-wrap" style="border:none;margin-top:8px;">
+          <table class="data-table">
+            <thead><tr>
+              <th>Nombre</th>
+              <th>Tipo</th>
+              <th>Detalle</th>
+              <th>Estado</th>
+              <th style="text-align:right;">Acciones</th>
+            </tr></thead>
+            <tbody id="ad-library-body">
+              <tr><td colspan="5" class="empty-state">Cargando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ AD CREATIVE MODAL ════════════════════════════════════════ -->
+    <div class="modal-overlay" id="ad-creative-modal" onclick="if(event.target===this)closeModal('ad-creative-modal')">
+      <div class="modal-card wide">
+        <div class="modal-head">
+          <h3 id="ad-creative-modal-title">Nuevo Creativo</h3>
+          <button class="btn btn-ghost btn-sm" onclick="closeModal('ad-creative-modal')" style="padding:4px 10px;font-size:18px;line-height:1;">×</button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="ac-id">
+
+          <div class="form-group" style="margin-bottom:14px;">
+            <label>Nombre del creativo</label>
+            <input type="text" id="ac-name" placeholder="Ej: Pre-roll Enero 2026 — Acme Corp">
+          </div>
+
+          <div class="form-group" style="margin-bottom:18px;">
+            <label>Tipo</label>
+            <select id="ac-type" class="form-select" onchange="renderAdCreativeFields()">
+              <option value="vast_url">VAST URL externo (Google IMA, DoubleClick, SpotX…)</option>
+              <option value="vast_video">VAST con video propio (genera tag VAST interno)</option>
+              <option value="banner">Banner HTML personalizado</option>
+              <option value="popup">Popup (URL externa)</option>
+            </select>
+          </div>
+
+          <!-- VAST URL externo -->
+          <div id="ac-fields-vast_url">
+            <div class="form-group">
+              <label>VAST Tag URL</label>
+              <input type="url" id="ac-vast-url" placeholder="https://pubads.g.doubleclick.net/gampad/ads?...">
+              <div style="font-size:11px;color:var(--muted);margin-top:4px;">URL del servidor VAST externo. Soporta Google IMA, DoubleClick, SpotX, Magnite, etc.</div>
+            </div>
+            <div class="form-group" style="margin-top:12px;">
+              <label>Posición</label>
+              <select id="ac-vast-url-position" class="form-select">
+                <option value="preroll">Pre-roll (antes del video)</option>
+                <option value="midroll">Mid-roll (en medio)</option>
+                <option value="postroll">Post-roll (al final)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- VAST con video propio -->
+          <div id="ac-fields-vast_video" style="display:none;">
+            <div class="info-box" style="margin-bottom:14px;">
+              El sistema genera un tag VAST 2.0 con tu video. Copia la URL VAST generada
+              y úsala en Google IMA, HLS.js o cualquier player compatible.
+            </div>
+            <div class="form-group">
+              <label>URL del video del anuncio</label>
+              <input type="url" id="ac-video-url" placeholder="https://cdn.tudominio.com/ads/anuncio-enero.mp4">
+              <div style="font-size:11px;color:var(--muted);margin-top:4px;">MP4 recomendado. Puede ser S3, CloudFront o cualquier CDN público.</div>
+            </div>
+            <div class="form-group" style="margin-top:12px;">
+              <label>URL de destino (click-through)</label>
+              <input type="url" id="ac-click-url" placeholder="https://anunciante.com/landing">
+            </div>
+            <div style="display:flex;gap:12px;margin-top:12px;">
+              <div class="form-group" style="flex:1;">
+                <label>Duración (seg)</label>
+                <input type="number" id="ac-duration" min="1" max="300" value="15" style="font-family:var(--mono);">
+              </div>
+              <div class="form-group" style="flex:1;">
+                <label>Posición</label>
+                <select id="ac-video-position" class="form-select">
+                  <option value="preroll">Pre-roll</option>
+                  <option value="midroll">Mid-roll</option>
+                  <option value="postroll">Post-roll</option>
+                </select>
+              </div>
+            </div>
+            <div id="ac-vast-url-output" style="display:none;margin-top:16px;padding:12px 14px;background:var(--surface2);border:1px solid var(--accent2);border-radius:10px;">
+              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--accent2);margin-bottom:6px;">🔗 Tu VAST Tag URL (cópiala)</div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <code id="ac-vast-generated-url" style="font-size:12px;color:var(--text);word-break:break-all;flex:1;"></code>
+                <button class="btn btn-ghost btn-sm" onclick="copyVastUrl()" style="flex-shrink:0;">Copiar</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Banner HTML -->
+          <div id="ac-fields-banner" style="display:none;">
+            <div class="form-group">
+              <label>HTML del banner</label>
+              <textarea id="ac-banner-html" rows="6" placeholder='<a href="https://anunciante.com" target="_blank" rel="noopener">&#10;  <img src="https://cdn.anunciante.com/banner.jpg" style="width:100%;height:90px;object-fit:cover;border-radius:4px;">&#10;</a>'></textarea>
+              <div style="font-size:11px;color:var(--muted);margin-top:4px;">HTML completo del banner. Se insertará sobre el video del player.</div>
+            </div>
+            <div style="display:flex;gap:12px;margin-top:12px;">
+              <div class="form-group" style="flex:1;">
+                <label>Posición</label>
+                <select id="ac-banner-position" class="form-select">
+                  <option value="bottom">Abajo</option>
+                  <option value="top">Arriba</option>
+                </select>
+              </div>
+              <div class="form-group" style="flex:1;">
+                <label>Delay de aparición (seg)</label>
+                <input type="number" id="ac-banner-delay" min="0" value="0" style="font-family:var(--mono);">
+              </div>
+              <div class="form-group" style="flex:1;">
+                <label>Duración visible (0=siempre)</label>
+                <input type="number" id="ac-banner-duration" min="0" value="0" style="font-family:var(--mono);">
+              </div>
+            </div>
+            <!-- Preview -->
+            <div style="margin-top:14px;">
+              <button class="btn btn-ghost btn-sm" onclick="previewBanner()">👁 Preview</button>
+              <div id="ac-banner-preview" style="display:none;margin-top:10px;border:1px solid var(--border2);border-radius:8px;overflow:hidden;"></div>
+            </div>
+          </div>
+
+          <!-- Popup -->
+          <div id="ac-fields-popup" style="display:none;">
+            <div class="form-group">
+              <label>URL del popup</label>
+              <input type="url" id="ac-popup-url" placeholder="https://anunciante.com/oferta-especial">
+            </div>
+            <div style="display:flex;gap:12px;margin-top:12px;">
+              <div class="form-group" style="flex:1;">
+                <label>Delay (seg)</label>
+                <input type="number" id="ac-popup-delay" min="0" value="10" style="font-family:var(--mono);">
+              </div>
+              <div class="form-group" style="flex:1;">
+                <label>Frecuencia (1=siempre, 2=cada 2ª vista)</label>
+                <input type="number" id="ac-popup-freq" min="1" value="1" style="font-family:var(--mono);">
+              </div>
+            </div>
+          </div>
+
+          <!-- Notas internas -->
+          <div class="form-group" style="margin-top:16px;">
+            <label>Notas internas (solo admin)</label>
+            <input type="text" id="ac-notes" placeholder="Ej: Colaboración Acme Corp, vigente hasta 31/03/2026">
+          </div>
+
+          <div style="margin-top:10px;">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">
+              <input type="checkbox" id="ac-active" checked style="accent-color:var(--accent);width:15px;height:15px;">
+              Creativo activo
+            </label>
+          </div>
+        </div>
+        <div class="modal-foot" style="justify-content:space-between;">
+          <button class="btn btn-ghost btn-sm" id="ac-use-platform-btn" onclick="useCreativeAsPlatformAd()" style="display:none;">
+            📡 Usar como Platform Ad
+          </button>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-ghost" onclick="closeModal('ad-creative-modal')">Cancelar</button>
+            <button class="btn btn-primary" onclick="saveAdCreative()">Guardar creativo</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- REFERRALS SECTION -->
     <div id="s-referrals" style="display:none;">
       <div class="page-header">
@@ -2767,7 +2968,7 @@
   </div>
 
   <script src="/js/toast.js" integrity="sha384-NOlrAhsJK/ux0DquI1zmOgS8Cs9AZPo8L+h9cRBWrHtqgd++igVHeJh8U7MwFSS4" crossorigin="anonymous" defer></script>
-  <script src="/js/app-admin.js?v=2026.05.24" defer></script>
+  <script src="/js/app-admin.js?v=2026.05.25" defer></script>
 </body>
 
 </html>

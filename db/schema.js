@@ -526,6 +526,39 @@ async function createSchema(pool) {
   // A JWT whose iat < password_changed_at is rejected immediately (no need to wait for expiry).
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_changed_at BIGINT DEFAULT NULL`);
 
+  // ── Ad Creatives Library ────────────────────────────────────────
+  // Biblioteca de creativos de anuncios gestionada por el super admin.
+  // Los creativos tipo 'vast_video' tienen un endpoint VAST propio en /api/ads/vast/:id
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ad_creatives (
+      id           TEXT PRIMARY KEY,
+      name         TEXT NOT NULL,
+      type         TEXT NOT NULL DEFAULT 'vast_url',
+      -- VAST URL externo (Google IMA, DoubleClick, etc.)
+      vast_url     TEXT,
+      -- VAST con video propio (subido o URL externa al video)
+      video_url    TEXT,
+      click_url    TEXT,
+      duration_sec INTEGER DEFAULT 15,
+      -- Banner HTML
+      banner_html     TEXT,
+      banner_position TEXT DEFAULT 'bottom',
+      banner_delay    INTEGER DEFAULT 0,
+      banner_duration INTEGER DEFAULT 0,
+      -- Popup
+      popup_url       TEXT,
+      popup_delay     INTEGER DEFAULT 10,
+      popup_frequency INTEGER DEFAULT 1,
+      -- Shared
+      vast_position TEXT DEFAULT 'preroll',
+      notes         TEXT,
+      is_active     BOOLEAN DEFAULT TRUE,
+      created_at    BIGINT DEFAULT ${NOW},
+      updated_at    BIGINT DEFAULT ${NOW}
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_ad_creatives_type ON ad_creatives(type)`);
+
   // ── Seed demo account (dev / SEED_DEMO_USER=1) ─────────────────
   await seedDemo(pool);
   await applySuperAdminBootstrap(pool);

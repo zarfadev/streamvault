@@ -93,7 +93,7 @@ function go(name, el) {
   if (window.location.hash !== '#' + name) {
     window.location.hash = name;
   }
-  ({overview:loadOverview,workspaces:loadWorkspaces,users:loadUsers,videos:loadAdminVideos,billing:loadBilling,plans:loadPlansConfig,gateways:loadGateways,referrals:loadReferrals,ads:loadAdsOverview,queue:loadQueue,storage:loadStorage,audit:()=>loadAudit(1),live:loadLive,config:loadConfig})[name]?.();
+  ({overview:loadOverview,workspaces:loadWorkspaces,users:loadUsers,videos:loadAdminVideos,billing:loadBilling,plans:loadPlansConfig,gateways:loadGateways,referrals:loadReferrals,ads:loadAdsOverview,'ad-library':loadAdLibrary,queue:loadQueue,storage:loadStorage,audit:()=>loadAudit(1),live:loadLive,config:loadConfig})[name]?.();
 }
 // Función para restaurar la sección desde el hash de la URL
 function restoreSection() {
@@ -2642,6 +2642,250 @@ async function saveAdsGlobalToggle(checkbox) {
     if (r.ok) toast(enabled ? 'Anuncios activados globalmente' : 'Anuncios desactivados globalmente');
     else { toast('Error al guardar', 'error'); checkbox.checked = !enabled; }
   } catch { toast('Error de conexión', 'error'); checkbox.checked = !enabled; }
+}
+
+/* ─── AD LIBRARY ─────────────────────────────────────────────── */
+// URL base del servidor (para generar VAST tag URLs)
+function getBaseUrl() {
+  return window.location.origin;
+}
+
+let _adCreatives = [];
+
+async function loadAdLibrary() {
+  try {
+    const r = await api('/api/admin/ad-creatives');
+    if (!r.ok) { toast('Error al cargar Ad Library', 'error'); return; }
+    const d = await r.json();
+    _adCreatives = d.creatives || [];
+    renderAdLibraryTable();
+  } catch (e) {
+    toast('Error de conexión', 'error');
+  }
+}
+
+function renderAdLibraryTable() {
+  const body = document.getElementById('ad-library-body');
+  if (!body) return;
+  if (!_adCreatives.length) {
+    body.innerHTML = '<tr><td colspan="5" class="empty-state">Sin creativos aún — crea el primero con "+ Nuevo creativo"</td></tr>';
+    return;
+  }
+
+  const typeLabel = { vast_url:'VAST Externo', vast_video:'VAST Video Propio', banner:'Banner HTML', popup:'Popup' };
+  const typeColor = { vast_url:'var(--accent)', vast_video:'var(--accent2)', banner:'var(--green)', popup:'#a855f7' };
+
+  body.innerHTML = _adCreatives.map(c => {
+    let detail = '—';
+    if (c.type === 'vast_url')   detail = `<span style="font-size:11px;color:var(--muted);word-break:break-all;">${esc((c.vast_url||'').substring(0,60))}…</span>`;
+    if (c.type === 'vast_video') detail = `<div style="font-size:11px;color:var(--muted);">${esc((c.video_url||'').substring(0,50))}…</div><code style="font-size:10px;color:var(--accent2);">${esc(getBaseUrl())}/api/ads/vast/${esc(c.id)}</code>`;
+    if (c.type === 'banner')     detail = `<span style="font-size:11px;color:var(--muted);">Posición: ${esc(c.banner_position)}, delay: ${c.banner_delay}s</span>`;
+    if (c.type === 'popup')      detail = `<span style="font-size:11px;color:var(--muted);">${esc((c.popup_url||'').substring(0,50))}</span>`;
+
+    return `<tr>
+      <td>
+        <div style="font-weight:600;">${esc(c.name)}</div>
+        ${c.notes ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">${esc(c.notes)}</div>` : ''}
+      </td>
+      <td><span style="font-size:11px;font-weight:700;color:${typeColor[c.type]||'var(--text)'};">${typeLabel[c.type]||c.type}</span></td>
+      <td>${detail}</td>
+      <td>${c.is_active ? '<span style="color:var(--green);font-size:12px;">●&nbsp;Activo</span>' : '<span style="color:var(--muted);font-size:12px;">○&nbsp;Inactivo</span>'}</td>
+      <td style="text-align:right;white-space:nowrap;">
+        <button class="btn btn-ghost btn-sm" onclick="useCreativeAsPlatformAdDirect('${esc(c.id)}')" title="Usar como Platform Ad" style="margin-right:4px;">📡</button>
+        <button class="btn btn-ghost btn-sm" onclick="editAdCreative('${esc(c.id)}')" style="margin-right:4px;">Editar</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--red);" onclick="deleteAdCreative('${esc(c.id)}','${esc(c.name)}')">Eliminar</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function openAdCreativeModal(id) {
+  // Reset form
+  document.getElementById('ac-id').value          = '';
+  document.getElementById('ac-name').value         = '';
+  document.getElementById('ac-type').value         = 'vast_url';
+  document.getElementById('ac-vast-url').value     = '';
+  document.getElementById('ac-video-url').value    = '';
+  document.getElementById('ac-click-url').value    = '';
+  document.getElementById('ac-duration').value     = '15';
+  document.getElementById('ac-banner-html').value  = '';
+  document.getElementById('ac-banner-delay').value = '0';
+  document.getElementById('ac-banner-duration').value = '0';
+  document.getElementById('ac-popup-url').value    = '';
+  document.getElementById('ac-popup-delay').value  = '10';
+  document.getElementById('ac-popup-freq').value   = '1';
+  document.getElementById('ac-notes').value        = '';
+  document.getElementById('ac-active').checked     = true;
+  document.getElementById('ac-vast-url-output').style.display = 'none';
+  document.getElementById('ac-banner-preview').style.display  = 'none';
+  document.getElementById('ac-use-platform-btn').style.display = 'none';
+  document.getElementById('ad-creative-modal-title').textContent = id ? 'Editar Creativo' : 'Nuevo Creativo';
+  renderAdCreativeFields();
+  document.getElementById('ad-creative-modal').style.display = 'flex';
+}
+
+function editAdCreative(id) {
+  const c = _adCreatives.find(x => x.id === id);
+  if (!c) return;
+  openAdCreativeModal(id);
+  document.getElementById('ac-id').value    = c.id;
+  document.getElementById('ac-name').value  = c.name || '';
+  document.getElementById('ac-type').value  = c.type || 'vast_url';
+  document.getElementById('ac-vast-url').value       = c.vast_url || '';
+  document.getElementById('ac-vast-url-position').value = c.vast_position || 'preroll';
+  document.getElementById('ac-video-url').value      = c.video_url || '';
+  document.getElementById('ac-click-url').value      = c.click_url || '';
+  document.getElementById('ac-duration').value       = c.duration_sec || 15;
+  document.getElementById('ac-video-position').value = c.vast_position || 'preroll';
+  document.getElementById('ac-banner-html').value    = c.banner_html || '';
+  document.getElementById('ac-banner-position').value = c.banner_position || 'bottom';
+  document.getElementById('ac-banner-delay').value   = c.banner_delay ?? 0;
+  document.getElementById('ac-banner-duration').value = c.banner_duration ?? 0;
+  document.getElementById('ac-popup-url').value      = c.popup_url || '';
+  document.getElementById('ac-popup-delay').value    = c.popup_delay ?? 10;
+  document.getElementById('ac-popup-freq').value     = c.popup_frequency ?? 1;
+  document.getElementById('ac-notes').value          = c.notes || '';
+  document.getElementById('ac-active').checked       = !!c.is_active;
+  document.getElementById('ac-use-platform-btn').style.display = 'inline-flex';
+
+  // Si es vast_video y ya tiene ID, mostrar el VAST URL generado
+  if (c.type === 'vast_video' && c.id) {
+    const vastOut = document.getElementById('ac-vast-url-output');
+    const vastUrl = document.getElementById('ac-vast-generated-url');
+    vastOut.style.display = 'block';
+    vastUrl.textContent   = `${getBaseUrl()}/api/ads/vast/${c.id}`;
+  }
+  renderAdCreativeFields();
+}
+
+function renderAdCreativeFields() {
+  const type = document.getElementById('ac-type')?.value || 'vast_url';
+  ['vast_url', 'vast_video', 'banner', 'popup'].forEach(t => {
+    const el = document.getElementById(`ac-fields-${t}`);
+    if (el) el.style.display = t === type ? 'block' : 'none';
+  });
+}
+
+function previewBanner() {
+  const html = document.getElementById('ac-banner-html').value;
+  const prev = document.getElementById('ac-banner-preview');
+  prev.style.display = 'block';
+  prev.innerHTML = html;
+}
+
+function copyVastUrl() {
+  const url = document.getElementById('ac-vast-generated-url').textContent;
+  navigator.clipboard.writeText(url).then(() => toast('VAST URL copiada al portapapeles'));
+}
+
+async function saveAdCreative() {
+  const id   = document.getElementById('ac-id').value;
+  const type = document.getElementById('ac-type').value;
+
+  const body = {
+    name:        document.getElementById('ac-name').value.trim(),
+    type,
+    vast_url:    document.getElementById('ac-vast-url').value.trim() || null,
+    vast_position: type === 'vast_url'
+      ? document.getElementById('ac-vast-url-position').value
+      : document.getElementById('ac-video-position').value,
+    video_url:   document.getElementById('ac-video-url').value.trim() || null,
+    click_url:   document.getElementById('ac-click-url').value.trim() || null,
+    duration_sec: parseInt(document.getElementById('ac-duration').value || '15', 10),
+    banner_html:     document.getElementById('ac-banner-html').value || null,
+    banner_position: document.getElementById('ac-banner-position').value,
+    banner_delay:    parseInt(document.getElementById('ac-banner-delay').value || '0', 10),
+    banner_duration: parseInt(document.getElementById('ac-banner-duration').value || '0', 10),
+    popup_url:       document.getElementById('ac-popup-url').value.trim() || null,
+    popup_delay:     parseInt(document.getElementById('ac-popup-delay').value || '10', 10),
+    popup_frequency: parseInt(document.getElementById('ac-popup-freq').value || '1', 10),
+    notes:           document.getElementById('ac-notes').value.trim() || null,
+    is_active:       document.getElementById('ac-active').checked,
+  };
+
+  if (!body.name) { toast('El nombre es requerido', 'error'); return; }
+
+  try {
+    const method = id ? 'PUT' : 'POST';
+    const url    = id ? `/api/admin/ad-creatives/${id}` : '/api/admin/ad-creatives';
+    const r = await api(url, { method, body: JSON.stringify(body) });
+    if (!r.ok) { const e = await r.json(); toast(e.error || 'Error al guardar', 'error'); return; }
+    const d = await r.json();
+
+    // Si es vast_video, mostrar el VAST URL generado
+    if (body.type === 'vast_video' && d.creative?.id) {
+      const vastOut = document.getElementById('ac-vast-url-output');
+      const vastUrl = document.getElementById('ac-vast-generated-url');
+      vastOut.style.display = 'block';
+      vastUrl.textContent   = `${getBaseUrl()}/api/ads/vast/${d.creative.id}`;
+      document.getElementById('ac-id').value = d.creative.id;
+      document.getElementById('ac-use-platform-btn').style.display = 'inline-flex';
+    }
+
+    toast(id ? 'Creativo actualizado ✅' : 'Creativo creado ✅');
+    await loadAdLibrary();
+  } catch (e) {
+    toast('Error de conexión', 'error');
+  }
+}
+
+async function deleteAdCreative(id, name) {
+  if (!confirm(`¿Eliminar el creativo "${name}"? Esta acción no se puede deshacer.`)) return;
+  try {
+    const r = await api(`/api/admin/ad-creatives/${id}`, { method: 'DELETE' });
+    if (r.ok) { toast('Creativo eliminado'); await loadAdLibrary(); }
+    else toast('Error al eliminar', 'error');
+  } catch { toast('Error de conexión', 'error'); }
+}
+
+// Aplicar un creativo desde el modal (botón "Usar como Platform Ad")
+function useCreativeAsPlatformAd() {
+  const id = document.getElementById('ac-id').value;
+  if (id) useCreativeAsPlatformAdDirect(id);
+}
+
+// Aplicar un creativo desde la tabla directamente
+async function useCreativeAsPlatformAdDirect(id) {
+  const c = _adCreatives.find(x => x.id === id);
+  if (!c) { toast('Creativo no encontrado', 'error'); return; }
+
+  // Construir el objeto `ad` equivalente al formato que espera platform ads
+  let ad = { type: c.type === 'vast_video' ? 'vast' : c.type === 'vast_url' ? 'vast' : c.type };
+
+  if (c.type === 'vast_url') {
+    ad.vastUrl      = c.vast_url;
+    ad.vastPosition = c.vast_position || 'preroll';
+    ad.vastMidrollAt = 60;
+  } else if (c.type === 'vast_video') {
+    ad.vastUrl      = `${getBaseUrl()}/api/ads/vast/${c.id}`;
+    ad.vastPosition = c.vast_position || 'preroll';
+    ad.vastMidrollAt = 60;
+  } else if (c.type === 'banner') {
+    ad.type          = 'banner';
+    ad.bannerHtml     = c.banner_html;
+    ad.bannerPosition = c.banner_position || 'bottom';
+    ad.bannerDelay    = c.banner_delay ?? 0;
+    ad.bannerDuration = c.banner_duration ?? 0;
+  } else if (c.type === 'popup') {
+    ad.type          = 'popup';
+    ad.popupUrl       = c.popup_url;
+    ad.popupDelay     = c.popup_delay ?? 10;
+    ad.popupFrequency = c.popup_frequency ?? 1;
+  }
+
+  // Leer platform ads config actual, actualizarla con este creativo
+  try {
+    const r = await api('/api/admin/platform-ads');
+    const current = r.ok ? await r.json() : {};
+    const updated = { ...current, ad, enabled: true };
+    const sr = await api('/api/admin/platform-ads', { method: 'PUT', body: JSON.stringify(updated) });
+    if (sr.ok) {
+      toast(`✅ "${c.name}" activado como Platform Ad`);
+      closeModal('ad-creative-modal');
+    } else {
+      toast('Error al aplicar como Platform Ad', 'error');
+    }
+  } catch { toast('Error de conexión', 'error'); }
 }
 
 /* ─── REFERRALS ──────────────────────────────────────────────── */

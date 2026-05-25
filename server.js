@@ -709,6 +709,11 @@ app.use('/api/upload', rateLimit(10, 60_000), preUploadQuotaCheck, upload.single
 // /api/admin is already protected by superAdminAuth middleware registered above
 app.use('/api/admin', require('./routes/admin'));
 
+// Ad Creatives — admin CRUD + public VAST XML endpoint
+const adCreatives = require('./routes/adCreatives');
+app.use('/api/admin/ad-creatives', adCreatives.adminRouter);
+app.use('/api/ads/vast',           adCreatives.publicRouter);
+
 // ─── Public workspace endpoints (MUST be before the authenticated workspaces router) ───
 // GET /api/workspaces/by-id/:id — public, returns name+slug for channel page link
 app.get('/api/workspaces/by-id/:id', async (req, res) => {
