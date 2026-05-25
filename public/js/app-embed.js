@@ -1931,23 +1931,46 @@ function _buildScopedBanner(rawHtml, scopeId) {
 
 function _showBanner(adsCfg) {
   if (_adsBannerEl) return;
-  const pos = adsCfg.bannerPosition || 'bottom';
+  const pos    = adsCfg.bannerPosition || 'bottom';
   const banner = document.createElement('div');
-  banner.id = 'sv-ad-banner';
-  banner.style.cssText = `position:absolute;${pos === 'top' ? 'top:0' : 'bottom:52px'};left:0;right:0;z-index:30;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:space-between;padding:8px 12px;gap:10px;`;
-  const content = document.createElement('div');
-  content.style.cssText = 'flex:1;font-size:13px;color:#fff;overflow:hidden;';
-  // Build scoped + sanitized banner (CSS inside the banner only affects itself)
-  content.appendChild(_buildScopedBanner(adsCfg.bannerHtml, adsCfg.creativeId || null));
-  const closeBtn = document.createElement('button');
-  closeBtn.textContent = '×';
-  closeBtn.style.cssText = 'background:none;border:none;color:rgba(255,255,255,.6);font-size:18px;cursor:pointer;padding:0 4px;flex-shrink:0;';
-  closeBtn.onclick = () => { banner.remove(); _adsBannerEl = null; };
-  banner.appendChild(content); banner.appendChild(closeBtn);
+  banner.id    = 'sv-ad-banner';
+  // Base positioning — no background/padding yet (may be overridden below)
+  banner.style.cssText = `position:absolute;${pos === 'top' ? 'top:0' : 'bottom:52px'};left:0;right:0;z-index:30;`;
+
+  const dismiss = () => { banner.remove(); _adsBannerEl = null; };
+
+  // Build scoped + sanitized DOM element from banner HTML
+  const scopedEl = _buildScopedBanner(adsCfg.bannerHtml, adsCfg.creativeId || null);
+
+  // Does the banner HTML include its own close button?
+  const hasCustomClose = !!scopedEl.querySelector('.sv-close-btn, [data-sv-close]');
+
+  if (hasCustomClose) {
+    // ── Custom banner with its own design ──────────────────────────────────
+    // No extra wrapper styles — let the banner HTML control everything.
+    // Wire up any .sv-close-btn / [data-sv-close] via delegation (onclick was sanitized away).
+    scopedEl.addEventListener('click', e => {
+      if (e.target.closest('.sv-close-btn, [data-sv-close]')) dismiss();
+    });
+    banner.appendChild(scopedEl);
+  } else {
+    // ── Simple banner — use default system layout ──────────────────────────
+    banner.style.cssText += 'background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:space-between;padding:8px 12px;gap:10px;';
+    const content = document.createElement('div');
+    content.style.cssText = 'flex:1;font-size:13px;color:#fff;overflow:hidden;';
+    content.appendChild(scopedEl);
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '×';
+    closeBtn.style.cssText = 'background:none;border:none;color:rgba(255,255,255,.6);font-size:18px;cursor:pointer;padding:0 4px;flex-shrink:0;';
+    closeBtn.onclick = dismiss;
+    banner.appendChild(content);
+    banner.appendChild(closeBtn);
+  }
+
   document.getElementById('player-inner')?.appendChild(banner);
   _adsBannerEl = banner;
   const dur = parseInt(adsCfg.bannerDuration) || 0;
-  if (dur > 0) setTimeout(() => { banner.remove(); _adsBannerEl = null; }, dur * 1000);
+  if (dur > 0) setTimeout(dismiss, dur * 1000);
 }
 
 function _showPopup(adsCfg) {
