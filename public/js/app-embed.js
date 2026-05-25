@@ -392,6 +392,11 @@ function showKeySeekThumb(targetTime) {
   keyThumbTimer = setTimeout(() => hidePreview(), 1500);
 }
 
+// Tracks whether AirPlay is currently projecting to a wireless device.
+// Used to suppress the loading spinner (the local video emits `waiting`
+// continuously while AirPlay is active, because data isn't buffered locally).
+let isAirPlayActive = false;
+
 function checkAirPlay() {
   if (window.WebKitPlaybackTargetAvailabilityEvent) {
     video.addEventListener('webkitplaybacktargetavailabilitychanged', e => {
@@ -404,9 +409,33 @@ function checkAirPlay() {
        document.getElementById('airplay-btn').style.display = 'inline-flex';
     }
   }
+
+  // Track AirPlay active state to suppress loading spinner while projecting
+  video.addEventListener('webkitcurrentplaybacktargetiswirelesschanged', () => {
+    isAirPlayActive = !!video.webkitCurrentPlaybackTargetIsWireless;
+    if (isAirPlayActive) {
+      // Hide loading overlay — video is playing on Apple TV, not locally
+      showLoading(false);
+    }
+  });
 }
 
 function triggerAirPlay() {
+  if (!video.webkitShowPlaybackTargetPicker) return;
+  // If HLS.js is active (MSE), we must switch to a direct src URL first —
+  // AirPlay cannot access blob: MSE URLs. Swap to native and re-invoke picker.
+  if (hls) {
+    const savedTime   = video.currentTime;
+    const wasPlaying  = !video.paused;
+    const m3u8Url     = video.dataset.m3u8 || '';
+    hls.destroy();
+    hls = null;
+    if (m3u8Url) {
+      video.src = m3u8Url;
+      video.currentTime = savedTime;
+      if (wasPlaying) video.play().catch(() => {});
+    }
+  }
   video.webkitShowPlaybackTargetPicker();
 }
 
@@ -630,7 +659,9 @@ video.addEventListener('ended', () => {
 });
 video.addEventListener('seeked',  () => { trackEvent('seek'); if (video.currentTime > 5) saveProgress(Math.floor(video.currentTime)); });
 window.addEventListener('pagehide', () => { if (video.currentTime > 5) saveProgress(Math.floor(video.currentTime)); });
-video.addEventListener('waiting', () => showLoading(true));
+// Suppress loading overlay while AirPlay is projecting: the local buffer is
+// intentionally empty — the video is playing on Apple TV, not locally.
+video.addEventListener('waiting', () => { if (!isAirPlayActive) showLoading(true); });
 video.addEventListener('canplay', () => showLoading(false));
 video.addEventListener('loadedmetadata', () => {
   if (startAt > 0) video.currentTime = startAt;
@@ -1096,8 +1127,18 @@ document.addEventListener('keyup', e => {
 });
 
 // ─── HLS init ──────────────────────────────────────────────────
+// Safari (desktop + iOS) tiene soporte nativo HLS y es el único navegador con
+// AirPlay/webkitShowPlaybackTargetPicker. HLS.js usa MSE (blob: URL) que las
+// Apple TV/AirPlay no pueden acceder, causando loading infinito al proyectar.
+// Solución: en Safari siempre usamos src nativa; HLS.js solo en Chrome/Firefox.
+function isSafariBrowser() {
+  const ua = navigator.userAgent;
+  return /Safari/.test(ua) && !/Chrome/.test(ua) && !/Chromium/.test(ua);
+}
+
 function initHls(m3u8Url) {
-  if (Hls.isSupported()) {
+  const preferNative = isSafariBrowser() && video.canPlayType('application/vnd.apple.mpegurl');
+  if (!preferNative && Hls.isSupported()) {
     hls = new Hls({
       enableWorker:            true,
       lowLatencyMode:          false,
@@ -1176,7 +1217,8 @@ function initHls(m3u8Url) {
       }
     });
 
-  } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+  } else if (preferNative || video.canPlayType('application/vnd.apple.mpegurl')) {
+    // Safari / iOS native HLS — compatible con AirPlay y webkitShowPlaybackTargetPicker
     video.src = m3u8Url;
     if (!spriteMeta) thumbVid.src = m3u8Url;
     video.addEventListener('loadedmetadata', () => {
@@ -1527,6 +1569,8 @@ async function init() {
           } catch (_) {}
         }
         await fetchVideoToken();
+        // Store m3u8Url in dataset so triggerAirPlay() can access it for HLS.js→native swap
+        video.dataset.m3u8 = videoData.m3u8Url;
         initHls(videoData.m3u8Url);
         loadSubtitles();
       }
