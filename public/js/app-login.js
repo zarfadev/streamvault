@@ -21,38 +21,49 @@ let _rcReady = false;
 // ─── StreamVault Drag CAPTCHA ─────────────────────────────────────────────────
 const _svc = {
   token:      null,   // token firmado del servidor
-  targetPct:  0.5,    // posición objetivo (0–1)
+  targetPct:  0.5,    // posición objetivo (0–1), rango [0.20, 0.75]
   startedAt:  null,   // cuando se mostró el captcha
   solved:     false,  // ¿resuelto?
   solvedPct:  null,   // posición donde soltó el usuario
 };
 
-const PIECE_W   = 50;  // px, debe coincidir con CSS
-const TOLERANCE = 0.08;
+// Deben coincidir con los valores en el CSS (#sv-piece, #sv-slot width)
+const PIECE_W   = 48;   // px — ancho de pieza y slot (idénticos)
+const PIECE_M   = 4;    // px — margen izquierdo inicial y derecho mínimo
+const TOLERANCE = 0.08; // ±8% de rango útil
+
+// AbortController activo para limpiar listeners al re-inicializar
+let _svcAC = null;
 
 async function initSvCaptcha() {
-  _svc.solved = false;
-  _svc.token  = null;
+  // Cancelar listeners de la instancia anterior
+  if (_svcAC) { _svcAC.abort(); }
+  _svcAC = new AbortController();
+  const signal = _svcAC.signal;
+
+  _svc.solved    = false;
+  _svc.token     = null;
   _svc.solvedPct = null;
 
-  const piece   = document.getElementById('sv-piece');
-  const slot    = document.getElementById('sv-slot');
-  const track   = document.getElementById('sv-track');
-  const status  = document.getElementById('sv-status');
-  const btnReg  = document.getElementById('btn-register');
+  const piece  = document.getElementById('sv-piece');
+  const slot   = document.getElementById('sv-slot');
+  const track  = document.getElementById('sv-track');
+  const status = document.getElementById('sv-status');
+  const btnReg = document.getElementById('btn-register');
   if (!piece || !track) return;
 
-  // Reset visual
-  piece.style.left = '2px';
+  // ── Reset visual ──────────────────────────────────────────────────────────
+  piece.style.transition = 'none';
+  piece.style.left       = PIECE_M + 'px';
   piece.style.background = 'linear-gradient(135deg,#7c6cfa,#5b4fd4)';
-  piece.style.boxShadow = '0 4px 14px rgba(124,108,250,.5)';
-  piece.style.cursor = 'grab';
-  piece.style.transition = '';
-  status.textContent = '';
-  status.style.color = 'var(--muted)';
+  piece.style.boxShadow  = '0 2px 12px rgba(124,108,250,.45)';
+  piece.style.cursor     = 'grab';
+  slot.style.borderColor = '';
+  status.textContent     = '';
+  status.style.color     = 'var(--muted)';
   if (btnReg) { btnReg.disabled = true; btnReg.style.opacity = '.5'; btnReg.style.cursor = 'not-allowed'; }
 
-  // Fetch challenge
+  // ── Fetch challenge ───────────────────────────────────────────────────────
   try {
     const r = await fetch('/api/captcha/challenge');
     if (!r.ok) throw new Error();
@@ -65,35 +76,38 @@ async function initSvCaptcha() {
     return;
   }
 
-  // Position the slot
-  const trackW = track.offsetWidth;
-  const slotLeft = Math.round(_svc.targetPct * (trackW - PIECE_W));
+  // ── Esperar DOS frames para que el layout esté comprometido ──────────────
+  // (el form puede haber estado en display:none hasta hace un momento)
+  await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+  // ── Posicionar el slot ────────────────────────────────────────────────────
+  // Rango útil: de PIECE_M hasta trackW - PIECE_W - PIECE_M
+  const trackW  = track.offsetWidth;
+  const usable  = trackW - PIECE_W - PIECE_M * 2;   // espacio navegable
+  const slotLeft = PIECE_M + Math.round(_svc.targetPct * usable);
   slot.style.left = slotLeft + 'px';
 
   // ── Drag logic ────────────────────────────────────────────────────────────
-  let dragging = false;
-  let startX   = 0;
-  let startPieceLeft = 2;
+  let dragging       = false;
+  let startX         = 0;
+  let startPieceLeft = PIECE_M;
 
-  function getTrackBounds() { return track.getBoundingClientRect(); }
-
-  function clamp(v, min, max) { return Math.min(Math.max(v, min), max); }
+  function clamp(v, mn, mx) { return Math.min(Math.max(v, mn), mx); }
 
   function onDragStart(clientX) {
     if (_svc.solved) return;
     dragging       = true;
     startX         = clientX;
-    startPieceLeft = parseInt(piece.style.left) || 2;
-    piece.style.cursor = 'grabbing';
+    startPieceLeft = parseInt(piece.style.left) || PIECE_M;
+    piece.style.cursor     = 'grabbing';
     piece.style.transition = 'none';
   }
 
   function onDragMove(clientX) {
     if (!dragging) return;
-    const tb   = getTrackBounds();
-    const maxX = tb.width - PIECE_W - 2;
-    const dx   = clientX - startX;
-    const newX = clamp(startPieceLeft + dx, 2, maxX);
+    const tb   = track.getBoundingClientRect();
+    const maxX = tb.width - PIECE_W - PIECE_M;
+    const newX = clamp(startPieceLeft + (clientX - startX), PIECE_M, maxX);
     piece.style.left = newX + 'px';
   }
 
@@ -102,52 +116,48 @@ async function initSvCaptcha() {
     dragging = false;
     piece.style.cursor = 'grab';
 
-    const tb      = getTrackBounds();
-    const trackW2 = tb.width;
-    const curLeft = parseInt(piece.style.left) || 2;
-    const pct     = curLeft / (trackW2 - PIECE_W);
+    const tb      = track.getBoundingClientRect();
+    const usable2 = tb.width - PIECE_W - PIECE_M * 2;
+    const curLeft = parseInt(piece.style.left) || PIECE_M;
+    const pct     = (curLeft - PIECE_M) / usable2;
     _svc.solvedPct = pct;
 
-    const diff = Math.abs(pct - _svc.targetPct);
-    if (diff <= TOLERANCE) {
-      // ✅ Solved
+    if (Math.abs(pct - _svc.targetPct) <= TOLERANCE) {
+      // ✅ Correcto
       _svc.solved = true;
       piece.style.transition = 'left .2s ease';
-      piece.style.left = slotLeft + 'px';
+      piece.style.left       = slotLeft + 'px';
       piece.style.background = 'linear-gradient(135deg,#22c55e,#16a34a)';
-      piece.style.boxShadow = '0 4px 16px rgba(34,197,94,.5)';
-      piece.style.cursor = 'default';
+      piece.style.boxShadow  = '0 4px 16px rgba(34,197,94,.5)';
+      piece.style.cursor     = 'default';
       slot.style.borderColor = 'rgba(34,197,94,.6)';
-      status.textContent = '✓ Verificado';
-      status.style.color = '#22c55e';
-      // Enable register button
+      status.textContent     = '✓ Verificado';
+      status.style.color     = '#22c55e';
       if (btnReg) { btnReg.disabled = false; btnReg.style.opacity = '1'; btnReg.style.cursor = ''; }
     } else {
-      // ❌ Wrong — shake and reset
+      // ❌ Incorrecto — volver al inicio
       piece.style.transition = 'left .15s ease';
       piece.style.background = 'linear-gradient(135deg,#ef4444,#dc2626)';
-      piece.style.boxShadow = '0 4px 14px rgba(239,68,68,.5)';
-      status.textContent = '✗ No coincide — inténtalo de nuevo';
-      status.style.color = '#ef4444';
+      piece.style.boxShadow  = '0 4px 14px rgba(239,68,68,.5)';
+      status.textContent     = '✗ No coincide — inténtalo de nuevo';
+      status.style.color     = '#ef4444';
       setTimeout(() => {
-        piece.style.left = '2px';
+        piece.style.left       = PIECE_M + 'px';
         piece.style.background = 'linear-gradient(135deg,#7c6cfa,#5b4fd4)';
-        piece.style.boxShadow = '0 4px 14px rgba(124,108,250,.5)';
-        status.textContent = 'Desliza de nuevo';
-        status.style.color = 'var(--muted)';
+        piece.style.boxShadow  = '0 2px 12px rgba(124,108,250,.45)';
+        status.textContent     = 'Desliza de nuevo';
+        status.style.color     = 'var(--muted)';
       }, 900);
     }
   }
 
-  // Mouse events
-  piece.addEventListener('mousedown', e => { e.preventDefault(); onDragStart(e.clientX); });
-  window.addEventListener('mousemove', e => onDragMove(e.clientX));
-  window.addEventListener('mouseup',   e => onDragEnd(e.clientX));
-
-  // Touch events
-  piece.addEventListener('touchstart', e => { e.preventDefault(); onDragStart(e.touches[0].clientX); }, { passive: false });
-  window.addEventListener('touchmove',  e => { if (dragging) { e.preventDefault(); onDragMove(e.touches[0].clientX); } }, { passive: false });
-  window.addEventListener('touchend',   e => { onDragEnd(e.changedTouches[0]?.clientX || 0); });
+  // Eventos — con signal para limpiar automáticamente al re-inicializar
+  piece.addEventListener('mousedown',  e => { e.preventDefault(); onDragStart(e.clientX); }, { signal });
+  window.addEventListener('mousemove', e => onDragMove(e.clientX), { signal });
+  window.addEventListener('mouseup',   e => onDragEnd(e.clientX),  { signal });
+  piece.addEventListener('touchstart',  e => { e.preventDefault(); onDragStart(e.touches[0].clientX); }, { passive: false, signal });
+  window.addEventListener('touchmove',  e => { if (dragging) { e.preventDefault(); onDragMove(e.touches[0].clientX); } }, { passive: false, signal });
+  window.addEventListener('touchend',   e => onDragEnd(e.changedTouches[0]?.clientX || 0), { signal });
 }
 
 async function getCaptchaToken(action = 'submit') {
