@@ -1943,14 +1943,16 @@ function _showBanner(adsCfg) {
   const scopedEl = _buildScopedBanner(adsCfg.bannerHtml, adsCfg.creativeId || null);
 
   // Does the banner HTML include its own close button?
-  const hasCustomClose = !!scopedEl.querySelector('.sv-close-btn, [data-sv-close]');
+  // Detect any close button pattern: explicit class/attr OR aria-label Cerrar/Close
+  const CLOSE_SEL = '.sv-close-btn, [data-sv-close], button[aria-label*="errar" i], button[aria-label*="lose" i]';
+  const hasCustomClose = !!scopedEl.querySelector(CLOSE_SEL);
 
   if (hasCustomClose) {
     // ── Custom banner with its own design ──────────────────────────────────
     // No extra wrapper styles — let the banner HTML control everything.
-    // Wire up any .sv-close-btn / [data-sv-close] via delegation (onclick was sanitized away).
+    // Wire up close buttons via delegation (onclick was sanitized away).
     scopedEl.addEventListener('click', e => {
-      if (e.target.closest('.sv-close-btn, [data-sv-close]')) dismiss();
+      if (e.target.closest(CLOSE_SEL)) dismiss();
     });
     banner.appendChild(scopedEl);
   } else {
