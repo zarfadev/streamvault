@@ -2663,60 +2663,108 @@ function _playImaAd(vastUrl, onComplete) {
   onComplete && onComplete();
 }
 
+/** Prefix CSS selectors with a scope class (handles @media/@supports recursively). */
+function _prefixCssRules(css, prefix) {
+  let out = '', i = 0;
+  while (i < css.length) {
+    const ob = css.indexOf('{', i);
+    if (ob === -1) { out += css.slice(i); break; }
+    const seg = css.slice(i, ob).trimStart();
+    if (/^@(keyframes|font-face|import|charset|namespace)/i.test(seg)) {
+      out += css.slice(i, ob + 1);
+      i = ob + 1;
+      let d = 1, j = i;
+      while (j < css.length && d) { if(css[j]==='{')d++;else if(css[j]==='}')d--; j++; }
+      out += css.slice(i, j); i = j;
+    } else if (/^@/i.test(seg)) {
+      out += seg + '{';
+      i = ob + 1;
+      let d = 1, j = i;
+      while (j < css.length && d) { if(css[j]==='{')d++;else if(css[j]==='}')d--; j++; }
+      out += _prefixCssRules(css.slice(i, j - 1), prefix) + '}';
+      i = j;
+    } else {
+      const scoped = seg.split(',').map(s => {
+        s = s.trim();
+        if (!s || s === ':root' || s === 'html' || s === 'body') return prefix;
+        if (/^(html|body)\s+/.test(s)) return prefix + ' ' + s.replace(/^(html|body)\s+/, '');
+        return prefix + ' ' + s;
+      }).join(', ');
+      out += scoped + '{';
+      i = ob + 1;
+      let d = 1, j = i;
+      while (j < css.length && d) { if(css[j]==='{')d++;else if(css[j]==='}')d--; j++; }
+      out += css.slice(i, j); i = j;
+    }
+  }
+  return out;
+}
+
+/** Parse, scope CSS and sanitize banner HTML. Returns a wrapped DOM element. */
+function _buildScopedBanner(rawHtml, scopeId) {
+  const cls = 'sv-ab-' + (scopeId || Math.random().toString(36).slice(2, 9));
+  try {
+    const doc = new DOMParser().parseFromString(rawHtml, 'text/html');
+    doc.querySelectorAll('style').forEach(s => {
+      s.textContent = _prefixCssRules(s.textContent, '.' + cls);
+    });
+    doc.querySelectorAll('script,iframe,object,embed,form,meta,link').forEach(n => n.remove());
+    doc.querySelectorAll('*').forEach(node => {
+      for (const attr of [...node.attributes]) {
+        if (/^on/i.test(attr.name) || (attr.name === 'href' && /^javascript:/i.test(attr.value.trim()))) {
+          node.removeAttribute(attr.name);
+        }
+      }
+    });
+    const wrap = document.createElement('div');
+    wrap.className = cls;
+    for (const child of doc.body.childNodes) wrap.appendChild(document.importNode(child, true));
+    return wrap;
+  } catch (_) {
+    const div = document.createElement('div');
+    div.textContent = rawHtml;
+    return div;
+  }
+}
+
 function _showBanner(adsCfg) {
   if (_adsBannerEl) return;
-  const pos = adsCfg.bannerPosition || 'bottom';
+  const pos    = adsCfg.bannerPosition || 'bottom';
   const banner = document.createElement('div');
-  banner.id = 'sv-ad-banner';
-  banner.style.cssText = `
-    position:absolute;${pos === 'top' ? 'top:0' : 'bottom:52px'};left:0;right:0;
-    z-index:30;background:rgba(0,0,0,.75);
-    display:flex;align-items:center;justify-content:space-between;
-    padding:8px 12px;gap:10px;
-  `;
-  
-  const content = document.createElement('div');
-  content.style.cssText = 'flex:1;font-size:13px;color:#fff;';
-  // SECURITY: bannerHtml puede contener scripts maliciosos si la cuenta del workspace
-  // es comprometida. Usamos DOMParser para extraer solo texto/enlaces seguros, rechazando
-  // etiquetas <script>, manejadores on*, y URIs javascript:.
-  (function setBannerSafe(html, el) {
-    try {
-      const doc = new DOMParser().parseFromString(html, 'text/html');
-      // Eliminar todos los scripts y elementos peligrosos
-      doc.querySelectorAll('script,iframe,object,embed,form,meta,link').forEach(n => n.remove());
-      // Eliminar atributos de eventos inline (onclick, onerror, etc.)
-      doc.querySelectorAll('*').forEach(node => {
-        for (const attr of [...node.attributes]) {
-          if (/^on/i.test(attr.name) || (attr.name === 'href' && /^javascript:/i.test(attr.value.trim()))) {
-            node.removeAttribute(attr.name);
-          }
-        }
-      });
-      // Importar el body sanitizado al documento actual
-      const frag = document.createDocumentFragment();
-      for (const child of doc.body.childNodes) {
-        frag.appendChild(document.importNode(child, true));
-      }
-      el.appendChild(frag);
-    } catch (_) {
-      el.textContent = html; // fallback ultra-seguro: texto plano
-    }
-  })(adsCfg.bannerHtml, content);
+  banner.id    = 'sv-ad-banner';
+  banner.style.cssText = `position:absolute;${pos === 'top' ? 'top:0' : 'bottom:52px'};left:0;right:0;z-index:30;`;
 
-  const closeBtn = document.createElement('button');
-  closeBtn.textContent = '×';
-  closeBtn.style.cssText = 'background:none;border:none;color:rgba(255,255,255,.6);font-size:18px;cursor:pointer;padding:0 4px;flex-shrink:0;';
-  closeBtn.onclick = () => { banner.remove(); _adsBannerEl = null; };
+  const dismiss = () => { banner.remove(); _adsBannerEl = null; };
 
-  banner.appendChild(content);
-  banner.appendChild(closeBtn);
+  // Build scoped + sanitized DOM element
+  const scopedEl = _buildScopedBanner(adsCfg.bannerHtml, adsCfg.creativeId || null);
+
+  // If the banner HTML has its own close button (.sv-close-btn), use event delegation
+  // and let the banner control its own layout. Otherwise use the default system layout.
+  const hasCustomClose = !!scopedEl.querySelector('.sv-close-btn, [data-sv-close]');
+
+  if (hasCustomClose) {
+    scopedEl.addEventListener('click', e => {
+      if (e.target.closest('.sv-close-btn, [data-sv-close]')) dismiss();
+    });
+    banner.appendChild(scopedEl);
+  } else {
+    banner.style.cssText += 'background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:space-between;padding:8px 12px;gap:10px;';
+    const content = document.createElement('div');
+    content.style.cssText = 'flex:1;font-size:13px;color:#fff;overflow:hidden;';
+    content.appendChild(scopedEl);
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '×';
+    closeBtn.style.cssText = 'background:none;border:none;color:rgba(255,255,255,.6);font-size:18px;cursor:pointer;padding:0 4px;flex-shrink:0;';
+    closeBtn.onclick = dismiss;
+    banner.appendChild(content);
+    banner.appendChild(closeBtn);
+  }
+
   document.getElementById('player-inner')?.appendChild(banner);
   _adsBannerEl = banner;
-
-  // Auto-cerrar si bannerDuration > 0
   const dur = parseInt(adsCfg.bannerDuration) || 0;
-  if (dur > 0) setTimeout(() => { banner.remove(); _adsBannerEl = null; }, dur * 1000);
+  if (dur > 0) setTimeout(dismiss, dur * 1000);
 }
 
 function _showPopup(adsCfg) {
