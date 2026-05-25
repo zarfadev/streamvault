@@ -20,8 +20,8 @@ nav {
 .nav-logo { font-family: var(--mono); font-size: 16px; font-weight: 700; color: var(--accent2); letter-spacing: -0.5px; text-decoration: none; flex-shrink: 0; }
 .nav-logo span { color: var(--muted); font-weight: 400; }
 .nav-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
-.nav-back { font-size: 13px; color: var(--muted); text-decoration: none; display: flex; align-items: center; gap: 8px; transition: color 0.2s; white-space: nowrap; }
-.nav-back:hover { color: var(--text); text-decoration: none; }
+.nav-back { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 10px; border: 1px solid var(--border2); background: var(--surface2); color: var(--text); font-size: 13px; font-weight: 600; text-decoration: none; transition: border-color .14s, background .14s; font-family: var(--sans); cursor: pointer; white-space: nowrap; }
+.nav-back:hover { border-color: var(--accent); background: rgba(124,108,250,.08); color: var(--text); text-decoration: none; }
 .nav-btn { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 10px; border: 1px solid var(--border2); background: var(--surface2); color: var(--text); font-size: 13px; font-weight: 600; text-decoration: none; transition: border-color .14s, background .14s; font-family: var(--sans); cursor: pointer; white-space: nowrap; }
 .nav-btn:hover { border-color: var(--accent); background: rgba(124,108,250,.08); text-decoration: none; }
 .nav-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
@@ -59,9 +59,9 @@ a:hover { text-decoration: underline; }
   p, ul li { font-size: 14px; }
   .updated { margin-bottom: 28px; }
 }
-@media (max-width: 400px) {
+@media (max-width: 480px) {
   .nav-back .nav-back-text { display: none; }
-  .nav-back { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border2); }
+  .nav-back { padding: 8px; }
 }
 .sv-footer { border-top: 1px solid var(--border); padding: 32px 40px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--muted); margin-top: auto; }
 .sv-footer a { color: var(--muted); text-decoration: none; transition: color .14s; }

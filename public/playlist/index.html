@@ -21,6 +21,8 @@ body{font-family:var(--sans,'DM Sans',sans-serif);background:var(--bg,#0a0a0f);c
 .nav-btn:hover{border-color:var(--accent,#7c6cfa);background:rgba(124,108,250,.08);}
 .nav-btn.primary{background:var(--accent,#7c6cfa);border-color:var(--accent,#7c6cfa);color:#fff;}
 .nav-btn.primary:hover{background:#6a5be8;}
+.nav-back{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:10px;border:1px solid var(--border2,#2a2a3e);background:var(--surface2,#1a1a24);color:var(--text,#f0f0f8);font-size:13px;font-weight:600;text-decoration:none;transition:border-color .14s,background .14s;font-family:var(--sans,'DM Sans',sans-serif);cursor:pointer;white-space:nowrap;}
+.nav-back:hover{border-color:var(--accent,#7c6cfa);background:rgba(124,108,250,.08);color:var(--text,#f0f0f8);text-decoration:none;}
 
 /* ── Layout ── */
 .pl-page{width:100%;padding:24px 40px 48px;flex:1;}
@@ -136,7 +138,10 @@ body{font-family:var(--sans,'DM Sans',sans-serif);background:var(--bg,#0a0a0f);c
   .pl-player-shell{border-radius:10px;}
   .pl-nav-row{flex-wrap:wrap;}
   .sv-footer{padding:16px;flex-direction:column;align-items:center;text-align:center;}
-  .nav-back-text{display:none;}
+}
+@media(max-width:480px){
+  .nav-back .nav-back-text{display:none;}
+  .nav-back{padding:8px;}
 }
 </style>
 <script>window._svSiteName='StreamVault';fetch('/api/settings').then(r=>r.json()).then(s=>{if(s.siteName){window._svSiteName=s.siteName;document.querySelectorAll('[data-brand-name]').forEach(el=>el.textContent=s.siteName);}}).catch(()=>{});</script>
@@ -147,7 +152,7 @@ body{font-family:var(--sans,'DM Sans',sans-serif);background:var(--bg,#0a0a0f);c
 <nav class="topbar">
   <a href="/" class="brand">Stream<span>Vault</span></a>
   <div class="nav-right">
-    <a href="javascript:history.back()" class="nav-btn">
+    <a href="javascript:history.back()" class="nav-back">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
       <span class="nav-back-text">Volver</span>
     </a>

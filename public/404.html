@@ -61,8 +61,8 @@ nav {
 }
 .nav-btn:hover { border-color: var(--accent); background: rgba(124,108,250,.08); }
 .nav-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-.nav-back { font-size: 13px; color: var(--muted); text-decoration: none; display: flex; align-items: center; gap: 8px; transition: color 0.2s; white-space: nowrap; }
-.nav-back:hover { color: var(--text); text-decoration: none; }
+.nav-back { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 10px; border: 1px solid var(--border2); background: var(--surface2); color: var(--text); font-size: 13px; font-weight: 600; text-decoration: none; transition: border-color .14s, background .14s; font-family: var(--sans); cursor: pointer; white-space: nowrap; }
+.nav-back:hover { border-color: var(--accent); background: rgba(124,108,250,.08); color: var(--text); text-decoration: none; }
 
 /* ─── MAIN ─── */
 main {
@@ -170,9 +170,9 @@ main {
   main { padding: 60px 20px; }
   .sv-footer { padding: 16px 20px; flex-direction: column; align-items: center; text-align: center; }
 }
-@media (max-width: 400px) {
+@media (max-width: 480px) {
   .nav-back .nav-back-text { display: none; }
-  .nav-back { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border2); }
+  .nav-back { padding: 8px; }
 }
 </style>
 <script>window._svSiteName='StreamVault';fetch('/api/settings').then(r=>r.json()).then(s=>{if(s.siteName)window._svSiteName=s.siteName;if(s.supportEmail){document.querySelectorAll('[data-contact-email]').forEach(el=>{el.href='mailto:'+s.supportEmail;});}}).catch(()=>{});</script>

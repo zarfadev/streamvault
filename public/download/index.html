@@ -22,8 +22,8 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 .nav-btn:hover{border-color:var(--accent);background:rgba(124,108,250,.08);}
 .nav-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
 .nav-btn.primary:hover{background:#6a5be8;}
-.nav-back{font-size:13px;color:var(--muted);text-decoration:none;display:flex;align-items:center;gap:8px;transition:color 0.2s;white-space:nowrap;}
-.nav-back:hover{color:var(--text);text-decoration:none;}
+.nav-back{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:10px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-size:13px;font-weight:600;text-decoration:none;transition:border-color .14s,background .14s;font-family:var(--sans);cursor:pointer;white-space:nowrap;}
+.nav-back:hover{border-color:var(--accent);background:rgba(124,108,250,.08);color:var(--text);text-decoration:none;}
 
 /* ── Page ── */
 .page{width:100%;padding:28px 40px 80px;flex:1;}
@@ -120,9 +120,9 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 .toast.ok{border-color:rgba(34,211,165,.3);color:var(--green);}
 
 /* ── Responsive ── */
-@media(max-width:400px){
+@media(max-width:480px){
   .nav-back .nav-back-text{display:none;}
-  .nav-back{padding:6px 8px;border-radius:8px;border:1px solid var(--border2);}
+  .nav-back{padding:8px;}
 }
 @media(max-width:640px){
   .topbar{padding:0 16px;}
