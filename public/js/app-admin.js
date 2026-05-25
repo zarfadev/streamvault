@@ -2470,7 +2470,118 @@ async function saveGatewaysQuiet() {
 }
 
 /* ─── ADS OVERVIEW ───────────────────────────────────────────── */
+/* ── PLATFORM ADS ──────────────────────────────────────────────── */
+async function loadPlatformAdsConfig() {
+  try {
+    const r = await api('/api/admin/platform-ads');
+    if (!r.ok) return;
+    const cfg = await r.json();
+
+    // Toggle principal
+    const toggle = document.getElementById('pads-enabled');
+    if (toggle) toggle.checked = !!cfg.enabled;
+
+    // Planes
+    const plans = cfg.applyToPlans || ['starter'];
+    ['starter', 'pro', 'enterprise'].forEach(p => {
+      const el = document.getElementById(`pads-plan-${p}`);
+      if (el) el.checked = plans.includes(p);
+    });
+
+    // Tipo y campos
+    const ad = cfg.ad || {};
+    const type = ad.type || 'vast';
+    const typeEl = document.getElementById('pads-type');
+    if (typeEl) typeEl.value = type;
+
+    // VAST
+    const vu = document.getElementById('pads-vast-url');
+    if (vu) vu.value = ad.vastUrl || ad.vast?.url || '';
+    const vp = document.getElementById('pads-vast-pos');
+    if (vp) vp.value = ad.vastPosition || ad.vast?.position || 'preroll';
+    const vm = document.getElementById('pads-vast-midroll');
+    if (vm) vm.value = ad.vastMidrollAt || ad.vast?.midrollTime || 60;
+
+    // Banner
+    const bh = document.getElementById('pads-banner-html');
+    if (bh) bh.value = ad.bannerHtml || ad.banner?.html || '';
+    const bp = document.getElementById('pads-banner-pos');
+    if (bp) bp.value = ad.bannerPosition || ad.banner?.position || 'bottom';
+    const bd = document.getElementById('pads-banner-delay');
+    if (bd) bd.value = ad.bannerDelay ?? ad.banner?.delay ?? 0;
+
+    // Popup
+    const pu = document.getElementById('pads-popup-url');
+    if (pu) pu.value = ad.popupUrl || ad.popup?.url || '';
+    const pd = document.getElementById('pads-popup-delay');
+    if (pd) pd.value = ad.popupDelay ?? ad.popup?.delay ?? 10;
+    const pf = document.getElementById('pads-popup-freq');
+    if (pf) pf.value = ad.popupFrequency ?? ad.popup?.frequency ?? 1;
+
+    renderPlatformAdsFields();
+  } catch (e) {
+    console.warn('loadPlatformAdsConfig error', e);
+  }
+}
+
+function onPlatformAdsToggle(checkbox) {
+  // Auto-guarda el toggle inmediatamente para feedback rápido
+  savePlatformAds({ silent: true });
+}
+
+function renderPlatformAdsFields() {
+  const type = document.getElementById('pads-type')?.value || 'vast';
+  ['vast', 'banner', 'popup'].forEach(t => {
+    const el = document.getElementById(`pads-fields-${t}`);
+    if (el) el.style.display = t === type ? 'block' : 'none';
+  });
+  // Mostrar/ocultar campo de tiempo midroll
+  const pos = document.getElementById('pads-vast-pos');
+  const mw = document.getElementById('pads-midroll-wrap');
+  if (pos && mw) mw.style.display = pos.value === 'midroll' ? 'block' : 'none';
+}
+
+async function savePlatformAds({ silent = false } = {}) {
+  try {
+    const enabled = document.getElementById('pads-enabled')?.checked || false;
+    const applyToPlans = ['starter', 'pro', 'enterprise'].filter(p => document.getElementById(`pads-plan-${p}`)?.checked);
+    const type = document.getElementById('pads-type')?.value || 'vast';
+
+    let ad = { type };
+    if (type === 'vast') {
+      ad.vastUrl      = document.getElementById('pads-vast-url')?.value?.trim() || null;
+      ad.vastPosition = document.getElementById('pads-vast-pos')?.value || 'preroll';
+      ad.vastMidrollAt = parseInt(document.getElementById('pads-vast-midroll')?.value || '60', 10);
+    } else if (type === 'banner') {
+      ad.bannerHtml     = document.getElementById('pads-banner-html')?.value?.trim() || null;
+      ad.bannerPosition = document.getElementById('pads-banner-pos')?.value || 'bottom';
+      ad.bannerDelay    = parseInt(document.getElementById('pads-banner-delay')?.value || '0', 10);
+    } else if (type === 'popup') {
+      ad.popupUrl       = document.getElementById('pads-popup-url')?.value?.trim() || null;
+      ad.popupDelay     = parseInt(document.getElementById('pads-popup-delay')?.value || '10', 10);
+      ad.popupFrequency = parseInt(document.getElementById('pads-popup-freq')?.value || '1', 10);
+    }
+
+    const r = await api('/api/admin/platform-ads', {
+      method: 'PUT',
+      body: JSON.stringify({ enabled, applyToPlans, ad }),
+    });
+
+    if (r.ok) {
+      if (!silent) toast(enabled ? '✅ Platform Ads activados' : 'Platform Ads guardados');
+    } else {
+      toast('Error al guardar Platform Ads', 'error');
+    }
+  } catch (e) {
+    toast('Error de conexión', 'error');
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────── */
 async function loadAdsOverview() {
+  // Cargar config de platform ads en paralelo
+  loadPlatformAdsConfig();
+
   try {
     const [featR, wsR] = await Promise.all([
       api('/api/admin/features'),

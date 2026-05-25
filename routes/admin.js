@@ -920,7 +920,7 @@ router.get('/config', superAdminAuth, async (req, res) => {
 
 router.put('/config', superAdminAuth, async (req, res) => {
   const { section, data } = req.body;
-  const allowed = ['platform', 'plans', 'transcoding', 'security', 'features', 'guest_config', 'referrals'];
+  const allowed = ['platform', 'plans', 'transcoding', 'security', 'features', 'guest_config', 'referrals', 'platformAds'];
   if (!allowed.includes(section)) return res.status(400).json({ error: 'Invalid section' });
   try {
     const dynCfg = require('../services/dynamicConfig');
@@ -1653,6 +1653,41 @@ router.put('/platform-config', superAdminAuth, async (req, res) => {
     res.json({ ok: true, config: updated });
   } catch (e) {
     logger.error({ err: e.message }, 'PUT platform-config error');
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/admin/platform-ads — Obtener config de Platform Ads (monetización plan gratuito)
+router.get('/platform-ads', superAdminAuth, async (req, res) => {
+  try {
+    const dynCfg = require('../services/dynamicConfig');
+    const cfg = await dynCfg.getDynSection('platformAds', {
+      enabled: false,
+      applyToPlans: ['starter'],
+      ad: null,
+    });
+    res.json(cfg);
+  } catch (e) {
+    logger.error({ err: e.message }, 'GET platform-ads error');
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// PUT /api/admin/platform-ads — Guardar config de Platform Ads
+router.put('/platform-ads', superAdminAuth, async (req, res) => {
+  try {
+    const dynCfg = require('../services/dynamicConfig');
+    const { enabled, applyToPlans, ad } = req.body;
+    const data = {
+      enabled: !!enabled,
+      applyToPlans: Array.isArray(applyToPlans) ? applyToPlans : ['starter'],
+      ad: ad || null,
+    };
+    await dynCfg.setDynConfig('platformAds', data);
+    logAudit(req, 'platform_ads_updated', 'system_config', 'platformAds', data).catch(() => {});
+    res.json({ ok: true });
+  } catch (e) {
+    logger.error({ err: e.message }, 'PUT platform-ads error');
     res.status(500).json({ error: e.message });
   }
 });

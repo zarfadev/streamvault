@@ -378,26 +378,42 @@ router.get('/:id', async (req, res) => {
 
         // Normalizar estructura ads: el dashboard guarda {type, vast:{url,position,midrollTime}, banner:{...}, popup:{...}}
         // El player espera formato flat: {enabled, type, vastUrl, vastPosition, vastMidrollAt, bannerHtml, ...}
+        const normalizeAdsFlat = (r) => ({
+          enabled: true,
+          type: r.type || 'vast',
+          // VAST — soportar formato nested (nuevo) y flat (legacy)
+          vastUrl:       r.vastUrl       || r.vast?.url      || null,
+          vastPosition:  r.vastPosition  || r.vast?.position || 'preroll',
+          vastMidrollAt: r.vastMidrollAt || r.vast?.midrollTime || 60,
+          // Banner
+          bannerHtml:     r.bannerHtml     || r.banner?.html     || null,
+          bannerPosition: r.bannerPosition || r.banner?.position || 'bottom',
+          bannerDelay:    r.bannerDelay    != null ? r.bannerDelay    : (r.banner?.delay    ?? 0),
+          bannerDuration: r.bannerDuration != null ? r.bannerDuration : (r.banner?.duration ?? 0),
+          // Popup
+          popupUrl:       r.popupUrl       || r.popup?.url       || null,
+          popupDelay:     r.popupDelay     != null ? r.popupDelay     : (r.popup?.delay     ?? 10),
+          popupFrequency: r.popupFrequency != null ? r.popupFrequency : (r.popup?.frequency ?? 1),
+        });
+
         let adsFlat = null;
         if (adsEnabled && adsConfigRaw) {
-          const r = adsConfigRaw;
-          adsFlat = {
-            enabled: true,
-            type: r.type || 'vast',
-            // VAST — soportar formato nested (nuevo) y flat (legacy)
-            vastUrl:       r.vastUrl       || r.vast?.url      || null,
-            vastPosition:  r.vastPosition  || r.vast?.position || 'preroll',
-            vastMidrollAt: r.vastMidrollAt || r.vast?.midrollTime || 60,
-            // Banner
-            bannerHtml:     r.bannerHtml     || r.banner?.html     || null,
-            bannerPosition: r.bannerPosition || r.banner?.position || 'bottom',
-            bannerDelay:    r.bannerDelay    != null ? r.bannerDelay    : (r.banner?.delay    ?? 0),
-            bannerDuration: r.bannerDuration != null ? r.bannerDuration : (r.banner?.duration ?? 0),
-            // Popup
-            popupUrl:       r.popupUrl       || r.popup?.url       || null,
-            popupDelay:     r.popupDelay     != null ? r.popupDelay     : (r.popup?.delay     ?? 10),
-            popupFrequency: r.popupFrequency != null ? r.popupFrequency : (r.popup?.frequency ?? 1),
-          };
+          adsFlat = normalizeAdsFlat(adsConfigRaw);
+        }
+
+        // ── Platform Ads (monetización de planes gratuitos) ─────────────────────
+        // Si el workspace no tiene ads propios configurados, verificar si el super
+        // admin ha activado Platform Ads para este plan (ej. Starter).
+        // Los platform ads se inyectan aunque adsEnabled=false para el plan,
+        // ya que son controlados 100% por la plataforma, no por el workspace owner.
+        if (!adsFlat && globalAdsEnabled) {
+          const platformAdsCfg = await dynCfg.getDynSection('platformAds', {
+            enabled: false, applyToPlans: ['starter'], ad: null,
+          });
+          const targetPlans = Array.isArray(platformAdsCfg.applyToPlans) ? platformAdsCfg.applyToPlans : ['starter'];
+          if (platformAdsCfg.enabled && platformAdsCfg.ad && targetPlans.includes(ws.plan)) {
+            adsFlat = { ...normalizeAdsFlat(platformAdsCfg.ad), isPlatformAd: true };
+          }
         }
 
         embedConfig = {

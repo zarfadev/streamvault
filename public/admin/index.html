@@ -2251,6 +2251,126 @@
         <div class="info-box" style="margin-top:14px;">El feature global se gestiona en <strong>Configuración → Features</strong>. Este toggle es un acceso rápido. Los workspaces no Pro/Enterprise no pueden activar anuncios aunque esté habilitado globalmente.</div>
       </div>
 
+      <!-- Platform Ads — monetización del plan gratuito -->
+      <div class="card" style="margin-bottom:24px;border:1px solid color-mix(in srgb,var(--accent2) 30%,var(--border2));">
+        <div class="card-title" style="display:flex;align-items:center;gap:10px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent2)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
+          Anuncios de Plataforma <span class="badge" style="background:color-mix(in srgb,var(--accent2) 20%,transparent);color:var(--accent2);font-size:10px;">Monetización</span>
+        </div>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:18px;">Inyecta anuncios en los videos de los planes gratuitos. Los usuarios de planes de pago nunca verán estos anuncios. El workspace owner <strong>no puede desactivarlos</strong>.</p>
+
+        <!-- Toggle principal -->
+        <div class="settings-group" style="margin-bottom:18px;">
+          <div class="setting-row">
+            <div>
+              <div class="setting-label">Activar Platform Ads</div>
+              <div class="setting-desc">Cuando está activo, todos los videos de los planes seleccionados mostrarán el anuncio configurado abajo.</div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="pads-enabled" onchange="onPlatformAdsToggle(this)">
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Planes que reciben ads -->
+        <div id="pads-config-section">
+          <div class="form-group" style="margin-bottom:14px;">
+            <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:8px;display:block;">Aplicar a estos planes</label>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;">
+              <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px;">
+                <input type="checkbox" id="pads-plan-starter" value="starter" style="accent-color:var(--accent2);width:15px;height:15px;">
+                Starter (Gratis)
+              </label>
+              <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px;">
+                <input type="checkbox" id="pads-plan-pro" value="pro" style="accent-color:var(--accent2);width:15px;height:15px;">
+                Pro
+              </label>
+              <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-size:13px;">
+                <input type="checkbox" id="pads-plan-enterprise" value="enterprise" style="accent-color:var(--accent2);width:15px;height:15px;">
+                Enterprise
+              </label>
+            </div>
+          </div>
+
+          <!-- Tipo de anuncio -->
+          <div class="form-group" style="margin-bottom:14px;">
+            <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:8px;display:block;">Tipo de anuncio</label>
+            <select id="pads-type" class="form-select" onchange="renderPlatformAdsFields()">
+              <option value="vast">VAST (video pre/mid/post-roll)</option>
+              <option value="banner">Banner HTML</option>
+              <option value="popup">Popup (URL externa)</option>
+            </select>
+          </div>
+
+          <!-- Campos VAST -->
+          <div id="pads-fields-vast">
+            <div class="form-group" style="margin-bottom:12px;">
+              <label style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;display:block;">VAST Tag URL</label>
+              <input type="url" id="pads-vast-url" placeholder="https://pubads.g.doubleclick.net/gampad/ads?..." style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);padding:9px 12px;font-size:13px;font-family:var(--mono);outline:none;width:100%;box-sizing:border-box;">
+              <div style="font-size:11px;color:var(--muted);margin-top:4px;">Compatible con Google IMA, DoubleClick, SpotX, etc.</div>
+            </div>
+            <div style="display:flex;gap:12px;">
+              <div class="form-group" style="flex:1;margin-bottom:12px;">
+                <label style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;display:block;">Posición</label>
+                <select id="pads-vast-pos" class="form-select" onchange="renderPlatformAdsFields()">
+                  <option value="preroll">Pre-roll (antes)</option>
+                  <option value="midroll">Mid-roll (en medio)</option>
+                  <option value="postroll">Post-roll (al final)</option>
+                </select>
+              </div>
+              <div class="form-group" id="pads-midroll-wrap" style="flex:1;margin-bottom:12px;display:none;">
+                <label style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;display:block;">Tiempo mid-roll (seg)</label>
+                <input type="number" id="pads-vast-midroll" min="5" value="60" style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);padding:9px 12px;font-size:13px;font-family:var(--mono);outline:none;width:100%;box-sizing:border-box;">
+              </div>
+            </div>
+          </div>
+
+          <!-- Campos Banner -->
+          <div id="pads-fields-banner" style="display:none;">
+            <div class="form-group" style="margin-bottom:12px;">
+              <label style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;display:block;">HTML del Banner</label>
+              <textarea id="pads-banner-html" rows="4" placeholder='&lt;a href="https://tuanunciante.com" target="_blank"&gt;&lt;img src="https://..." style="width:100%;height:90px;object-fit:cover;"&gt;&lt;/a&gt;' style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);padding:9px 12px;font-size:12px;font-family:var(--mono);outline:none;width:100%;box-sizing:border-box;resize:vertical;"></textarea>
+            </div>
+            <div style="display:flex;gap:12px;">
+              <div class="form-group" style="flex:1;margin-bottom:12px;">
+                <label style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;display:block;">Posición</label>
+                <select id="pads-banner-pos" class="form-select">
+                  <option value="bottom">Abajo</option>
+                  <option value="top">Arriba</option>
+                </select>
+              </div>
+              <div class="form-group" style="flex:1;margin-bottom:12px;">
+                <label style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;display:block;">Delay de aparición (seg)</label>
+                <input type="number" id="pads-banner-delay" min="0" value="0" style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);padding:9px 12px;font-size:13px;font-family:var(--mono);outline:none;width:100%;box-sizing:border-box;">
+              </div>
+            </div>
+          </div>
+
+          <!-- Campos Popup -->
+          <div id="pads-fields-popup" style="display:none;">
+            <div class="form-group" style="margin-bottom:12px;">
+              <label style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;display:block;">URL del Popup</label>
+              <input type="url" id="pads-popup-url" placeholder="https://anunciante.com/landing" style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--surface);color:var(--text);padding:9px 12px;font-size:13px;font-family:var(--mono);outline:none;width:100%;box-sizing:border-box;">
+            </div>
+            <div style="display:flex;gap:12px;">
+              <div class="form-group" style="flex:1;margin-bottom:12px;">
+                <label style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;display:block;">Delay (seg)</label>
+                <input type="number" id="pads-popup-delay" min="0" value="10" style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);padding:9px 12px;font-size:13px;font-family:var(--mono);outline:none;width:100%;box-sizing:border-box;">
+              </div>
+              <div class="form-group" style="flex:1;margin-bottom:12px;">
+                <label style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;display:block;">Frecuencia (1=siempre)</label>
+                <input type="number" id="pads-popup-freq" min="1" value="1" style="background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);padding:9px 12px;font-size:13px;font-family:var(--mono);outline:none;width:100%;box-sizing:border-box;">
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;justify-content:flex-end;margin-top:6px;">
+            <button class="btn btn-primary btn-sm" onclick="savePlatformAds()">Guardar Platform Ads</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Workspaces with ads configured -->
       <div class="card">
         <div class="card-title">Workspaces con anuncios activos</div>
