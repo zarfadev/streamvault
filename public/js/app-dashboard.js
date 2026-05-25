@@ -7545,5 +7545,16 @@ function copyLink(id, type) {
       const bellWrap = document.getElementById('notif-bell-wrap');
       if (bellWrap) bellWrap.style.display = '';
       document.body.classList.add('ready');
+
+      // ── Handle ?open_billing=1 (coming from /upgrade) ─────────────────────
+      // Opens Settings → Billing tab automatically and cleans the URL param.
+      const _upgSp = new URLSearchParams(location.search);
+      if (_upgSp.get('open_billing') === '1') {
+        history.replaceState(null, '', location.pathname);
+        setTimeout(() => {
+          goSection(null, 'settings');
+          setTimeout(() => switchSettingsTab('billing'), 250);
+        }, 400);
+      }
     });
   

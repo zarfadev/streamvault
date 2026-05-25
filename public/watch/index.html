@@ -254,14 +254,14 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
     <a href="/status">Estado</a>
     <a href="/api-docs">API</a>
   </div>
-  <span id="footer-year">© 2026 StreamVault</span>
+  <span id="footer-year">© 2026 StreamVault · <a href="https://myscreators.com" target="_blank" rel="noopener" style="color:var(--muted);text-decoration:none;">Una marca de M&amp;S Creators S.A.S.</a></span>
 </footer>
 <script>
 fetch('/api/settings').then(r=>r.json()).then(s=>{
   const n=s.siteName||'StreamVault';
   window._svSiteName=n;
-  document.getElementById('footer-year').textContent='© '+new Date().getFullYear()+' '+n;
-}).catch(()=>{document.getElementById('footer-year').textContent='© '+new Date().getFullYear()+' StreamVault';});
+  document.getElementById('footer-year').innerHTML='© '+new Date().getFullYear()+' '+n+' · <a href="https://myscreators.com" target="_blank" rel="noopener" style="color:var(--muted);text-decoration:none;">Una marca de M&amp;S Creators S.A.S.</a>';
+}).catch(()=>{document.getElementById('footer-year').innerHTML='© '+new Date().getFullYear()+' StreamVault · <a href="https://myscreators.com" target="_blank" rel="noopener" style="color:var(--muted);text-decoration:none;">Una marca de M&amp;S Creators S.A.S.</a>';});
 </script>
 
 <div id="share-toast"></div>

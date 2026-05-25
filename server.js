@@ -1131,6 +1131,40 @@ app.get('/billing', (req, res) => {
   res.sendFile(path.join(__dirname, 'public/dashboard/index.html'));
 });
 
+// /upgrade — smart redirect:
+//   • logged in  → /dashboard?open_billing=1  (opens Settings > Billing automatically)
+//   • logged out → /login?tab=register&redirect=/upgrade  (register then billing)
+app.get('/upgrade', (req, res) => {
+  res.send(`<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<title>Actualizar plan</title>
+<link rel="stylesheet" href="/css/sv-theme.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);display:flex;align-items:center;justify-content:center;min-height:100vh;}
+.spin{width:36px;height:36px;border:3px solid rgba(124,108,250,.18);border-top-color:var(--accent);border-radius:50%;animation:s .7s linear infinite}
+@keyframes s{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body><div class="spin"></div>
+<script>
+(function(){
+  var t = localStorage.getItem('sv_access_token')
+        || sessionStorage.getItem('sv_access_token')
+        || localStorage.getItem('sv_token');
+  location.replace(t
+    ? '/dashboard?open_billing=1'
+    : '/login?tab=register&redirect=' + encodeURIComponent('/upgrade'));
+})();
+</script>
+</body>
+</html>`);
+});
+
 // F4.3: Status page — public
 app.get('/status', (req, res) => {
   res.sendFile(path.join(__dirname, 'public/status/index.html'));

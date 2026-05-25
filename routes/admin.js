@@ -958,6 +958,23 @@ router.put('/config', superAdminAuth, async (req, res) => {
           if (shortKey && shortKey !== key) normalised[shortKey] = val;
         }
         await dynCfg.setDynConfig(`plans.${planName}`, { ...planData, features: normalised });
+
+        // ── Propagate new limits to existing workspaces on this plan ──────────
+        // Workspaces store max_videos / max_storage_bytes / max_bandwidth_bytes
+        // on their own row. Updating the plan template doesn't update them
+        // automatically — we do it here, skipping those with admin custom limits.
+        const GB = 1_000_000_000; // 1e9 — same as individual workspace update
+        const maxVid = (planData.maxVideos    != null && planData.maxVideos    >= 0) ? planData.maxVideos    : 0;
+        const maxSto = (planData.maxStorageGB != null && planData.maxStorageGB >= 0) ? Math.round(planData.maxStorageGB   * GB) : 0;
+        const maxBw  = (planData.maxBandwidthGB != null && planData.maxBandwidthGB >= 0) ? Math.round(planData.maxBandwidthGB * GB) : 0;
+        await db.prepare(`
+          UPDATE workspaces
+          SET max_videos = ?, max_storage_bytes = ?, max_bandwidth_bytes = ?,
+              updated_at = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT
+          WHERE plan = ?
+            AND (custom_limits IS NULL
+                 OR TRIM(custom_limits::TEXT) IN ('{}','null',''))
+        `).run(maxVid, maxSto, maxBw, planName);
       }
     }
 
