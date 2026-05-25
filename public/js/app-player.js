@@ -37,6 +37,7 @@ function hlsXhrSetup(xhr, url) {
 // ─── State ──────────────────────────────────────────────────
 let videoData = null, hls = null, levels = [], currentLevel = -1;
 let _hlsSourceUrl = null; // URL real del m3u8 — necesaria para AirPlay (Apple TV no admite blob://)
+let isAirPlayActive = false; // true mientras Apple TV está recibiendo el stream
 let currentSpeed = 1, hideUiTimer = null, spriteMeta = null, spriteImg = null;
 let audioTracks = [], currentAudioTrack = -1;
 // Flag: HLS manifest parsed — quality button/settings gear only visible after this
@@ -1338,7 +1339,8 @@ function initHls(m3u8Url) {
     // Cuando AirPlay conecta, cambiamos a native src (URL real del m3u8).
     // Cuando AirPlay desconecta, reenganchamos HLS.js para tener ABR, calidades, etc.
     video.addEventListener('webkitcurrentplaybacktargetiswirelesschanged', function _onAirPlayChange() {
-      if (video.webkitCurrentPlaybackTargetIsWireless) {
+      isAirPlayActive = !!video.webkitCurrentPlaybackTargetIsWireless;
+      if (isAirPlayActive) {
         // AirPlay conectado → switch a native HLS para que Apple TV pueda reproducir
         const pos    = video.currentTime;
         const paused = video.paused;
@@ -1453,7 +1455,7 @@ video.addEventListener('ended', () => {
 });
 video.addEventListener('seeked', () => { trackEvent('seek'); if (video.currentTime > 5) saveProgress(Math.floor(video.currentTime)); });
 window.addEventListener('pagehide', () => { if (video.currentTime > 5) saveProgress(Math.floor(video.currentTime)); });
-video.addEventListener('waiting', () => showLoading(true));
+video.addEventListener('waiting', () => { if (!isAirPlayActive) showLoading(true); });
 video.addEventListener('canplay',  () => showLoading(false));
 video.addEventListener('loadedmetadata', () => {
   _updateDurationDisplay();
