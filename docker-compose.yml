@@ -14,13 +14,13 @@
 
 # Variables compartidas por API + Worker
 x-app-env: &app-env
-  PORT: "3000"
-  NODE_ENV: development
+  PORT: ${PORT:-3000}
+  NODE_ENV: ${NODE_ENV:-development}
   APP_URL: ${APP_URL:-http://localhost:3000}
 
-  DATABASE_URL: postgres://streamvault:streamvault@postgres:5432/streamvault
-  DATABASE_SSL: "false"
-  REDIS_URL: redis://redis:6379
+  DATABASE_URL: ${DATABASE_URL:-postgres://streamvault:streamvault@postgres:5432/streamvault}
+  DATABASE_SSL: ${DATABASE_SSL:-false}
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379}
 
   # Secrets — NUNCA hardcodear en producción.
   # Usar: docker-compose --env-file .env up
@@ -36,22 +36,22 @@ x-app-env: &app-env
   SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL:-admin@streamvault.local}
 
   # CORS — vacío = permite todo en dev
-  ALLOWED_ORIGINS: ""
+  ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
 
   # Worker — concurrencia POR INSTANCIA (ajustar según CPUs del servidor)
   # Para SaaS escalar horizontalmente: docker compose up --scale worker=N
   # Cada worker toma hasta WORKER_CONCURRENCY jobs de Redis en paralelo.
   # Regla: WORKER_CONCURRENCY = nCPUs del servidor (1-2 por core)
   # Ej: servidor 8 cores → 3 workers × concurrency=3 = 9 jobs paralelos
-  WORKER_CONCURRENCY: "3"
-  TRANSCRIPTION_CONCURRENCY: "4"
+  WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-3}
+  TRANSCRIPTION_CONCURRENCY: ${TRANSCRIPTION_CONCURRENCY:-4}
 
   # S3 — deshabilitado por defecto en dev (usa almacenamiento local)
   AWS_REGION: ${AWS_REGION:-}
   S3_BUCKET: ${S3_BUCKET:-}
   S3_KEY_PREFIX: ${S3_KEY_PREFIX:-streamvault}
   CLOUDFRONT_BASE_URL: ${CLOUDFRONT_BASE_URL:-}
-  DELETE_LOCAL_AFTER_S3: "0"
+  DELETE_LOCAL_AFTER_S3: ${DELETE_LOCAL_AFTER_S3:-0}
 
   # Email — vacío = logs a consola en dev
   SMTP_HOST: ${SMTP_HOST:-}
@@ -75,10 +75,10 @@ x-app-env: &app-env
   BEDROCK_MODEL_ID: ${BEDROCK_MODEL_ID:-claude-haiku-4-5-20251001}
 
   # Seguridad de tokens HLS
-  REQUIRE_VIDEO_TOKENS: "false"
+  REQUIRE_VIDEO_TOKENS: ${REQUIRE_VIDEO_TOKENS:-false}
 
-  # Semilla demo automática en dev
-  SEED_DEMO_USER: "1"
+  # Semilla demo automática en dev (poner SEED_DEMO_USER=0 en .env de producción)
+  SEED_DEMO_USER: ${SEED_DEMO_USER:-1}
 
   # DB retry config
   DB_CONNECT_RETRIES: "10"
@@ -148,8 +148,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
+      # redis: no listed — en producción se usa Redis del host (REDIS_URL=redis://172.17.0.1:6379)
+      # En dev Docker el contenedor redis arranca solo con "docker compose up"
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health/ || exit 1"]
@@ -185,8 +185,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
+      # redis: no listed — igual que el API, usa REDIS_URL del entorno
       streamvault:
         condition: service_healthy
     restart: unless-stopped
