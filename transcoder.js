@@ -113,6 +113,7 @@ function transcodeQuality(inputPath, outputDir, preset, videoInfo, keyInfoPath, 
       `-maxrate ${Math.round(vbrKbps * 1.5)}k`,
       `-bufsize ${Math.round(vbrKbps * 2)}k`,
       `-b:a ${preset.abr}`,
+      `-ac 2`,
       `-ar 48000`,
       `-pix_fmt yuv420p`,
       `-profile:v ${preset.profile}`,
@@ -226,6 +227,7 @@ function transcodeMultiQuality(inputPath, outputDir, presets, videoInfo, keyInfo
         // Audio codec
         '-c:a',   'aac',
         '-b:a',   p.abr,
+        '-ac',    '2',
         '-ar',    '48000',
         // HLS muxer options
         '-hls_time',             String(HLS_TIME),
@@ -508,6 +510,7 @@ function extractAudioStream(inputPath, outputDir, streamIndex) {
         `-map 0:${streamIndex}`,
         `-c:a aac`,
         `-b:a 128k`,
+        `-ac 2`,
         `-ar 48000`,
         `-hls_time 6`,
         `-hls_playlist_type vod`,
@@ -724,14 +727,11 @@ async function processVideo(videoId, inputPath, title, options = {}) {
     // Store expected quality count so the dashboard can show X/Y progress
     await db.prepare(`UPDATE videos SET qualities_expected=? WHERE id=?`).run(presets.length, videoId).catch(() => {});
 
-    // ── Phase 1: encode primary quality (720p or closest to source) first ────
-    // All CPU threads go to this job so it finishes as fast as possible.
-    // Once done, the video is immediately marked 'ready' so users can watch
-    // while secondary qualities continue encoding in the background.
-    const primaryPreset = [...presets].sort((a, b) => {
-      const target = Math.min(720, info.height);
-      return Math.abs(a.height - target) - Math.abs(b.height - target);
-    })[0];
+    // ── Phase 1: encode highest supported quality first ───────────────────────
+    // Primary = the best quality the source supports within the plan limits.
+    // This way users can watch in the best available resolution immediately
+    // while secondary (lower) qualities encode in the background.
+    const primaryPreset = [...presets].sort((a, b) => b.height - a.height)[0];
     const secondaryPresets = presets.filter(p => p.name !== primaryPreset.name);
     // 0 = FFmpeg auto (uses all logical CPUs) — no artificial cap
     const primaryThreads = 0;

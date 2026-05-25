@@ -467,6 +467,14 @@ function _doCastConnect() {
     req.autoplay = true;
     s.loadMedia(req).then(() => {
       toast('Transmitiendo en TV');
+      // Aplicar pistas de audio y subtítulo activas al receptor Chromecast.
+      // Se lanza con delay de 900 ms para dar tiempo al receptor a inicializar su lista de pistas.
+      const audioLang  = hls?.audioTracks?.[currentAudioTrack >= 0 ? currentAudioTrack : 0]?.lang || null;
+      const subEntry   = ccKey ? subtitlesList.find(t => subKey(t) === ccKey) : null;
+      const desiredSub = subEntry ? (subEntry.language || null) : undefined; // undefined = apagar subs
+      if (audioLang !== null || ccKey !== null) {
+        setTimeout(() => _castEditTracks(audioLang, desiredSub), 900);
+      }
       // Listen for media status updates to catch playback errors on the receiver
       const ms = s.getMediaSession();
       if (ms) {
@@ -1344,24 +1352,58 @@ function initHls(m3u8Url) {
         // AirPlay conectado → switch a native HLS para que Apple TV pueda reproducir
         const pos    = video.currentTime;
         const paused = video.paused;
+        // Guardar pista de audio e idioma de subtítulo activos antes de desconectar HLS.js
+        const savedAudioLang = hls?.audioTracks?.[currentAudioTrack >= 0 ? currentAudioTrack : 0]?.lang || null;
+        const savedCcLang    = ccLang;
+
         hls.stopLoad();
         hls.detachMedia();
         video.src = _hlsSourceUrl;
         video.load();
         video.currentTime = pos;
         if (!paused) video.play().catch(() => {});
-        logger.debug && logger.debug('AirPlay: switched to native HLS src');
+
+        // Tras cargar el manifest nativo, restaurar audio y activar subtítulo para Apple TV.
+        // El overlay HTML sigue corriendo en paralelo (se ve en la pantalla local).
+        // La pista nativa con mode='showing' es lo que Safari envía al Apple TV.
+        video.addEventListener('loadedmetadata', function _applyAirPlayTracks() {
+          // ── Pista de audio ─────────────────────────────────────
+          if (savedAudioLang && video.audioTracks?.length > 1) {
+            for (let i = 0; i < video.audioTracks.length; i++) {
+              video.audioTracks[i].enabled = (video.audioTracks[i].language === savedAudioLang);
+            }
+          }
+          // ── Subtítulos para Apple TV ───────────────────────────
+          // Activar la primera pista que coincida con el idioma seleccionado;
+          // ocultar el resto para evitar duplicados.
+          let ccApplied = false;
+          for (let i = 0; i < video.textTracks.length; i++) {
+            const isMatch = savedCcLang && video.textTracks[i].language === savedCcLang;
+            if (isMatch && !ccApplied) {
+              video.textTracks[i].mode = 'showing'; // Apple TV recibe esta pista
+              ccApplied = true;
+            } else {
+              video.textTracks[i].mode = 'hidden';
+            }
+          }
+        }, { once: true });
+
       } else {
         // AirPlay desconectado → re-enganchar HLS.js
         const pos = video.currentTime;
+        // Volver al modo overlay: deshabilitar pistas nativas para evitar doble render
+        disableAllNativeTracks();
         video.src = '';
         hls.attachMedia(video);
         hls.loadSource(_hlsSourceUrl);
         hls.once(Hls.Events.MANIFEST_PARSED, () => {
           video.currentTime = pos;
           video.play().catch(() => {});
+          // Restaurar la pista de audio que el usuario tenía seleccionada en HLS.js
+          if (currentAudioTrack >= 0 && currentAudioTrack < (hls.audioTracks?.length || 0)) {
+            hls.audioTrack = currentAudioTrack;
+          }
         });
-        logger.debug && logger.debug('AirPlay: re-attached HLS.js');
       }
     }, { once: false });
 

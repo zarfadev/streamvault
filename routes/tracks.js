@@ -325,6 +325,7 @@ function transcodeAudioTrack(inputPath, outputDir, language) {
       .noVideo()
       .audioCodec('aac')
       .audioBitrate('128k')
+      .audioChannels(2)     // Forzar stereo: evita downmix grave de audio 5.1/7.1
       .audioFrequency(48000)
       .addOptions([
         `-hls_time 6`,
