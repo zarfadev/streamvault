@@ -630,8 +630,9 @@ const upload = multer({
 app.use('/auth', require('./routes/auth'));
 
 // ─── API routes ──────────────────────────────────────────────
-app.use('/api/health', require('./routes/health'));
-app.use('/api/plans',  require('./routes/plans'));
+app.use('/api/health',   require('./routes/health'));
+app.use('/api/plans',    require('./routes/plans'));
+app.use('/api/captcha',  require('./routes/captcha').router);
 // Bulk must be registered before the generic /:id video routes to prevent
 // Express matching "bulk" as a videoId in the videos router.
 app.use('/api/videos/bulk', require('./routes/bulk'));

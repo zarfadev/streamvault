@@ -18,6 +18,138 @@ let _rcReady = false;
   } catch {}
 })();
 
+// ─── StreamVault Drag CAPTCHA ─────────────────────────────────────────────────
+const _svc = {
+  token:      null,   // token firmado del servidor
+  targetPct:  0.5,    // posición objetivo (0–1)
+  startedAt:  null,   // cuando se mostró el captcha
+  solved:     false,  // ¿resuelto?
+  solvedPct:  null,   // posición donde soltó el usuario
+};
+
+const PIECE_W   = 50;  // px, debe coincidir con CSS
+const TOLERANCE = 0.08;
+
+async function initSvCaptcha() {
+  _svc.solved = false;
+  _svc.token  = null;
+  _svc.solvedPct = null;
+
+  const piece   = document.getElementById('sv-piece');
+  const slot    = document.getElementById('sv-slot');
+  const track   = document.getElementById('sv-track');
+  const status  = document.getElementById('sv-status');
+  const btnReg  = document.getElementById('btn-register');
+  if (!piece || !track) return;
+
+  // Reset visual
+  piece.style.left = '2px';
+  piece.style.background = 'linear-gradient(135deg,#7c6cfa,#22d3a5)';
+  piece.style.boxShadow = '0 4px 14px rgba(124,108,250,.5)';
+  piece.style.cursor = 'grab';
+  piece.style.transition = '';
+  status.textContent = '';
+  status.style.color = 'var(--muted)';
+  if (btnReg) { btnReg.disabled = true; btnReg.style.opacity = '.5'; btnReg.style.cursor = 'not-allowed'; }
+
+  // Fetch challenge
+  try {
+    const r = await fetch('/api/captcha/challenge');
+    if (!r.ok) throw new Error();
+    const d = await r.json();
+    _svc.token     = d.token;
+    _svc.targetPct = d.targetPct;
+    _svc.startedAt = Date.now();
+  } catch {
+    status.textContent = '⚠ Error al cargar el captcha';
+    return;
+  }
+
+  // Position the slot
+  const trackW = track.offsetWidth;
+  const slotLeft = Math.round(_svc.targetPct * (trackW - PIECE_W));
+  slot.style.left = slotLeft + 'px';
+
+  // ── Drag logic ────────────────────────────────────────────────────────────
+  let dragging = false;
+  let startX   = 0;
+  let startPieceLeft = 2;
+
+  function getTrackBounds() { return track.getBoundingClientRect(); }
+
+  function clamp(v, min, max) { return Math.min(Math.max(v, min), max); }
+
+  function onDragStart(clientX) {
+    if (_svc.solved) return;
+    dragging       = true;
+    startX         = clientX;
+    startPieceLeft = parseInt(piece.style.left) || 2;
+    piece.style.cursor = 'grabbing';
+    piece.style.transition = 'none';
+  }
+
+  function onDragMove(clientX) {
+    if (!dragging) return;
+    const tb   = getTrackBounds();
+    const maxX = tb.width - PIECE_W - 2;
+    const dx   = clientX - startX;
+    const newX = clamp(startPieceLeft + dx, 2, maxX);
+    piece.style.left = newX + 'px';
+  }
+
+  function onDragEnd(clientX) {
+    if (!dragging) return;
+    dragging = false;
+    piece.style.cursor = 'grab';
+
+    const tb      = getTrackBounds();
+    const trackW2 = tb.width;
+    const curLeft = parseInt(piece.style.left) || 2;
+    const pct     = curLeft / (trackW2 - PIECE_W);
+    _svc.solvedPct = pct;
+
+    const diff = Math.abs(pct - _svc.targetPct);
+    if (diff <= TOLERANCE) {
+      // ✅ Solved
+      _svc.solved = true;
+      piece.style.transition = 'left .2s ease';
+      piece.style.left = slotLeft + 'px';
+      piece.style.background = 'linear-gradient(135deg,#22c55e,#16a34a)';
+      piece.style.boxShadow = '0 4px 16px rgba(34,197,94,.5)';
+      piece.style.cursor = 'default';
+      slot.style.borderColor = 'rgba(34,197,94,.6)';
+      status.textContent = '✓ Verificado';
+      status.style.color = '#22c55e';
+      // Enable register button
+      if (btnReg) { btnReg.disabled = false; btnReg.style.opacity = '1'; btnReg.style.cursor = ''; }
+    } else {
+      // ❌ Wrong — shake and reset
+      piece.style.transition = 'left .15s ease';
+      piece.style.background = 'linear-gradient(135deg,#ef4444,#dc2626)';
+      piece.style.boxShadow = '0 4px 14px rgba(239,68,68,.5)';
+      status.textContent = '✗ No coincide — inténtalo de nuevo';
+      status.style.color = '#ef4444';
+      setTimeout(() => {
+        piece.style.left = '2px';
+        piece.style.background = 'linear-gradient(135deg,#7c6cfa,#22d3a5)';
+        piece.style.boxShadow = '0 4px 14px rgba(124,108,250,.5)';
+        status.textContent = 'Desliza de nuevo';
+        status.style.color = 'var(--muted)';
+      }, 900);
+    }
+  }
+
+  // Mouse events
+  piece.addEventListener('mousedown', e => { e.preventDefault(); onDragStart(e.clientX); });
+  window.addEventListener('mousemove', e => onDragMove(e.clientX));
+  window.addEventListener('mouseup',   e => onDragEnd(e.clientX));
+
+  // Touch events
+  piece.addEventListener('touchstart', e => { e.preventDefault(); onDragStart(e.touches[0].clientX); }, { passive: false });
+  window.addEventListener('touchmove',  e => { if (dragging) { e.preventDefault(); onDragMove(e.touches[0].clientX); } }, { passive: false });
+  window.addEventListener('touchend',   e => { onDragEnd(e.changedTouches[0]?.clientX || 0); });
+}
+
 async function getCaptchaToken(action = 'submit') {
   if (!_rcKey) return '';
   if (!_rcReady) {
@@ -56,6 +188,10 @@ function switchTab(tab) {
   const tabsSwitcher = document.getElementById('tabs-switcher');
   if (tabsSwitcher) tabsSwitcher.style.display = (tab === 'forgot' || tab === 'check-email') ? 'none' : 'flex';
   clearAlert();
+  // Inicializar CAPTCHA al entrar al tab de registro
+  if (tab === 'register') {
+    setTimeout(() => initSvCaptcha(), 80); // pequeño delay para que el layout esté visible
+  }
 }
 
 function showAlert(msg, type = 'error') {
@@ -182,27 +318,48 @@ async function doRegister() {
   if (!name || !email || !pass) return showAlert('Por favor completa todos los campos.');
   if (pass.length < 8) return showAlert('La contraseña debe tener al menos 8 caracteres.');
 
+  // Verificar que el SV CAPTCHA fue resuelto
+  if (!_svc.solved || !_svc.token) {
+    showAlert('Por favor completa el CAPTCHA de seguridad.');
+    // Sacudir el captcha visualmente para indicar que falta
+    const box = document.getElementById('sv-captcha-box');
+    if (box) {
+      box.style.outline = '2px solid #ef4444';
+      setTimeout(() => { box.style.outline = ''; }, 2000);
+    }
+    return;
+  }
+
   const refCode = urlParams.get('ref') || null;
 
   setLoading('btn-register','spin-register','btn-register-text', true, 'Crear cuenta gratis');
   try {
     const captchaToken = await getCaptchaToken('register');
-    
-    // Check if we have a guest session ID in query params or local storage
     const guestSessionId = urlParams.get('guest_id') || localStorage.getItem('guest_session_id') || undefined;
 
-    const body = { name, email, password: pass, captchaToken, guestSessionId };
+    const body = {
+      name, email, password: pass, captchaToken, guestSessionId,
+      // SV CAPTCHA fields
+      svToken:      _svc.token,
+      svSolvedPct:  _svc.solvedPct,
+      svStartedAt:  _svc.startedAt,
+    };
     if (refCode) body.ref = refCode;
     const r = await fetch('/auth/register', {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify(body)
     });
     const data = await r.json();
-    if (!r.ok) return showAlert(data.error || 'Error al registrarse.');
+    if (!r.ok) {
+      // Si falla el captcha en el servidor, reinicializar el widget
+      if (data.error?.toLowerCase().includes('captcha')) {
+        _svc.solved = false;
+        await initSvCaptcha();
+      }
+      return showAlert(data.error || 'Error al registrarse.');
+    }
 
-    storeTokens(data, true); // new registrations always persist session
-
-    // Show "check your email" panel
+    storeTokens(data, true);
     document.getElementById('reg-email-display').textContent = email;
     switchTab('check-email');
   } catch (e) {

@@ -82,7 +82,7 @@ async function api(url, opts={}) {
   }
   return r;
 }
-const SECTIONS = ['overview','workspaces','users','videos','billing','plans','gateways','referrals','ads','queue','storage','audit','live','config'];
+const SECTIONS = ['overview','workspaces','users','videos','billing','plans','gateways','referrals','ads','ad-library','queue','storage','audit','live','config'];
 function go(name, el) {
   SECTIONS.forEach(s => { const e=document.getElementById('s-'+s); if(e) e.style.display=s===name?'block':'none'; });
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));

@@ -11,6 +11,9 @@ const { sendPasswordReset, sendWelcome, sendEmailVerification } = require('../se
 const rateLimit = require('../middleware/rateLimit');
 const logger = require('../services/logger').child({ module: 'auth' });
 
+// ─── StreamVault custom CAPTCHA ───────────────────────────────────────────────
+const { verifySvCaptcha } = require('./captcha');
+
 // ─── reCAPTCHA v3 validation (graceful: skipped when key not configured) ──────
 function validatePasswordStrength(password) {
   if (!password || password.length < 8)  return 'Password must be at least 8 characters';
@@ -23,15 +26,23 @@ function validatePasswordStrength(password) {
   return null;
 }
 
-async function verifyCaptcha(token) {
-  const secret = process.env.RECAPTCHA_SECRET_KEY;
-  if (!secret) return true; // not configured — skip
-  const siteKey = process.env.RECAPTCHA_SITE_KEY;
-  if (!siteKey) return true; // site key not set — frontend can't generate tokens, skip enforcement
-  if (!token) return false;
+// verifyCaptcha: valida el CAPTCHA (reCAPTCHA v3 si está configurado + SV CAPTCHA siempre)
+// svFields = { svToken, svSolvedPct, svStartedAt }
+async function verifyCaptcha(captchaToken, svFields = {}) {
+  const { svToken, svSolvedPct, svStartedAt } = svFields;
+
+  // ── SV CAPTCHA (siempre requerido cuando no hay reCAPTCHA) ────────────────
+  const hasRecaptcha = !!(process.env.RECAPTCHA_SECRET_KEY && process.env.RECAPTCHA_SITE_KEY);
+  if (!hasRecaptcha) {
+    // Sin reCAPTCHA externo: el SV CAPTCHA es el único guard
+    return verifySvCaptcha(svToken, svSolvedPct, svStartedAt);
+  }
+
+  // ── reCAPTCHA v3 (cuando está configurado) + SV CAPTCHA opcional ──────────
+  if (!captchaToken) return false;
   try {
     const https = require('https');
-    const body = `secret=${encodeURIComponent(secret)}&response=${encodeURIComponent(token)}`;
+    const body = `secret=${encodeURIComponent(process.env.RECAPTCHA_SECRET_KEY)}&response=${encodeURIComponent(captchaToken)}`;
     const data = await new Promise((resolve, reject) => {
       const req = https.request(
         { hostname: 'www.google.com', path: '/recaptcha/api/siteverify', method: 'POST',
@@ -44,7 +55,7 @@ async function verifyCaptcha(token) {
     });
     return data.success && (data.score === undefined || data.score >= 0.5);
   } catch {
-    return true; // fail open: network error shouldn't block legitimate users
+    return true; // fail open: network error no debe bloquear usuarios legítimos
   }
 }
 
@@ -78,7 +89,7 @@ async function generateReferralCode() {
 
 router.post('/register', rateLimit(5, 60_000), async (req, res) => {
   try {
-    const { email, password, name, ref, captchaToken } = req.body;
+    const { email, password, name, ref, captchaToken, svToken, svSolvedPct, svStartedAt } = req.body;
 
     const _plat = await require('../services/dynamicConfig')
       .getDynSection('platform', { allowRegistration: true })
@@ -87,8 +98,8 @@ router.post('/register', rateLimit(5, 60_000), async (req, res) => {
       return res.status(403).json({ error: 'El registro público está deshabilitado. Contacta al administrador para obtener acceso.' });
     }
 
-    if (!await verifyCaptcha(captchaToken)) {
-      return res.status(400).json({ error: 'CAPTCHA verification failed. Please try again.' });
+    if (!await verifyCaptcha(captchaToken, { svToken, svSolvedPct, svStartedAt })) {
+      return res.status(400).json({ error: 'Verificación CAPTCHA fallida. Por favor resuélvelo de nuevo.' });
     }
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
@@ -188,10 +199,10 @@ router.post('/register', rateLimit(5, 60_000), async (req, res) => {
 
 router.post('/login', rateLimit(10, 60_000), async (req, res) => {
   try {
-    const { email, password, captchaToken } = req.body;
+    const { email, password, captchaToken, svToken, svSolvedPct, svStartedAt } = req.body;
 
-    if (!await verifyCaptcha(captchaToken)) {
-      return res.status(400).json({ error: 'CAPTCHA verification failed. Please try again.' });
+    if (!await verifyCaptcha(captchaToken, { svToken, svSolvedPct, svStartedAt })) {
+      return res.status(400).json({ error: 'Verificación CAPTCHA fallida. Por favor resuélvelo de nuevo.' });
     }
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
@@ -487,9 +498,9 @@ router.post('/logout', authenticate, async (req, res) => {
 // Changed from 3/min to 3/10min - more aggressive against password reset spam attacks
 router.post('/forgot-password', rateLimit(3, 600_000), async (req, res) => {
   try {
-    const { email, captchaToken } = req.body;
-    if (!await verifyCaptcha(captchaToken)) {
-      return res.status(400).json({ error: 'CAPTCHA verification failed. Please try again.' });
+    const { email, captchaToken, svToken, svSolvedPct, svStartedAt } = req.body;
+    if (!await verifyCaptcha(captchaToken, { svToken, svSolvedPct, svStartedAt })) {
+      return res.status(400).json({ error: 'Verificación CAPTCHA fallida. Por favor resuélvelo de nuevo.' });
     }
     if (!email) return res.status(400).json({ error: 'Email is required' });
 

@@ -255,7 +255,63 @@ body {
         <div id="reg-pass-hint" style="font-size:11px;min-height:14px;color:var(--muted);"></div>
       </div>
     </div>
-    <button class="btn btn-primary" id="btn-register" onclick="doRegister()">
+    <!-- ── SV CAPTCHA ─────────────────────────────────────────── -->
+    <div id="sv-captcha-wrap" style="margin-bottom:18px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        Verificación de seguridad
+      </div>
+      <div id="sv-captcha-box" style="
+        border:1px solid var(--border2);border-radius:12px;
+        background:var(--surface2);overflow:hidden;padding:14px 14px 10px;">
+
+        <div style="font-size:13px;color:var(--muted);margin-bottom:10px;text-align:center;">
+          Desliza el escudo hasta la ranura
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-left:2px;"><polyline points="9 18 15 12 9 6"/></svg>
+        </div>
+
+        <!-- Track -->
+        <div id="sv-track" style="
+          position:relative;height:52px;border-radius:10px;overflow:visible;
+          background:linear-gradient(90deg,rgba(124,108,250,.18) 0%,rgba(34,211,165,.15) 100%);
+          border:1px solid rgba(124,108,250,.25);">
+
+          <!-- Stripe pattern overlay -->
+          <div style="position:absolute;inset:0;border-radius:10px;overflow:hidden;pointer-events:none;">
+            <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg" style="position:absolute;inset:0;">
+              <defs><pattern id="sv-stripes" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse" patternTransform="rotate(-35)">
+                <line x1="0" y1="0" x2="0" y2="20" stroke="rgba(124,108,250,0.08)" stroke-width="8"/>
+              </pattern></defs>
+              <rect width="100%" height="100%" fill="url(#sv-stripes)"/>
+            </svg>
+          </div>
+
+          <!-- Target slot (posición aleatoria, seteada por JS) -->
+          <div id="sv-slot" style="
+            position:absolute;top:2px;bottom:2px;width:50px;border-radius:8px;
+            background:rgba(0,0,0,.35);border:2px dashed rgba(124,108,250,.55);
+            display:flex;align-items:center;justify-content:center;pointer-events:none;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="rgba(124,108,250,.5)" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+
+          <!-- Draggable piece -->
+          <div id="sv-piece" style="
+            position:absolute;top:2px;left:2px;width:50px;height:48px;
+            border-radius:8px;cursor:grab;touch-action:none;user-select:none;
+            background:linear-gradient(135deg,#7c6cfa,#22d3a5);
+            box-shadow:0 4px 14px rgba(124,108,250,.5);
+            display:flex;align-items:center;justify-content:center;
+            transition:box-shadow .15s;z-index:10;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="white" stroke="white" stroke-width="0"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+        </div>
+
+        <!-- Status line -->
+        <div id="sv-status" style="text-align:center;font-size:12px;color:var(--muted);margin-top:8px;height:16px;transition:color .2s;"></div>
+      </div>
+    </div>
+
+    <button class="btn btn-primary" id="btn-register" onclick="doRegister()" disabled style="opacity:.5;cursor:not-allowed;">
       <div class="spinner" id="spin-register"></div>
       <span id="btn-register-text">Crear cuenta gratis</span>
     </button>
