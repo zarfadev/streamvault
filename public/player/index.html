@@ -399,48 +399,6 @@ body.player-standalone .video-info { display: none !important; }
 }
 .progress-track:hover .sv-chapter-marker { height: 14px; background: #fff; }
 
-/* ── Page footer ──────────────────────────────────────────── */
-.sv-footer {
-  border-top: 1px solid rgba(255,255,255,.06);
-  padding: 20px 32px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 10px;
-  font-size: 11px;
-  color: #9191a8;
-  margin-top: 8px;
-}
-.sv-footer a { color: #9191a8; text-decoration: none; transition: color .14s; }
-.sv-footer a:hover { color: #f0f0f8; }
-.sv-footer-logo { font-weight: 700; font-size: 13px; color: #a78bfa !important; }
-.sv-footer-logo span { color: #9191a8; font-weight: 400; }
-.sv-footer-links { display: flex; gap: 14px; flex-wrap: wrap; }
-@media (max-width: 600px) {
-  .sv-footer { padding: 16px 16px 24px; flex-direction: column; align-items: center; text-align: center; }
-}
 </style>
-
-<footer class="sv-footer">
-  <a href="/" class="sv-footer-logo">Stream<span>Vault</span></a>
-  <div class="sv-footer-links">
-    <a href="/privacy">Privacidad</a>
-    <a href="/terms">Términos</a>
-    <a href="/cookies">Cookies</a>
-    <a href="/status">Estado</a>
-  </div>
-  <span id="sv-footer-brand">© <span id="sv-footer-year"></span> StreamVault · <a href="https://myscreators.com" target="_blank" rel="noopener">Una marca de M&amp;S Creators S.A.S.</a></span>
-</footer>
-<script>
-document.getElementById('sv-footer-year').textContent = new Date().getFullYear();
-fetch('/api/settings').then(r=>r.json()).then(s=>{
-  if (s.siteName && s.siteName !== 'StreamVault') {
-    document.getElementById('sv-footer-brand').innerHTML =
-      '© ' + new Date().getFullYear() + ' ' + s.siteName +
-      ' · <a href="https://myscreators.com" target="_blank" rel="noopener" style="color:#9191a8;text-decoration:none;">Una marca de M&amp;S Creators S.A.S.</a>';
-  }
-}).catch(()=>{});
-</script>
 </body>
 </html>

@@ -108,7 +108,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 .fade-in-3{animation:fadeIn .35s .16s ease both;}
 
 /* ── Footer ── */
-.sv-footer{border-top:1px solid var(--border);padding:36px 48px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--muted);margin-top:auto;}
+.sv-footer{border-top:1px solid var(--border);padding:28px 40px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--muted);margin-top:auto;}
 .sv-footer a{color:var(--muted);text-decoration:none;transition:color .14s;}
 .sv-footer a:hover{color:var(--text);}
 
@@ -121,7 +121,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 @media(max-width:640px){
   .topbar{padding:0 16px;}
   .page{padding:16px 16px 60px;}
-  .sv-footer{padding:24px 20px;}
+  .sv-footer{padding:16px 20px;}
   .q-row{flex-wrap:wrap;}
   .q-info-sub{display:none;}
   .q-actions{width:100%;justify-content:stretch;}
@@ -154,8 +154,9 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 <div id="toast" class="toast"></div>
 
 <footer class="sv-footer">
-  <a href="/" style="font-family:var(--mono);font-weight:700;color:var(--accent2);font-size:14px;">Stream<span style="color:var(--muted);font-weight:400;">Vault</span></a>
+  <a href="/" style="font-family:var(--mono);font-weight:700;color:var(--accent2);font-size:14px;text-decoration:none;">Stream<span style="color:var(--muted);font-weight:400;">Vault</span></a>
   <div style="display:flex;gap:16px;flex-wrap:wrap;">
+    <a href="/referidos">Referidos</a>
     <a href="/privacy">Privacidad</a>
     <a href="/terms">Términos</a>
     <a href="/cookies">Cookies</a>
@@ -163,15 +164,15 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
     <a href="/status">Estado</a>
     <a href="/api-docs">API</a>
   </div>
-  <span id="dl-footer-year">© 2026 StreamVault</span>
+  <span id="dl-footer-year">© 2026 StreamVault · <a href="https://myscreators.com" target="_blank" rel="noopener" style="color:var(--muted);text-decoration:none;">Una marca de M&amp;S Creators S.A.S.</a></span>
 </footer>
 <script>
 fetch('/api/settings').then(r=>r.json()).then(s=>{
   window._svSiteName=s.siteName||'StreamVault';
-  document.getElementById('dl-footer-year').textContent='© '+new Date().getFullYear()+' '+window._svSiteName;
+  document.getElementById('dl-footer-year').innerHTML='© '+new Date().getFullYear()+' '+window._svSiteName+' · <a href="https://myscreators.com" target="_blank" rel="noopener" style="color:var(--muted);text-decoration:none;">Una marca de M&amp;S Creators S.A.S.</a>';
 }).catch(()=>{
   window._svSiteName='StreamVault';
-  document.getElementById('dl-footer-year').textContent='© '+new Date().getFullYear()+' StreamVault';
+  document.getElementById('dl-footer-year').innerHTML='© '+new Date().getFullYear()+' StreamVault · <a href="https://myscreators.com" target="_blank" rel="noopener" style="color:var(--muted);text-decoration:none;">Una marca de M&amp;S Creators S.A.S.</a>';
 });
 </script>
 

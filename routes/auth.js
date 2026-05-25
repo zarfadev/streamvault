@@ -26,15 +26,18 @@ function validatePasswordStrength(password) {
   return null;
 }
 
-// verifyCaptcha: valida el CAPTCHA (reCAPTCHA v3 si está configurado + SV CAPTCHA siempre)
+// verifyCaptcha: valida el CAPTCHA (reCAPTCHA v3 si está configurado + SV CAPTCHA para registro)
 // svFields = { svToken, svSolvedPct, svStartedAt }
-async function verifyCaptcha(captchaToken, svFields = {}) {
+// opts.requireSvCaptcha = true → register; false → login / forgot-password
+async function verifyCaptcha(captchaToken, svFields = {}, opts = {}) {
   const { svToken, svSolvedPct, svStartedAt } = svFields;
+  const { requireSvCaptcha = true } = opts;
 
-  // ── SV CAPTCHA (siempre requerido cuando no hay reCAPTCHA) ────────────────
+  // ── SV CAPTCHA (requerido para registro cuando no hay reCAPTCHA externo) ──
   const hasRecaptcha = !!(process.env.RECAPTCHA_SECRET_KEY && process.env.RECAPTCHA_SITE_KEY);
   if (!hasRecaptcha) {
-    // Sin reCAPTCHA externo: el SV CAPTCHA es el único guard
+    // Sin reCAPTCHA externo: solo register necesita el drag-CAPTCHA
+    if (!requireSvCaptcha) return true;
     return verifySvCaptcha(svToken, svSolvedPct, svStartedAt);
   }
 
@@ -201,7 +204,7 @@ router.post('/login', rateLimit(10, 60_000), async (req, res) => {
   try {
     const { email, password, captchaToken, svToken, svSolvedPct, svStartedAt } = req.body;
 
-    if (!await verifyCaptcha(captchaToken, { svToken, svSolvedPct, svStartedAt })) {
+    if (!await verifyCaptcha(captchaToken, { svToken, svSolvedPct, svStartedAt }, { requireSvCaptcha: false })) {
       return res.status(400).json({ error: 'Verificación CAPTCHA fallida. Por favor resuélvelo de nuevo.' });
     }
     if (!email || !password) {
@@ -499,7 +502,7 @@ router.post('/logout', authenticate, async (req, res) => {
 router.post('/forgot-password', rateLimit(3, 600_000), async (req, res) => {
   try {
     const { email, captchaToken, svToken, svSolvedPct, svStartedAt } = req.body;
-    if (!await verifyCaptcha(captchaToken, { svToken, svSolvedPct, svStartedAt })) {
+    if (!await verifyCaptcha(captchaToken, { svToken, svSolvedPct, svStartedAt }, { requireSvCaptcha: false })) {
       return res.status(400).json({ error: 'Verificación CAPTCHA fallida. Por favor resuélvelo de nuevo.' });
     }
     if (!email) return res.status(400).json({ error: 'Email is required' });
