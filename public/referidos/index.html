@@ -18,17 +18,17 @@ nav {
   background: rgba(10,10,15,.94); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--border);
 }
-.nav-logo { font-family: var(--mono); font-size: 16px; font-weight: 700; color: var(--accent2); letter-spacing: -0.5px; text-decoration: none; }
+.nav-logo { font-family: var(--mono); font-size: 16px; font-weight: 700; color: var(--accent2); letter-spacing: -0.5px; text-decoration: none; flex-shrink: 0; }
 .nav-logo span { color: var(--muted); font-weight: 400; }
-.nav-right { display: flex; align-items: center; gap: 10px; }
-.nav-back { font-size: 13px; color: var(--muted); text-decoration: none; display: flex; align-items: center; gap: 8px; transition: color 0.2s; }
+.nav-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.nav-back { font-size: 13px; color: var(--muted); text-decoration: none; display: flex; align-items: center; gap: 8px; transition: color 0.2s; white-space: nowrap; }
 .nav-back:hover { color: var(--text); text-decoration: none; }
-.nav-btn { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 10px; border: 1px solid var(--border2); background: var(--surface2); color: var(--text); font-size: 13px; font-weight: 600; text-decoration: none; transition: border-color .14s, background .14s; font-family: var(--sans); cursor: pointer; }
+.nav-btn { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 10px; border: 1px solid var(--border2); background: var(--surface2); color: var(--text); font-size: 13px; font-weight: 600; text-decoration: none; transition: border-color .14s, background .14s; font-family: var(--sans); cursor: pointer; white-space: nowrap; }
 .nav-btn:hover { border-color: var(--accent); background: rgba(124,108,250,.08); text-decoration: none; }
 .nav-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 .nav-btn.primary:hover { background: #6a5be8; }
 
-.container { max-width: 860px; margin: 0 auto; padding: 56px 40px 80px; flex: 1; }
+.container { max-width: 860px; margin: 0 auto; padding: 56px 40px 80px; flex: 1; width: 100%; }
 
 /* Hero */
 .page-badge { display: inline-flex; align-items: center; gap: 8px; padding: 5px 12px; background: rgba(124,108,250,.12); border: 1px solid rgba(124,108,250,.22); border-radius: 100px; font-size: 11px; font-weight: 700; color: var(--accent2); letter-spacing: .6px; text-transform: uppercase; margin-bottom: 20px; }
@@ -96,17 +96,21 @@ a:hover { text-decoration: underline; }
 footer a:hover { color: var(--text); }
 
 @media (max-width: 640px) {
-  nav { padding: 0 20px; }
-  .container { padding: 36px 20px 60px; }
+  nav { padding: 0 16px; }
+  .container { padding: 32px 16px 56px; }
   .steps { grid-template-columns: 1fr; }
   .how-grid { grid-template-columns: 1fr; }
   .credit-box { flex-direction: column; text-align: center; }
   .cta-strip { flex-direction: column; text-align: center; }
 }
-.sv-footer { border-top: 1px solid var(--border); padding: 32px 48px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--muted); margin-top: auto; }
+@media (max-width: 400px) {
+  .nav-back .nav-back-text { display: none; }
+  .nav-back { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border2); }
+}
+.sv-footer { border-top: 1px solid var(--border); padding: 32px 40px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--muted); margin-top: auto; }
 .sv-footer a { color: var(--muted); text-decoration: none; transition: color .14s; }
 .sv-footer a:hover { color: var(--text); }
-@media (max-width: 640px) { .sv-footer { padding: 24px 20px; flex-direction: column; align-items: center; text-align: center; } }
+@media (max-width: 640px) { .sv-footer { padding: 24px 16px; flex-direction: column; align-items: center; text-align: center; } }
 </style>
 </head>
 <body>
@@ -116,7 +120,7 @@ footer a:hover { color: var(--text); }
   <div class="nav-right">
     <a href="/" class="nav-back">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
-      Volver al inicio
+      <span class="nav-back-text">Volver al inicio</span>
     </a>
     <a href="/dashboard" class="nav-btn" id="nav-dash" style="display:none;">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>

@@ -47,17 +47,17 @@ nav {
 }
 .nav-logo {
   font-family: var(--mono); font-size: 16px; font-weight: 700;
-  color: var(--accent2); letter-spacing: -0.5px; text-decoration: none;
+  color: var(--accent2); letter-spacing: -0.5px; text-decoration: none; flex-shrink: 0;
 }
 .nav-logo span { color: var(--muted); font-weight: 400; }
-.nav-links { display: flex; gap: 8px; }
+.nav-links { display: flex; gap: 8px; flex-shrink: 0; }
 .nav-btn {
   display: inline-flex; align-items: center; gap: 8px;
   padding: 8px 16px; border-radius: 10px;
   border: 1px solid var(--border2); background: var(--surface2);
   color: var(--text); font-size: 13px; font-weight: 600;
   text-decoration: none; transition: border-color .14s, background .14s;
-  font-family: var(--sans); cursor: pointer;
+  font-family: var(--sans); cursor: pointer; white-space: nowrap;
 }
 .nav-btn:hover { border-color: var(--accent); background: rgba(124,108,250,.08); }
 .nav-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
@@ -222,7 +222,7 @@ main {
 
 <footer class="sv-footer">
   <a href="/" style="font-family:var(--mono);font-weight:700;color:var(--accent2);font-size:14px;text-decoration:none;">Stream<span style="color:var(--muted);font-weight:400;">Vault</span></a>
-  <div style="display:flex;gap:16px;flex-wrap:wrap;">
+  <div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:center;">
     <a href="/referidos">Referidos</a>
     <a href="/privacy">Privacidad</a>
     <a href="/terms">Términos</a>
@@ -238,8 +238,16 @@ main {
 <script>
 document.getElementById('sv-copy').innerHTML = '© ' + new Date().getFullYear() + ' ' + (window._svSiteName || 'StreamVault') + ' · <a href="https://myscreators.com" target="_blank" rel="noopener" style="color:var(--muted);text-decoration:none;">Una marca de M&amp;S Creators S.A.S.</a>';
 (function(){
-  const t = localStorage.getItem('sv_access_token') || localStorage.getItem('sv_token');
-  document.getElementById(t ? 'nav-dash' : 'nav-login').style.display = 'inline-flex';
+  const t = localStorage.getItem('sv_access_token') || sessionStorage.getItem('sv_access_token') ||
+            localStorage.getItem('sv_token') || localStorage.getItem('sv_refresh_token') ||
+            sessionStorage.getItem('sv_refresh_token');
+  const dash = document.getElementById('nav-dash');
+  if (t && dash) {
+    let r = '';
+    try { r = JSON.parse(localStorage.getItem('sv_user') || sessionStorage.getItem('sv_user') || '{}')?.platform_role || ''; } catch {}
+    if (r === 'super_admin') dash.href = '/admin';
+    dash.style.display = 'inline-flex';
+  } else { document.getElementById('nav-login').style.display = 'inline-flex'; }
 })();
 
 document.addEventListener("DOMContentLoaded", () => {

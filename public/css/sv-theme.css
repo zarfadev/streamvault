@@ -1,8 +1,9 @@
 /**
  * StreamVault — tokens y utilidades compartidas (landing, login, dashboard)
  */
-html { background: #0a0a0f; overflow-x: hidden; }
-body { overflow-x: hidden; }
+html { background: #0a0a0f; overflow-x: clip; }
+/* No poner overflow-x:hidden en body — recortaría tablas y contenido con scroll propio.
+   overflow-x:clip en html evita scroll lateral de la página sin afectar elementos internos. */
 :root {
   --bg: #0a0a0f;
   --surface: #111118;
@@ -1212,11 +1213,32 @@ body.nav-open .nav-backdrop{display:block;opacity:1;pointer-events:auto;}
      con un único botón (dashboard O login) que SÍ debe mostrarse en móvil. */
   .nav-actions .nav-btn-ghost,
   .nav-actions .nav-btn-primary { display: none !important; }
-  /* Adaptar .nav-right en páginas secundarias a móvil */
-  .nav-right .nav-back { font-size: 12px; gap: 5px; }
+  /* En móvil el nav de páginas legales tiene: logo + "Volver al inicio" + btn
+     Mostrar solo el icono de volver para que todo quepa en 375 px */
+  .nav-right .nav-back .nav-back-text { display: none; }
+  .nav-right .nav-back { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border2); }
   .nav-right .nav-btn  { padding: 7px 12px; font-size: 12px; }
   .sv-footer { padding: 24px 20px !important; flex-direction: column !important; align-items: center !important; text-align: center !important; gap: 16px !important; }
   .sv-footer div { justify-content: center; }
+}
+
+/* ── Tablas de contenido (páginas legales) ─────────────────────────
+   Envuelve cualquier .cookie-table o .legal-table con overflow-x
+   para que en móvil se pueda hacer scroll horizontal sin que la
+   página entera se mueva. */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 8px;
+  margin: 12px 0 20px;
+}
+.table-scroll table {
+  min-width: 480px;
+}
+/* Mejorar legibilidad del código en celdas de tabla en móvil */
+.table-scroll code, .cookie-table code {
+  word-break: break-all;
+  font-size: 12px;
 }
 
 /* ── Global Error & Status Pages ────────────────────────────────── */

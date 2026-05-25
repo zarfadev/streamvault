@@ -7,21 +7,14 @@
 <title>StreamVault API — Developer Documentation</title>
 <meta name="description" content="Complete REST API reference for StreamVault. Upload, transcode, stream and manage video programmatically.">
 <link rel="stylesheet" href="/css/sv-theme.css">
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; scroll-padding-top: 72px; }
+body { font-family: var(--sans); background: var(--bg); color: var(--text); line-height: 1.6; overflow-x: hidden; }
 
-body {
-  font-family: var(--sans);
-  background: var(--bg);
-  color: var(--text);
-  line-height: 1.6;
-  overflow-x: hidden;
-}
-
-/* ─── NAV (identical to landing) ─── */
-nav {
+/* ─── NAV ─── */
+nav.api-nav {
   position: sticky; top: 0; z-index: 100;
   height: 56px; padding: 0 40px;
   display: flex; align-items: center; justify-content: space-between;
@@ -29,388 +22,165 @@ nav {
   backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--border);
 }
-.nav-logo {
-  font-family: var(--mono); font-size: 16px; font-weight: 700;
-  color: var(--accent2); letter-spacing: -0.5px; text-decoration: none;
-}
+.nav-logo { font-family: var(--mono); font-size: 16px; font-weight: 700; color: var(--accent2); letter-spacing: -0.5px; text-decoration: none; flex-shrink: 0; }
 .nav-logo span { color: var(--muted); font-weight: 400; }
-
-.nav-search {
-  display: flex; align-items: center; gap: 10px;
-  background: var(--surface2); border: 1px solid var(--border);
-  border-radius: 10px; padding: 0 12px; height: 38px;
-  width: 320px; transition: all 0.2s; position: relative;
-}
+.nav-search { display: flex; align-items: center; gap: 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 0 12px; height: 38px; width: 320px; max-width: calc(100vw - 320px); transition: all 0.2s; }
+.nav-search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,108,250,.12); }
 .nav-search svg { color: var(--muted); flex-shrink: 0; }
-.nav-search input {
-  flex: 1; background: none; border: none; color: var(--text);
-  font-size: 13px; font-family: var(--sans); outline: none; width: 100%;
-}
+.nav-search input { flex: 1; background: none; border: none; color: var(--text); font-size: 13px; font-family: var(--sans); outline: none; width: 100%; }
 .nav-search input::placeholder { color: var(--muted); }
-.search-kbd {
-  display: flex; align-items: center; gap: 2px;
-  padding: 2px 6px; border-radius: 4px;
-  background: var(--surface3); border: 1px solid var(--border2);
-  color: var(--muted); font-size: 10px; font-weight: 700;
-  pointer-events: none; user-select: none;
-}
-.kbd-cmd { font-size: 12px; }
-
-.nav-actions { display: flex; gap: 10px; align-items: center; }
-.btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  padding: 8px 16px; border-radius: 10px; font-size: 13px; font-weight: 600;
-  text-decoration: none; font-family: var(--sans); transition: all 0.2s; cursor: pointer;
-}
-.btn-primary {
-  background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff;
-  border: 1px solid rgba(167,139,250,.2); box-shadow: 0 2px 12px rgba(124,108,250,.3);
-}
+.search-kbd { display: flex; align-items: center; gap: 2px; padding: 2px 6px; border-radius: 4px; background: var(--surface3); border: 1px solid var(--border2); color: var(--muted); font-size: 10px; font-weight: 700; pointer-events: none; user-select: none; }
+.nav-actions { display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 16px; border-radius: 10px; font-size: 13px; font-weight: 600; text-decoration: none; font-family: var(--sans); transition: all 0.2s; cursor: pointer; border: none; }
+.btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; border: 1px solid rgba(167,139,250,.2); box-shadow: 0 2px 12px rgba(124,108,250,.3); }
 .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(124,108,250,.45); }
-.btn-ghost {
-  background: transparent; color: var(--muted); border: 1px solid var(--border2);
-}
+.btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border2); }
 .btn-ghost:hover { color: var(--text); border-color: rgba(167,139,250,.4); background: rgba(124,108,250,.06); }
 
-/* ─── PAGE LAYOUT ─── */
-.page-layout {
-  display: flex;
-  margin-top: 0;
-  min-height: calc(100vh - 56px);
-}
+/* ─── LAYOUT ─── */
+.page-layout { display: flex; min-height: calc(100vh - 56px); }
 
 /* ─── SIDEBAR ─── */
-.sidebar {
-  width: 260px;
-  min-width: 260px;
-  background: var(--surface);
-  border-right: 1px solid var(--border);
-  position: fixed;
-  top: 56px;
-  bottom: 0;
-  left: 0;
-  overflow-y: auto;
-  padding: 28px 0 40px;
-  z-index: 50;
-}
+.sidebar { width: 272px; min-width: 272px; background: var(--surface); border-right: 1px solid var(--border); position: fixed; top: 56px; bottom: 0; left: 0; overflow-y: auto; padding: 24px 0 40px; z-index: 50; }
+.sb-section { font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); padding: 20px 24px 8px; }
+.sb-link { display: flex; align-items: center; gap: 10px; padding: 7px 24px; font-size: 13px; color: var(--text-secondary); text-decoration: none; transition: all 0.15s; border-left: 2px solid transparent; }
+.sb-link:hover { color: var(--text); background: rgba(124,108,250,.04); }
+.sb-link.active { color: var(--accent2); border-left-color: var(--accent); background: rgba(124,108,250,.06); }
+.sb-method { font-size: 9px; font-weight: 700; letter-spacing: 0.5px; padding: 2px 6px; border-radius: 4px; min-width: 38px; text-align: center; font-family: var(--mono); }
+.m-get { background: rgba(34,197,94,.12); color: #22c55e; }
+.m-post { background: rgba(59,130,246,.12); color: #3b82f6; }
+.m-patch { background: rgba(234,179,8,.12); color: #eab308; }
+.m-put { background: rgba(234,179,8,.12); color: #eab308; }
+.m-delete { background: rgba(239,68,68,.12); color: #ef4444; }
 
-.sb-section {
-  font-size: 10px; font-weight: 700; letter-spacing: 2px;
-  text-transform: uppercase; color: var(--muted);
-  padding: 18px 24px 8px;
-}
-
-.sb-link {
-  display: flex; align-items: center; gap: 10px;
-  padding: 9px 24px; font-size: 13px; font-weight: 500;
-  color: var(--muted); text-decoration: none;
-  border-left: 3px solid transparent;
-  transition: all 0.15s;
-}
-.sb-link:hover {
-  color: var(--text);
-  background: var(--surface2);
-}
-.sb-link.active {
-  color: var(--accent2);
-  background: rgba(124, 108, 250, 0.06);
-  border-left-color: var(--accent2);
-  font-weight: 600;
-}
-
-.sb-method {
-  font-size: 9px; font-weight: 700; letter-spacing: 0.5px;
-  padding: 3px 7px; border-radius: 4px;
-  min-width: 38px; text-align: center;
-  font-family: var(--mono);
-}
-.m-get    { background: rgba(96, 165, 250, 0.12);  color: #60a5fa; }
-.m-post   { background: rgba(34, 211, 165, 0.12);  color: var(--green); }
-.m-patch  { background: rgba(251, 191, 36, 0.12);  color: var(--amber); }
-.m-delete { background: rgba(248, 113, 113, 0.12); color: var(--red); }
-
-/* ─── MAIN CONTENT ─── */
-.main-content {
-  margin-left: 260px;
-  flex: 1;
-  min-width: 0;
-}
+/* ─── MAIN ─── */
+.main-content { margin-left: 272px; flex: 1; min-width: 0; }
+.content-area { max-width: 920px; margin: 0 auto; padding: 48px 48px 80px; }
 
 /* ─── HERO ─── */
-.api-hero {
-  padding: 72px 56px;
-  border-bottom: 1px solid var(--border);
-  position: relative;
-  overflow: hidden;
-}
-.api-hero::before {
-  content: '';
-  position: absolute; top: 50%; left: 50%;
-  width: 800px; height: 800px;
-  transform: translate(-50%, -50%);
-  background: radial-gradient(circle, rgba(124,108,250,0.08) 0%, transparent 70%);
-  pointer-events: none;
-}
-.api-hero h1 {
-  font-size: 48px; font-weight: 700; letter-spacing: -2px;
-  margin-bottom: 16px; position: relative;
-}
-.api-hero .gradient-text {
-  background: linear-gradient(135deg, #a78bfa, #7c6cfa, #22d3a5);
-  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-.api-hero p {
-  font-size: 18px; color: var(--muted); max-width: 640px;
-  line-height: 1.7; margin-bottom: 32px; position: relative;
-}
-.api-hero-actions {
-  display: flex; gap: 14px; position: relative;
-}
+.api-hero { text-align: center; padding: 80px 48px; background: linear-gradient(180deg, rgba(124,108,250,.04) 0%, transparent 100%); border-bottom: 1px solid var(--border); }
+.api-hero h1 { font-size: 52px; font-weight: 800; letter-spacing: -1.5px; line-height: 1.1; }
+.api-hero .subtitle { color: var(--muted); font-size: 18px; margin-top: 16px; max-width: 640px; margin-inline: auto; line-height: 1.6; }
+.api-hero-actions { display: flex; gap: 12px; justify-content: center; margin-top: 32px; }
+.gradient-text { background: linear-gradient(135deg, var(--accent), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+.api-hero-version { display: inline-flex; align-items: center; gap: 6px; margin-top: 20px; font-size: 12px; color: var(--muted); background: var(--surface2); padding: 5px 14px; border-radius: 99px; border: 1px solid var(--border); }
 
-/* ─── CONTENT AREA ─── */
-.content-area {
-  max-width: 1200px;
-  padding: 56px;
-}
+/* ─── SECTIONS ─── */
+.doc-section { margin-bottom: 56px; }
+.section-tag { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
+.section-heading { font-size: 26px; font-weight: 800; margin-bottom: 10px; letter-spacing: -0.5px; }
+.section-desc { color: var(--muted); font-size: 14px; margin-bottom: 24px; max-width: 700px; line-height: 1.7; }
 
-/* ─── SECTION ─── */
-.doc-section {
-  padding-bottom: 48px;
-  margin-bottom: 48px;
-  border-bottom: 1px solid var(--border);
-}
-.doc-section:last-child { border-bottom: none; }
-
-.section-tag {
-  font-size: 11px; font-weight: 700; letter-spacing: 2px;
-  text-transform: uppercase; color: var(--accent2); margin-bottom: 10px;
-}
-.section-heading {
-  font-size: 32px; font-weight: 700; letter-spacing: -1px;
-  margin-bottom: 14px; display: flex; align-items: center; gap: 12px;
-}
-.section-heading svg { flex-shrink: 0; }
-.section-desc {
-  font-size: 16px; color: var(--muted); line-height: 1.7;
-  margin-bottom: 28px; max-width: 720px;
-}
-
-/* ─── BASE URL ─── */
-.base-url {
-  display: flex; align-items: center; gap: 14px;
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius-lg); padding: 14px 20px;
-  margin-bottom: 28px;
-}
-.base-url-label {
-  font-size: 10px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 2px; color: var(--muted); white-space: nowrap;
-}
-.base-url-val {
-  font-family: var(--mono); font-size: 14px; color: #60a5fa; font-weight: 600;
-}
-
-/* ─── FEATURE GRID ─── */
-.api-features {
-  display: grid; grid-template-columns: repeat(3, 1fr);
-  gap: 16px; margin-bottom: 28px;
-}
-.api-feature {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: 14px; padding: 22px;
-  transition: all 0.3s; position: relative; overflow: hidden;
-}
-.api-feature::before {
-  content: '';
-  position: absolute; top: 0; left: 0; right: 0; height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(124,108,250,0.4), transparent);
-  opacity: 0; transition: opacity 0.3s;
-}
-.api-feature:hover { border-color: rgba(124,108,250,0.2); transform: translateY(-2px); }
-.api-feature:hover::before { opacity: 1; }
-.api-feature-icon {
-  width: 40px; height: 40px; border-radius: 10px;
-  background: rgba(124,108,250,0.12); border: 1px solid rgba(124,108,250,0.2);
-  display: flex; align-items: center; justify-content: center;
-  margin-bottom: 14px; font-size: 18px;
-}
-.api-feature-title { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
-.api-feature-desc { font-size: 13px; color: var(--muted); line-height: 1.6; }
+/* ─── FEATURES GRID ─── */
+.api-features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 28px 0; }
+.api-feature { padding: 20px; border-radius: 12px; background: var(--surface2); border: 1px solid var(--border); transition: border-color 0.2s; }
+.api-feature:hover { border-color: rgba(124,108,250,.3); }
+.api-feature-icon { width: 36px; height: 36px; border-radius: 10px; background: rgba(124,108,250,.08); display: flex; align-items: center; justify-content: center; margin-bottom: 12px; }
+.api-feature-icon svg { width: 18px; height: 18px; color: var(--accent2); }
+.api-feature-title { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+.api-feature-desc { font-size: 12px; color: var(--muted); line-height: 1.5; }
 
 /* ─── AUTH BOX ─── */
-.auth-box {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius-lg); padding: 24px; margin-bottom: 20px;
-}
-.auth-box h3 {
-  font-size: 16px; font-weight: 600; margin-bottom: 14px;
-  display: flex; align-items: center; gap: 10px;
-}
-.auth-row {
-  display: flex; align-items: center; gap: 14px;
-  background: var(--surface2); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 11px 16px; margin-bottom: 10px;
-}
-.auth-row-label {
-  font-size: 10px; font-weight: 700; color: var(--muted);
-  text-transform: uppercase; letter-spacing: 1.5px; min-width: 90px;
-}
-.auth-row-val {
-  font-family: var(--mono); font-size: 12px; color: var(--accent2);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-
-/* ─── ENDPOINT ─── */
-.endpoint {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius-lg); margin-bottom: 20px;
-  overflow: hidden; transition: all 0.2s;
-}
-.endpoint:hover {
-  border-color: rgba(124,108,250,0.2);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-}
-
-.ep-header {
-  display: flex; align-items: center; gap: 14px;
-  padding: 16px 22px; cursor: pointer; user-select: none;
-  transition: background 0.15s;
-}
-.ep-header:hover { background: var(--surface2); }
-
-.ep-method {
-  font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
-  padding: 5px 12px; border-radius: var(--radius-sm);
-  min-width: 56px; text-align: center; font-family: var(--mono);
-}
-.ep-path {
-  font-family: var(--mono); font-size: 13px; color: var(--text); flex: 1; font-weight: 500;
-}
-.ep-path .param { color: var(--accent2); font-weight: 700; }
-.ep-summary { font-size: 13px; color: var(--muted); }
-.ep-chevron {
-  color: var(--muted); transition: transform 0.2s; font-size: 11px;
-}
-.ep-chevron.open { transform: rotate(180deg); }
-.ep-badge {
-  font-size: 10px; font-weight: 700; letter-spacing: 0.5px;
-  padding: 3px 9px; border-radius: 99px;
-  background: rgba(251, 191, 36, 0.12); color: var(--amber);
-  border: 1px solid rgba(251, 191, 36, 0.25);
-}
-
-.ep-body { display: none; padding: 0 22px 22px; border-top: 1px solid var(--border); }
-.ep-body.open { display: block; }
-
-/* ─── PARAMS TABLE ─── */
-.params-label {
-  font-size: 10px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 1.5px; color: var(--muted); margin: 24px 0 12px;
-}
-table {
-  width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 16px;
-}
-th {
-  text-align: left; font-size: 10px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 1px;
-  color: var(--muted); padding: 10px 14px;
-  background: var(--surface2); border-bottom: 1px solid var(--border);
-}
-td {
-  padding: 11px 14px; border-bottom: 1px solid var(--border); vertical-align: top;
-}
-tr:last-child td { border-bottom: none; }
-tr:hover td { background: rgba(124,108,250,0.03); }
-
-.pname { font-family: var(--mono); font-size: 12px; color: var(--text); font-weight: 600; }
-.ptype { font-family: var(--mono); font-size: 11px; color: var(--accent2); }
-.preq { font-size: 10px; font-weight: 700; color: var(--red); background: rgba(248,113,113,0.1); padding: 2px 7px; border-radius: 4px; }
-.popt { font-size: 10px; color: var(--muted); }
-.pdesc { color: var(--muted); font-size: 13px; }
-td code {
-  font-family: var(--mono); font-size: 11px; background: var(--surface3);
-  padding: 2px 6px; border-radius: 4px; color: var(--accent2);
-}
-
-/* ─── CODE BLOCKS ─── */
-.code-block-wrap { position: relative; margin: 14px 0; }
-pre.code {
-  background: var(--surface2); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 16px 18px;
-  font-family: var(--mono); font-size: 12.5px; line-height: 1.7;
-  overflow-x: auto; color: #cdd6f4; white-space: pre;
-}
-.copy-btn {
-  position: absolute; top: 10px; right: 10px;
-  background: var(--surface3); border: 1px solid var(--border2);
-  color: var(--muted); font-size: 11px; font-weight: 600;
-  font-family: var(--sans); padding: 4px 10px;
-  border-radius: var(--radius-sm); cursor: pointer; transition: all 0.15s;
-}
-.copy-btn:hover { color: var(--text); background: var(--surface4); }
-.copy-btn.copied { color: var(--green); border-color: rgba(34,211,165,0.4); }
-
-/* Syntax */
-.kw  { color: #cba6f7; }
-.str { color: #a6e3a1; }
-.num { color: #fab387; }
-.cm  { color: #6c7086; font-style: italic; }
-.key { color: #89dceb; }
-.url { color: #89b4fa; }
-.flag{ color: #f38ba8; }
-.bool{ color: #fab387; }
-
-/* ─── TABS ─── */
-.code-tabs { display: flex; gap: 4px; margin-bottom: 4px; }
-.code-tab {
-  font-size: 11px; font-weight: 600; padding: 5px 12px;
-  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
-  cursor: pointer; color: var(--muted); background: transparent;
-  border: none; font-family: var(--sans); transition: all 0.15s;
-}
-.code-tab:hover { color: var(--text); background: var(--surface2); }
-.code-tab.active { color: var(--accent2); background: var(--surface2); }
+.auth-box { padding: 20px 24px; border-radius: 12px; background: var(--surface2); border: 1px solid var(--border); margin-bottom: 16px; }
+.auth-box h3 { font-size: 15px; font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.auth-row { display: flex; gap: 12px; align-items: center; margin-bottom: 8px; }
+.auth-row-label { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); min-width: 80px; }
+.auth-row-val { font-family: var(--mono); font-size: 12px; color: var(--accent2); word-break: break-all; }
 
 /* ─── CALLOUT ─── */
-.callout {
-  border-radius: var(--radius); padding: 14px 18px;
-  margin: 16px 0; font-size: 13px; line-height: 1.7;
-  display: flex; gap: 10px; border: 1px solid;
-}
-.callout-info { background: rgba(96,165,250,0.06); border-color: rgba(96,165,250,0.2); color: #93c5fd; }
-.callout-warn { background: rgba(251,191,36,0.06); border-color: rgba(251,191,36,0.2); color: #fcd34d; }
-.callout-tip  { background: rgba(34,211,165,0.06); border-color: rgba(34,211,165,0.2); color: #86efac; }
+.callout { display: flex; gap: 12px; align-items: flex-start; padding: 14px 18px; border-radius: 10px; font-size: 13px; margin: 20px 0; line-height: 1.6; }
+.callout svg { flex-shrink: 0; margin-top: 2px; }
+.callout-info { background: rgba(59,130,246,.06); border: 1px solid rgba(59,130,246,.15); color: #93c5fd; }
+.callout-warn { background: rgba(234,179,8,.06); border: 1px solid rgba(234,179,8,.15); color: #fde047; }
+.callout-tip { background: rgba(34,197,94,.06); border: 1px solid rgba(34,197,94,.15); color: #86efac; }
 
-/* ─── RESPONSES ─── */
-.responses { margin-top: 18px; display: flex; flex-direction: column; gap: 8px; }
-.resp { display: flex; align-items: center; gap: 10px; }
-.resp-code {
-  font-family: var(--mono); font-size: 11px; font-weight: 700;
-  padding: 3px 8px; border-radius: 4px;
-}
-.r2xx { background: rgba(34,211,165,0.12); color: var(--green); }
-.r4xx { background: rgba(248,113,113,0.12); color: var(--red); }
-.r5xx { background: rgba(251,191,36,0.12); color: var(--amber); }
-.resp-text { color: var(--muted); font-size: 13px; }
+/* ─── TABLES ─── */
+table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13px; }
+th { text-align: left; font-weight: 700; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+td { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.pdesc { color: var(--text-secondary); }
+.resp-code { font-family: var(--mono); font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 6px; }
+.r2xx { background: rgba(34,197,94,.1); color: #22c55e; }
+.r4xx { background: rgba(239,68,68,.1); color: #ef4444; }
+.r5xx { background: rgba(234,179,8,.1); color: #eab308; }
 
-/* ─── EVENTS ─── */
-.event-list { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
-.event-badge {
-  font-family: var(--mono); font-size: 11px;
-  background: var(--surface3); border: 1px solid var(--border2);
-  color: var(--accent2); padding: 4px 12px; border-radius: 99px;
-}
+/* ─── ENDPOINT CARD ─── */
+.ep-card { border: 1px solid var(--border); border-radius: 12px; margin-bottom: 16px; overflow: hidden; transition: all 0.2s; background: var(--surface); }
+.ep-card:hover { border-color: rgba(124,108,250,.25); }
+.ep-header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; cursor: pointer; user-select: none; }
+.ep-method { font-family: var(--mono); font-size: 11px; font-weight: 800; padding: 4px 10px; border-radius: 6px; letter-spacing: 0.5px; }
+.ep-path { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--text); }
+.ep-summary { font-size: 12px; color: var(--muted); margin-left: auto; }
+.ep-chevron { color: var(--muted); transition: transform 0.2s; margin-left: 8px; font-size: 14px; }
+.ep-card.open .ep-chevron { transform: rotate(90deg); }
+.ep-body { display: none; padding: 0 20px 20px; border-top: 1px solid var(--border); }
+.ep-card.open .ep-body { display: block; padding-top: 16px; }
+.ep-scope { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+
+/* ─── CODE BLOCK ─── */
+.code-block { position: relative; background: #0a0a12; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin: 12px 0; }
+.code-tabs { display: flex; border-bottom: 1px solid var(--border); padding: 0 12px; gap: 2px; background: rgba(0,0,0,.3); }
+.code-tab { padding: 8px 14px; font-size: 11px; font-weight: 600; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; }
+.code-tab.active { color: var(--accent2); border-bottom-color: var(--accent); }
+.code-content { display: none; padding: 16px 18px; overflow-x: auto; }
+.code-content.active { display: block; }
+.code-content pre { font-family: var(--mono); font-size: 12px; line-height: 1.8; color: #e2e2e8; white-space: pre; }
+.code-copy { position: absolute; top: 8px; right: 12px; background: var(--surface3); border: 1px solid var(--border2); padding: 4px 10px; border-radius: 6px; font-size: 10px; font-weight: 600; color: var(--muted); cursor: pointer; opacity: 0; transition: opacity 0.2s; }
+.code-block:hover .code-copy { opacity: 1; }
+.code-copy:hover { background: var(--accent); color: #fff; }
+
+/* Syntax colors */
+.code-content .cm { color: #6272a4; }
+.code-content .kw { color: #ff79c6; }
+.code-content .str { color: #86efac; }
+.code-content .num { color: #bd93f9; }
+
+/* ─── PARAM TABLE ─── */
+.param-table { width: 100%; font-size: 13px; margin: 12px 0; }
+.param-table th { font-size: 10px; }
+.param-name { font-family: var(--mono); font-size: 12px; color: var(--accent2); }
+.param-required { color: #ef4444; font-size: 10px; font-weight: 700; margin-left: 4px; }
+.param-optional { color: var(--muted); font-size: 10px; font-style: italic; margin-left: 4px; }
+.param-type { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+
+/* ─── SCOPE/BADGE ─── */
+.scope-badge { display: inline-flex; align-items: center; gap: 4px; font-family: var(--mono); font-size: 11px; background: rgba(124,108,250,.08); border: 1px solid rgba(124,108,250,.18); color: var(--accent2); padding: 3px 10px; border-radius: 6px; margin: 2px 4px 2px 0; }
+.ep-badge { font-family: var(--mono); font-size: 10px; background: rgba(124,108,250,.08); border: 1px solid rgba(124,108,250,.18); color: var(--accent2); padding: 3px 10px; border-radius: 99px; }
+.base-url { display: inline-flex; align-items: center; gap: 12px; padding: 12px 20px; border-radius: 10px; background: var(--surface2); border: 1px solid var(--border); margin: 16px 0; }
+.base-url-label { font-size: 10px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); }
+.base-url-val { font-family: var(--mono); font-size: 14px; color: var(--accent2); font-weight: 600; }
+
+/* ─── GUIDE BOX ─── */
+.guide-box { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin: 20px 0; }
+.guide-box h4 { font-size: 14px; font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+.guide-steps { list-style: none; counter-reset: guide-step; padding: 0; }
+.guide-steps li { counter-increment: guide-step; padding: 8px 0 8px 32px; font-size: 13px; color: var(--text-secondary); position: relative; border-left: 1px solid var(--border); margin-left: 10px; }
+.guide-steps li::before { content: counter(guide-step); position: absolute; left: -11px; top: 8px; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.guide-steps li:last-child { border-left-color: transparent; }
+
+/* ─── TRY IT (Interactive) ─── */
+.try-it { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin: 16px 0; }
+.try-it h4 { font-size: 13px; font-weight: 700; margin-bottom: 12px; color: var(--accent2); display: flex; align-items: center; gap: 6px; }
+.try-it-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+.try-it-row label { font-size: 11px; font-weight: 600; color: var(--muted); min-width: 80px; text-transform: uppercase; letter-spacing: 0.5px; }
+.try-it-row input { flex: 1; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; font-size: 12px; font-family: var(--mono); color: var(--text); outline: none; }
+.try-it-row input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,108,250,.1); }
+.try-btn { margin-top: 12px; padding: 8px 20px; border-radius: 8px; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; border: none; cursor: pointer; transition: all 0.2s; }
+.try-btn:hover { background: var(--accent2); transform: translateY(-1px); }
+.try-response { margin-top: 12px; background: #0a0a12; border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; font-family: var(--mono); font-size: 11px; line-height: 1.7; color: #86efac; display: none; max-height: 240px; overflow: auto; white-space: pre-wrap; word-break: break-all; }
+.try-response.visible { display: block; }
+.try-response.error { color: #ef4444; }
 
 /* ─── DIVIDER ─── */
-.doc-divider {
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--border), transparent);
-  margin: 48px 0;
-}
+.doc-divider { height: 1px; background: linear-gradient(90deg, transparent, var(--border), transparent); margin: 48px 0; }
 
 /* ─── SEARCH ─── */
 .ep-hidden { display: none !important; }
+
+/* ─── FOOTER ─── */
+.sv-footer { border-top: 1px solid var(--border); padding: 28px 40px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--muted); margin-top: auto; }
+.sv-footer a { color: var(--muted); text-decoration: none; transition: color .14s; }
+.sv-footer a:hover { color: var(--accent2); }
 
 /* ─── RESPONSIVE ─── */
 @media (max-width: 1024px) {
@@ -421,32 +191,31 @@ pre.code {
   .api-features { grid-template-columns: 1fr; }
 }
 @media (max-width: 768px) {
-  nav { padding: 14px 20px; }
-  .nav-links { display: none; }
+  nav.api-nav { padding: 14px 20px; }
+  .nav-search { display: none; }
   .api-hero h1 { font-size: 32px; }
-  .api-hero p { font-size: 16px; }
+  .api-hero .subtitle { font-size: 15px; }
   .content-area { padding: 28px 16px; }
-  .section-heading { font-size: 24px; }
+  .section-heading { font-size: 22px; }
   .ep-header { flex-wrap: wrap; }
-  .ep-summary { width: 100%; margin-top: 6px; }
+  .ep-summary { width: 100%; margin-top: 6px; margin-left: 0; }
+  .sv-footer { padding: 20px 16px; flex-direction: column; align-items: center; text-align: center; }
 }
 </style>
 </head>
 <body>
 
-<!-- NAV (same as landing page) -->
-<nav>
+<!-- NAV -->
+<nav class="api-nav">
   <a href="/" class="nav-logo">Stream<span>Vault</span></a>
   <div class="nav-search">
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-    <input type="text" id="api-search" placeholder="Buscar en la API..." autocomplete="off">
-    <div class="search-kbd" id="search-kbd-hint">
-      <span class="kbd-cmd" id="kbd-symbol">⌘</span>K
-    </div>
+    <input type="text" id="api-search" placeholder="Search endpoints..." autocomplete="off">
+    <div class="search-kbd"><span id="kbd-symbol">⌘</span>K</div>
   </div>
   <div class="nav-actions" id="api-nav-actions">
-    <a href="/login" class="btn btn-ghost" id="api-nav-login" style="display:none;">Iniciar sesión</a>
-    <a href="/login?tab=register" class="btn btn-primary" id="api-nav-register" style="display:none;">Empezar gratis →</a>
+    <a href="/login" class="btn btn-ghost" id="api-nav-login" style="display:none;">Log in</a>
+    <a href="/login?tab=register" class="btn btn-primary" id="api-nav-register" style="display:none;">Get Started →</a>
     <a href="/dashboard" class="btn btn-ghost" id="api-nav-dash" style="display:none;">Dashboard</a>
   </div>
 </nav>
@@ -455,45 +224,93 @@ pre.code {
 
 <!-- SIDEBAR -->
 <aside class="sidebar">
-  <div class="sb-section">Overview</div>
+  <div class="sb-section">Getting Started</div>
   <a class="sb-link active" href="#intro">Introduction</a>
   <a class="sb-link" href="#auth">Authentication</a>
+  <a class="sb-link" href="#scopes">API Key Scopes</a>
+  <a class="sb-link" href="#quickstart">Quick Start Guide</a>
   <a class="sb-link" href="#errors">Errors & Limits</a>
 
   <div class="sb-section">Videos</div>
-  <a class="sb-link" href="#upload-video"><span class="sb-method m-post">POST</span> Upload video</a>
-  <a class="sb-link" href="#list-videos"><span class="sb-method m-get">GET</span> List videos</a>
-  <a class="sb-link" href="#get-video"><span class="sb-method m-get">GET</span> Get video</a>
-  <a class="sb-link" href="#update-video"><span class="sb-method m-patch">PATCH</span> Update video</a>
-  <a class="sb-link" href="#delete-video"><span class="sb-method m-delete">DEL</span> Delete video</a>
-  <a class="sb-link" href="#bulk-videos"><span class="sb-method m-post">POST</span> Bulk operations</a>
+  <a class="sb-link" href="#upload-video"><span class="sb-method m-post">POST</span> Upload</a>
+  <a class="sb-link" href="#import-video"><span class="sb-method m-post">POST</span> Import URL</a>
+  <a class="sb-link" href="#list-videos"><span class="sb-method m-get">GET</span> List</a>
+  <a class="sb-link" href="#get-video"><span class="sb-method m-get">GET</span> Get details</a>
+  <a class="sb-link" href="#update-video"><span class="sb-method m-patch">PATCH</span> Update</a>
+  <a class="sb-link" href="#delete-video"><span class="sb-method m-delete">DEL</span> Delete</a>
+  <a class="sb-link" href="#bulk-videos"><span class="sb-method m-post">POST</span> Bulk ops</a>
 
   <div class="sb-section">Playback</div>
   <a class="sb-link" href="#video-token"><span class="sb-method m-get">GET</span> Playback token</a>
-  <a class="sb-link" href="#download-link"><span class="sb-method m-post">POST</span> Download link</a>
+  <a class="sb-link" href="#video-views"><span class="sb-method m-post">POST</span> Record view</a>
+  <a class="sb-link" href="#download-link"><span class="sb-method m-post">POST</span> Download</a>
   <a class="sb-link" href="#retry-transcode"><span class="sb-method m-post">POST</span> Retry transcode</a>
 
-  <div class="sb-section">Organization</div>
-  <a class="sb-link" href="#list-folders"><span class="sb-method m-get">GET</span> List folders</a>
-  <a class="sb-link" href="#create-folder"><span class="sb-method m-post">POST</span> Create folder</a>
-  <a class="sb-link" href="#list-playlists"><span class="sb-method m-get">GET</span> List playlists</a>
-  <a class="sb-link" href="#create-playlist"><span class="sb-method m-post">POST</span> Create playlist</a>
+  <div class="sb-section">Progress</div>
+  <a class="sb-link" href="#get-progress"><span class="sb-method m-get">GET</span> Get position</a>
+  <a class="sb-link" href="#save-progress"><span class="sb-method m-post">POST</span> Save position</a>
+  <a class="sb-link" href="#delete-progress"><span class="sb-method m-delete">DEL</span> Reset</a>
 
-  <div class="sb-section">AI & Subs</div>
+  <div class="sb-section">Folders</div>
+  <a class="sb-link" href="#list-folders"><span class="sb-method m-get">GET</span> List</a>
+  <a class="sb-link" href="#create-folder"><span class="sb-method m-post">POST</span> Create</a>
+  <a class="sb-link" href="#update-folder"><span class="sb-method m-patch">PATCH</span> Update</a>
+  <a class="sb-link" href="#delete-folder"><span class="sb-method m-delete">DEL</span> Delete</a>
+
+  <div class="sb-section">Playlists</div>
+  <a class="sb-link" href="#list-playlists"><span class="sb-method m-get">GET</span> List</a>
+  <a class="sb-link" href="#get-playlist"><span class="sb-method m-get">GET</span> Get</a>
+  <a class="sb-link" href="#create-playlist"><span class="sb-method m-post">POST</span> Create</a>
+  <a class="sb-link" href="#update-playlist"><span class="sb-method m-patch">PATCH</span> Update</a>
+  <a class="sb-link" href="#delete-playlist"><span class="sb-method m-delete">DEL</span> Delete</a>
+  <a class="sb-link" href="#playlist-videos"><span class="sb-method m-post">POST</span> Videos</a>
+
+  <div class="sb-section">Chapters</div>
+  <a class="sb-link" href="#list-chapters"><span class="sb-method m-get">GET</span> List</a>
+  <a class="sb-link" href="#create-chapter"><span class="sb-method m-post">POST</span> Create</a>
+  <a class="sb-link" href="#update-chapter"><span class="sb-method m-put">PUT</span> Update</a>
+  <a class="sb-link" href="#delete-chapter"><span class="sb-method m-delete">DEL</span> Delete</a>
+
+  <div class="sb-section">Tracks</div>
+  <a class="sb-link" href="#list-tracks"><span class="sb-method m-get">GET</span> List</a>
+  <a class="sb-link" href="#upload-track"><span class="sb-method m-post">POST</span> Upload</a>
+  <a class="sb-link" href="#update-track"><span class="sb-method m-patch">PATCH</span> Update</a>
+  <a class="sb-link" href="#delete-track"><span class="sb-method m-delete">DEL</span> Delete</a>
+
+  <div class="sb-section">Transcriptions</div>
   <a class="sb-link" href="#transcribe"><span class="sb-method m-post">POST</span> Transcribe</a>
-  <a class="sb-link" href="#get-vtt"><span class="sb-method m-get">GET</span> Download VTT</a>
-  <a class="sb-link" href="#analytics"><span class="sb-method m-get">GET</span> Analytics</a>
+  <a class="sb-link" href="#list-transcriptions"><span class="sb-method m-get">GET</span> List</a>
+  <a class="sb-link" href="#get-vtt"><span class="sb-method m-get">GET</span> VTT file</a>
+  <a class="sb-link" href="#search-transcriptions"><span class="sb-method m-get">GET</span> Search</a>
+  <a class="sb-link" href="#delete-transcription"><span class="sb-method m-delete">DEL</span> Delete</a>
+
+  <div class="sb-section">Analytics</div>
+  <a class="sb-link" href="#analytics"><span class="sb-method m-get">GET</span> Report</a>
+  <a class="sb-link" href="#analytics-live"><span class="sb-method m-get">GET</span> Live</a>
+  <a class="sb-link" href="#analytics-export"><span class="sb-method m-get">GET</span> Export CSV</a>
 
   <div class="sb-section">Webhooks</div>
-  <a class="sb-link" href="#list-webhooks"><span class="sb-method m-get">GET</span> List webhooks</a>
-  <a class="sb-link" href="#create-webhook"><span class="sb-method m-post">POST</span> Create webhook</a>
+  <a class="sb-link" href="#list-webhooks"><span class="sb-method m-get">GET</span> List</a>
+  <a class="sb-link" href="#create-webhook"><span class="sb-method m-post">POST</span> Create</a>
+  <a class="sb-link" href="#update-webhook"><span class="sb-method m-patch">PATCH</span> Update</a>
+  <a class="sb-link" href="#delete-webhook"><span class="sb-method m-delete">DEL</span> Delete</a>
+  <a class="sb-link" href="#webhook-deliveries"><span class="sb-method m-get">GET</span> Deliveries</a>
 
   <div class="sb-section">Workspaces</div>
-  <a class="sb-link" href="#list-workspaces"><span class="sb-method m-get">GET</span> List workspaces</a>
-  <a class="sb-link" href="#create-apikey"><span class="sb-method m-post">POST</span> Create API key</a>
+  <a class="sb-link" href="#list-workspaces"><span class="sb-method m-get">GET</span> List</a>
+  <a class="sb-link" href="#create-workspace"><span class="sb-method m-post">POST</span> Create</a>
+  <a class="sb-link" href="#get-workspace"><span class="sb-method m-get">GET</span> Get</a>
+  <a class="sb-link" href="#update-workspace"><span class="sb-method m-patch">PATCH</span> Update</a>
+  <a class="sb-link" href="#delete-workspace"><span class="sb-method m-delete">DEL</span> Delete</a>
+  <a class="sb-link" href="#workspace-members"><span class="sb-method m-get">GET</span> Members</a>
+
+  <div class="sb-section">API Keys</div>
+  <a class="sb-link" href="#list-apikeys"><span class="sb-method m-get">GET</span> List</a>
+  <a class="sb-link" href="#create-apikey"><span class="sb-method m-post">POST</span> Create</a>
+  <a class="sb-link" href="#delete-apikey"><span class="sb-method m-delete">DEL</span> Revoke</a>
 
   <div class="sb-section">System</div>
-  <a class="sb-link" href="#health"><span class="sb-method m-get">GET</span> Health check</a>
+  <a class="sb-link" href="#health"><span class="sb-method m-get">GET</span> Health</a>
 </aside>
 
 <!-- MAIN -->
@@ -502,718 +319,897 @@ pre.code {
 <!-- HERO -->
 <section class="api-hero">
   <h1>StreamVault <span class="gradient-text">API</span></h1>
-  <p>Upload, transcode, stream and manage video programmatically. All access over HTTPS, JSON in/out. Build powerful video integrations in minutes.</p>
+  <p class="subtitle">Programmatic video hosting. Upload, transcode, stream, and manage video infrastructure through a RESTful API with full HLS delivery and AI-powered features.</p>
   <div class="api-hero-actions">
-    <a href="#upload-video" class="btn btn-primary">Get Started →</a>
-    <a href="/dashboard#apikeys" class="btn btn-ghost">Get API Key</a>
+    <a href="#quickstart" class="btn btn-primary">Quick Start Guide →</a>
+    <a href="/dashboard#apikeys" class="btn btn-ghost">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+      Get API Key
+    </a>
+  </div>
+  <div class="api-hero-version">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+    v1.0 &middot; REST &middot; JSON &middot; HTTPS
   </div>
 </section>
 
 <div class="content-area">
 
-<!-- INTRO -->
+<!-- ═══════════════════ INTRO ═══════════════════ -->
 <section class="doc-section" id="intro">
   <div class="section-tag">Overview</div>
   <h2 class="section-heading">Introduction</h2>
-  <p class="section-desc">
-    The StreamVault REST API lets you upload, manage and stream video at scale. All data is sent and received as JSON. Timestamps are UNIX epoch integers (seconds).
-  </p>
+  <p class="section-desc">The StreamVault API enables you to upload, manage, and stream video at scale. All communication is over HTTPS with JSON request/response bodies. Timestamps are UNIX epoch integers (seconds).</p>
+
   <div class="base-url">
     <span class="base-url-label">Base URL</span>
-    <span class="base-url-val">https://api.streamvault.link</span>
+    <span class="base-url-val" id="base-url-display">https://api.streamvault.link</span>
   </div>
+
   <div class="api-features">
     <div class="api-feature">
-      <div class="api-feature-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
-      <div class="api-feature-title">HLS Streaming</div>
-      <div class="api-feature-desc">Auto-transcode to 360p–4K adaptive bitrate with AES-128 encryption.</div>
+      <div class="api-feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
+      <div class="api-feature-title">Adaptive HLS</div>
+      <div class="api-feature-desc">Auto-transcode to 360p-4K ABR with AES-128 encryption and signed token delivery.</div>
     </div>
     <div class="api-feature">
-      <div class="api-feature-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M12 2v9"/><line x1="8" y1="6" x2="16" y2="6"/><circle cx="8" cy="16" r="1" fill="currentColor"/><circle cx="16" cy="16" r="1" fill="currentColor"/></svg></div>
-      <div class="api-feature-title">AI Subtitles</div>
-      <div class="api-feature-desc">Whisper-powered transcription in 11 languages. VTT delivered over API.</div>
+      <div class="api-feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 003-3h6a3 3 0 003 3v18H0V5a3 3 0 003-3h6a3 3 0 003 3z"/><path d="M8 10h8M8 14h4"/></svg></div>
+      <div class="api-feature-title">AI Transcription</div>
+      <div class="api-feature-desc">Whisper-powered speech-to-text in 11 languages. VTT subtitles via API.</div>
     </div>
     <div class="api-feature">
-      <div class="api-feature-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg></div>
+      <div class="api-feature-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg></div>
       <div class="api-feature-title">Webhooks</div>
-      <div class="api-feature-desc">HMAC-signed events for video.ready, transcription.complete, and more.</div>
+      <div class="api-feature-desc">HMAC-SHA256 signed event delivery for video.ready, transcription.complete and more.</div>
     </div>
   </div>
+
   <div class="callout callout-info">
-    <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></span>
-    <span>All responses include <code>Content-Type: application/json</code>. Errors always return <code>{ "error": "..." }</code>.</span>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+    <span>All responses return <code>Content-Type: application/json</code>. Errors always include <code>{ "error": "human-readable message" }</code>.</span>
   </div>
 </section>
 
-<!-- AUTH -->
+<!-- ═══════════════════ AUTH ═══════════════════ -->
 <section class="doc-section" id="auth">
   <div class="section-tag">Security</div>
   <h2 class="section-heading">Authentication</h2>
-  <p class="section-desc">
-    StreamVault supports two auth methods. All endpoints require <code>Authorization</code> header + <code>X-Workspace-Id</code>.
-  </p>
+  <p class="section-desc">All authenticated endpoints require two headers: <code>Authorization</code> with your token and <code>X-Workspace-Id</code> with the target workspace.</p>
+
   <div class="auth-box">
-    <h3><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg> Bearer Token (JWT)</h3>
-    <div class="auth-row">
-      <span class="auth-row-label">Header</span>
-      <span class="auth-row-val">Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6...</span>
-    </div>
-    <div class="auth-row">
-      <span class="auth-row-label">Workspace</span>
-      <span class="auth-row-val">X-Workspace-Id: ws_a1b2c3d4e5</span>
-    </div>
-    <p style="font-size:13px;color:var(--muted);margin-top:12px;">Obtain via <code>POST /auth/login</code>. Expires in 15 min — use <code>POST /auth/refresh</code>.</p>
+    <h3>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+      Bearer Token (JWT)
+    </h3>
+    <div class="auth-row"><span class="auth-row-label">Header</span><span class="auth-row-val">Authorization: Bearer eyJhbGciOiJIUzI1NiJ9...</span></div>
+    <div class="auth-row"><span class="auth-row-label">Workspace</span><span class="auth-row-val">X-Workspace-Id: ws_a1b2c3d4e5</span></div>
+    <p style="font-size:12px;color:var(--muted);margin-top:12px;">Obtain via <code>POST /auth/login</code>. Access tokens expire in 15 min. Use <code>POST /auth/refresh</code> with your refresh token to obtain a new pair.</p>
   </div>
+
   <div class="auth-box">
-    <h3><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><circle cx="12" cy="16" r="1"/><rect x="3" y="10" width="18" height="12" rx="2"/><path d="M7 10V7a5 5 0 0110 0v3"/></svg> API Key <span class="ep-badge">Pro+</span></h3>
-    <div class="auth-row">
-      <span class="auth-row-label">Header</span>
-      <span class="auth-row-val">Authorization: Bearer sv_live_a1b2c3d4e5f6...</span>
-    </div>
-    <div class="auth-row">
-      <span class="auth-row-label">Workspace</span>
-      <span class="auth-row-val">X-Workspace-Id: ws_a1b2c3d4e5</span>
-    </div>
-    <p style="font-size:13px;color:var(--muted);margin-top:12px;">Keys start with <code>sv_live_</code>. Shown <strong>once</strong> at creation — save securely.</p>
+    <h3>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="16" r="1"/><rect x="3" y="10" width="18" height="12" rx="2"/><path d="M7 10V7a5 5 0 0110 0v3"/></svg>
+      API Key <span class="ep-badge">Pro+</span>
+    </h3>
+    <div class="auth-row"><span class="auth-row-label">Header</span><span class="auth-row-val">Authorization: Bearer sv_live_a1b2c3d4e5f6g7h8...</span></div>
+    <div class="auth-row"><span class="auth-row-label">Workspace</span><span class="auth-row-val">X-Workspace-Id: ws_a1b2c3d4e5</span></div>
+    <p style="font-size:12px;color:var(--muted);margin-top:12px;">API keys begin with <code>sv_live_</code>. The full key is shown <strong>once</strong> at creation. Keys are scoped to specific permissions (see below).</p>
+  </div>
+
+  <div class="callout callout-tip">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+    <span>API keys are workspace-bound. The <code>X-Workspace-Id</code> header must match the workspace where the key was generated.</span>
   </div>
 </section>
 
-<!-- ERRORS -->
+<!-- ═══════════════════ SCOPES ═══════════════════ -->
+<section class="doc-section" id="scopes">
+  <div class="section-tag">Security</div>
+  <h2 class="section-heading">API Key Scopes</h2>
+  <p class="section-desc">API keys use granular scopes to restrict access. JWT tokens from login bypass scopes and have full workspace access.</p>
+
+  <table>
+    <thead><tr><th>Scope</th><th>Access Level</th><th>Endpoints</th></tr></thead>
+    <tbody>
+      <tr><td><span class="scope-badge">videos:read</span></td><td class="pdesc">Read video metadata, list, playback tokens, download</td><td class="pdesc"><code>GET /api/videos*</code>, <code>GET .../token</code></td></tr>
+      <tr><td><span class="scope-badge">videos:write</span></td><td class="pdesc">Update metadata, tags, visibility, retry transcode</td><td class="pdesc"><code>PATCH /api/videos/:id</code>, <code>POST .../retry</code></td></tr>
+      <tr><td><span class="scope-badge">videos:delete</span></td><td class="pdesc">Delete videos individually or in bulk</td><td class="pdesc"><code>DELETE /api/videos/:id</code>, <code>POST .../bulk</code></td></tr>
+      <tr><td><span class="scope-badge">uploads:write</span></td><td class="pdesc">Upload new video files, import from URL</td><td class="pdesc"><code>POST /api/upload</code>, <code>POST /api/import</code></td></tr>
+      <tr><td><span class="scope-badge">analytics:read</span></td><td class="pdesc">Read analytics reports, live viewers, CSV export</td><td class="pdesc"><code>GET .../analytics</code>, <code>.../live</code>, <code>.../export.csv</code></td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout callout-warn">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    <span>Requests outside the key's scope return <code>403</code> with <code>{ "error": "Insufficient scope" }</code>.</span>
+  </div>
+</section>
+
+<!-- ═══════════════════ QUICKSTART ═══════════════════ -->
+<section class="doc-section" id="quickstart">
+  <div class="section-tag">Getting Started</div>
+  <h2 class="section-heading">Quick Start Guide</h2>
+  <p class="section-desc">Get from zero to your first API call in under 2 minutes.</p>
+
+  <div class="guide-box">
+    <h4>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+      Generate your API key
+    </h4>
+    <ol class="guide-steps">
+      <li>Log in to your StreamVault account and go to <strong>Dashboard → Settings → API Keys</strong></li>
+      <li>Click <strong>"Create API Key"</strong>, give it a name and select the scopes you need</li>
+      <li>Copy the key immediately — it starts with <code>sv_live_</code> and is shown only once</li>
+      <li>Store it securely in environment variables (never commit to git)</li>
+      <li>Use it in the <code>Authorization: Bearer sv_live_...</code> header with every request</li>
+    </ol>
+  </div>
+
+  <div class="guide-box">
+    <h4>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      First API call — List your videos
+    </h4>
+    <div class="code-block">
+      <div class="code-tabs">
+        <div class="code-tab active" onclick="switchTab(this,'curl')">cURL</div>
+        <div class="code-tab" onclick="switchTab(this,'js')">JavaScript</div>
+        <div class="code-tab" onclick="switchTab(this,'python')">Python</div>
+      </div>
+      <button class="code-copy" onclick="copyCode(this)">Copy</button>
+      <div class="code-content active" data-lang="curl"><pre>curl -X GET BASE_URL/api/videos \
+  -H "Authorization: Bearer sv_live_YOUR_API_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID"</pre></div>
+      <div class="code-content" data-lang="js"><pre>const res = await fetch('BASE_URL/api/videos', {
+  headers: {
+    'Authorization': 'Bearer sv_live_YOUR_API_KEY',
+    'X-Workspace-Id': 'YOUR_WORKSPACE_ID'
+  }
+});
+const { videos, nextCursor } = await res.json();</pre></div>
+      <div class="code-content" data-lang="python"><pre>import requests
+
+headers = {
+    'Authorization': 'Bearer sv_live_YOUR_API_KEY',
+    'X-Workspace-Id': 'YOUR_WORKSPACE_ID'
+}
+r = requests.get('BASE_URL/api/videos', headers=headers)
+data = r.json()
+print(f"Found {len(data['videos'])} videos")</pre></div>
+    </div>
+  </div>
+
+  <div class="guide-box">
+    <h4>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+      Import to Postman
+    </h4>
+    <p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px;">We provide an OpenAPI 3.0 spec file you can import directly into Postman, Insomnia, or any API client.</p>
+    <ol class="guide-steps">
+      <li>Download the spec: <a href="/api-spec.yaml" style="color:var(--accent2);" download>api-spec.yaml</a></li>
+      <li>In Postman: <strong>Import → File → Select api-spec.yaml</strong></li>
+      <li>Set the <code>baseUrl</code> variable to <code>https://api.streamvault.link</code></li>
+      <li>Add your API key to the collection's Authorization tab as Bearer Token</li>
+    </ol>
+  </div>
+
+  <!-- TRY IT LIVE -->
+  <div class="try-it" id="try-health">
+    <h4>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      Try it — Health Check (no auth required)
+    </h4>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:12px;">Click to send a live request to the API.</p>
+    <button class="try-btn" onclick="tryHealth()">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      Send GET /api/health
+    </button>
+    <div class="try-response" id="try-health-response"></div>
+  </div>
+</section>
+
+<!-- ═══════════════════ ERRORS ═══════════════════ -->
 <section class="doc-section" id="errors">
   <div class="section-tag">Reference</div>
   <h2 class="section-heading">Errors & Rate Limits</h2>
-  <p class="section-desc">Conventional HTTP status codes. Errors always carry a human-readable <code>error</code> field.</p>
+  <p class="section-desc">Standard HTTP status codes. All errors include a human-readable <code>error</code> field.</p>
+
   <table>
     <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
     <tbody>
       <tr><td><span class="resp-code r2xx">200</span></td><td class="pdesc">Success</td></tr>
       <tr><td><span class="resp-code r2xx">201</span></td><td class="pdesc">Resource created</td></tr>
       <tr><td><span class="resp-code r2xx">202</span></td><td class="pdesc">Accepted — async job queued</td></tr>
-      <tr><td><span class="resp-code r4xx">400</span></td><td class="pdesc">Bad request — missing/invalid parameters</td></tr>
-      <tr><td><span class="resp-code r4xx">401</span></td><td class="pdesc">Unauthenticated — invalid/expired token</td></tr>
-      <tr><td><span class="resp-code r4xx">403</span></td><td class="pdesc">Forbidden — insufficient plan or role</td></tr>
+      <tr><td><span class="resp-code r2xx">204</span></td><td class="pdesc">Deleted — no content</td></tr>
+      <tr><td><span class="resp-code r4xx">400</span></td><td class="pdesc">Bad request — validation failed</td></tr>
+      <tr><td><span class="resp-code r4xx">401</span></td><td class="pdesc">Unauthenticated — invalid or expired token</td></tr>
+      <tr><td><span class="resp-code r4xx">403</span></td><td class="pdesc">Forbidden — insufficient plan, role, or scope</td></tr>
       <tr><td><span class="resp-code r4xx">404</span></td><td class="pdesc">Resource not found</td></tr>
-      <tr><td><span class="resp-code r4xx">429</span></td><td class="pdesc">Rate limit exceeded</td></tr>
-      <tr><td><span class="resp-code r5xx">503</span></td><td class="pdesc">Service unavailable</td></tr>
+      <tr><td><span class="resp-code r4xx">409</span></td><td class="pdesc">Conflict — duplicate resource</td></tr>
+      <tr><td><span class="resp-code r4xx">429</span></td><td class="pdesc">Rate limited — check <code>Retry-After</code> header</td></tr>
+      <tr><td><span class="resp-code r5xx">500</span></td><td class="pdesc">Internal server error</td></tr>
+      <tr><td><span class="resp-code r5xx">503</span></td><td class="pdesc">Service unavailable — maintenance</td></tr>
     </tbody>
   </table>
+
   <div class="callout callout-warn">
-    <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
-    <span>Upload endpoints: <strong>10 req/min</strong> per IP. Webhooks retry with exponential backoff — 3 attempts, up to 1 hour.</span>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+    <span><strong>Rate limits:</strong> 100 req/min (general), 10 req/min (upload), 5 req/min (auth). The <code>X-RateLimit-Remaining</code> and <code>Retry-After</code> headers are included in responses.</span>
+  </div>
+
+  <div class="code-block">
+    <div class="code-content active"><pre><span class="cm">// Example error response</span>
+{
+  <span class="str">"error"</span>: <span class="str">"Video not found"</span>,
+  <span class="str">"status"</span>: <span class="num">404</span>
+}</pre></div>
   </div>
 </section>
 
 <div class="doc-divider"></div>
 
-<!-- ═══════════════════ VIDEOS ═══════════════════ -->
-<div class="section-tag" style="margin-bottom:8px">Videos</div>
-<h2 class="section-heading" style="margin-bottom:24px"> <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg> Video Management</h2>
+<!-- ═══════════════════ UPLOAD ═══════════════════ -->
+<section class="doc-section" id="upload-video">
+  <div class="section-tag">Videos</div>
+  <h2 class="section-heading">Video Management</h2>
 
-<!-- UPLOAD -->
-<div class="endpoint" id="upload-video">
-  <div class="ep-header" onclick="toggleEp(this)">
-    <span class="ep-method m-post">POST</span>
-    <span class="ep-path">/api/upload</span>
-    <span class="ep-summary">Upload a video — triggers HLS transcoding</span>
-    <span class="ep-chevron open">▼</span>
-  </div>
-  <div class="ep-body open">
-    <div class="callout callout-info">
-      <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></span>
-      <span>Send as <code>multipart/form-data</code>. Max: <strong>10 GB</strong>. Async — poll or use webhooks.</span>
+  <div class="ep-card">
+    <div class="ep-header" onclick="toggleEp(this)">
+      <span class="ep-method m-post">POST</span>
+      <span class="ep-path">/api/upload</span>
+      <span class="ep-summary">Upload a video file</span>
+      <span class="ep-chevron">›</span>
     </div>
-    <div class="params-label">Request body (multipart/form-data)</div>
-    <table>
-      <thead><tr><th>Field</th><th>Type</th><th></th><th>Description</th></tr></thead>
-      <tbody>
-        <tr><td class="pname">video</td><td class="ptype">file</td><td><span class="preq">required</span></td><td class="pdesc">MP4, MKV, MOV, AVI, WebM</td></tr>
-        <tr><td class="pname">title</td><td class="ptype">string</td><td><span class="preq">required</span></td><td class="pdesc">Display title</td></tr>
-        <tr><td class="pname">description</td><td class="ptype">string</td><td><span class="popt">optional</span></td><td class="pdesc">Long description</td></tr>
-        <tr><td class="pname">folder_id</td><td class="ptype">string</td><td><span class="popt">optional</span></td><td class="pdesc">Target folder</td></tr>
-        <tr><td class="pname">visibility</td><td class="ptype">string</td><td><span class="popt">optional</span></td><td class="pdesc"><code>public</code> · <code>private</code> · <code>password</code></td></tr>
-      </tbody>
-    </table>
+    <div class="ep-body">
+      <p class="ep-scope">Scope: <span class="scope-badge">uploads:write</span></p>
+      <table class="param-table">
+        <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><span class="param-name">file</span><span class="param-required">required</span></td><td><span class="param-type">multipart/form-data</span></td><td class="pdesc">Video file (mp4, mov, avi, mkv, webm). Max size per plan.</td></tr>
+          <tr><td><span class="param-name">title</span><span class="param-optional">optional</span></td><td><span class="param-type">string</span></td><td class="pdesc">Video title. Defaults to filename.</td></tr>
+          <tr><td><span class="param-name">description</span><span class="param-optional">optional</span></td><td><span class="param-type">string</span></td><td class="pdesc">Video description.</td></tr>
+          <tr><td><span class="param-name">folder_id</span><span class="param-optional">optional</span></td><td><span class="param-type">string</span></td><td class="pdesc">Target folder ID.</td></tr>
+          <tr><td><span class="param-name">visibility</span><span class="param-optional">optional</span></td><td><span class="param-type">string</span></td><td class="pdesc"><code>public</code> | <code>private</code> | <code>unlisted</code>. Default: <code>public</code></td></tr>
+        </tbody>
+      </table>
+      <div class="code-block">
+        <div class="code-tabs">
+          <div class="code-tab active" onclick="switchTab(this,'curl')">cURL</div>
+          <div class="code-tab" onclick="switchTab(this,'js')">JavaScript</div>
+          <div class="code-tab" onclick="switchTab(this,'python')">Python</div>
+        </div>
+        <button class="code-copy" onclick="copyCode(this)">Copy</button>
+        <div class="code-content active" data-lang="curl"><pre>curl -X POST BASE_URL/api/upload \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID" \
+  -F "file=@video.mp4" \
+  -F "title=Product Demo" \
+  -F "visibility=public"</pre></div>
+        <div class="code-content" data-lang="js"><pre>const form = new FormData();
+form.append('file', fileInput.files[0]);
+form.append('title', 'Product Demo');
+form.append('visibility', 'public');
 
-    <div class="code-tabs">
-      <button class="code-tab active" onclick="switchTab(this,'upload','curl')">cURL</button>
-      <button class="code-tab" onclick="switchTab(this,'upload','python')">Python</button>
-      <button class="code-tab" onclick="switchTab(this,'upload','node')">Node.js</button>
-    </div>
-    <div id="upload-curl" class="code-block-wrap">
-      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
-      <pre class="code"><span class="url">curl</span> <span class="flag">-X POST</span> https://api.streamvault.link/api/upload \
-  <span class="flag">-H</span> <span class="str">"Authorization: Bearer sv_live_YOUR_KEY"</span> \
-  <span class="flag">-H</span> <span class="str">"X-Workspace-Id: ws_YOUR_WORKSPACE"</span> \
-  <span class="flag">-F</span> <span class="str">"video=@/path/to/movie.mp4"</span> \
-  <span class="flag">-F</span> <span class="str">"title=My Awesome Video"</span> \
-  <span class="flag">-F</span> <span class="str">"visibility=public"</span></pre>
-    </div>
-    <div id="upload-python" class="code-block-wrap" style="display:none">
-      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
-      <pre class="code"><span class="kw">import</span> requests
+const res = await fetch('BASE_URL/api/upload', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer sv_live_YOUR_KEY',
+    'X-Workspace-Id': 'YOUR_WORKSPACE_ID'
+  },
+  body: form
+});
 
-url = <span class="str">"https://api.streamvault.link/api/upload"</span>
-hdrs = {<span class="str">"Authorization"</span>: <span class="str">"Bearer sv_live_YOUR_KEY"</span>, <span class="str">"X-Workspace-Id"</span>: <span class="str">"ws_YOUR_WORKSPACE"</span>}
-<span class="kw">with</span> <span class="kw">open</span>(<span class="str">"/path/to/movie.mp4"</span>, <span class="str">"rb"</span>) <span class="kw">as</span> f:
-    r = requests.post(url, headers=hdrs, files={<span class="str">"video"</span>: f}, data={<span class="str">"title"</span>: <span class="str">"My Awesome Video"</span>})
-print(r.json())</pre>
-    </div>
-    <div id="upload-node" class="code-block-wrap" style="display:none">
-      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
-      <pre class="code"><span class="kw">const</span> form = <span class="kw">new</span> FormData();
-form.append(<span class="str">'video'</span>, fs.createReadStream(<span class="str">'/path/to/movie.mp4'</span>));
-form.append(<span class="str">'title'</span>, <span class="str">'My Awesome Video'</span>);
+const video = await res.json();
+console.log(video.id, video.m3u8Url);</pre></div>
+        <div class="code-content" data-lang="python"><pre>import requests
 
-<span class="kw">const</span> res = <span class="kw">await</span> fetch(<span class="str">'https://api.streamvault.link/api/upload'</span>, {
-  method: <span class="str">'POST'</span>,
-  headers: { <span class="str">'Authorization'</span>: <span class="str">'Bearer sv_live_YOUR_KEY'</span>, <span class="str">'X-Workspace-Id'</span>: <span class="str">'ws_YOUR_WORKSPACE'</span> },
-  body: form,
-});</pre>
-    </div>
+headers = {
+    'Authorization': 'Bearer sv_live_YOUR_KEY',
+    'X-Workspace-Id': 'YOUR_WORKSPACE_ID'
+}
+files = {'file': open('video.mp4', 'rb')}
+data = {'title': 'Product Demo', 'visibility': 'public'}
 
-    <div class="params-label">Response</div>
-    <div class="code-block-wrap">
-      <pre class="code">{
-  <span class="key">"id"</span>:           <span class="str">"vid_a1b2c3"</span>,
-  <span class="key">"title"</span>:        <span class="str">"My Awesome Video"</span>,
-  <span class="key">"status"</span>:       <span class="str">"queued"</span>,
-  <span class="key">"workspace_id"</span>: <span class="str">"ws_YOUR_WORKSPACE"</span>,
-  <span class="key">"created_at"</span>:   <span class="num">1714500000</span>
-}</pre>
-    </div>
-    <div class="responses">
-      <div class="resp"><span class="resp-code r2xx">200</span><span class="resp-text">Upload accepted. Status: queued → transcoding → ready</span></div>
-      <div class="resp"><span class="resp-code r4xx">400</span><span class="resp-text">Missing video/title or exceeds 10 GB</span></div>
-      <div class="resp"><span class="resp-code r4xx">403</span><span class="resp-text">Quota exceeded</span></div>
+r = requests.post('BASE_URL/api/upload',
+    headers=headers, files=files, data=data)
+video = r.json()
+print(video['m3u8Url'])</pre></div>
+      </div>
+      <p style="font-size:12px;color:var(--muted);margin-top:12px;"><strong>Response 201</strong></p>
+      <div class="code-block"><div class="code-content active"><pre>{
+  <span class="str">"id"</span>: <span class="str">"abc123-def456"</span>,
+  <span class="str">"shortCode"</span>: <span class="str">"xK9mW"</span>,
+  <span class="str">"shortUrl"</span>: <span class="str">"https://streamvault.link/w/xK9mW"</span>,
+  <span class="str">"watchUrl"</span>: <span class="str">"https://streamvault.link/watch/abc123-def456"</span>,
+  <span class="str">"m3u8Url"</span>: <span class="str">"https://cdn.streamvault.link/videos/abc123-def456/master.m3u8"</span>
+}</pre></div></div>
     </div>
   </div>
-</div>
+</section>
 
-<!-- LIST VIDEOS -->
-<div class="endpoint" id="list-videos">
-  <div class="ep-header" onclick="toggleEp(this)">
-    <span class="ep-method m-get">GET</span>
-    <span class="ep-path">/api/videos</span>
-    <span class="ep-summary">List videos (paginated)</span>
-    <span class="ep-chevron">▼</span>
-  </div>
-  <div class="ep-body">
-    <div class="params-label">Query parameters</div>
-    <table>
-      <thead><tr><th>Param</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
-      <tbody>
-        <tr><td class="pname">page</td><td class="ptype">integer</td><td><code>1</code></td><td class="pdesc">Page number</td></tr>
-        <tr><td class="pname">limit</td><td class="ptype">integer</td><td><code>20</code></td><td class="pdesc">Results per page (max 100)</td></tr>
-        <tr><td class="pname">search</td><td class="ptype">string</td><td>—</td><td class="pdesc">Full-text search</td></tr>
-        <tr><td class="pname">folder_id</td><td class="ptype">string</td><td>—</td><td class="pdesc">Filter by folder</td></tr>
-        <tr><td class="pname">status</td><td class="ptype">string</td><td>—</td><td class="pdesc"><code>ready</code> · <code>processing</code> · <code>error</code></td></tr>
-      </tbody>
-    </table>
-    <div class="code-block-wrap">
-      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
-      <pre class="code"><span class="url">curl</span> <span class="str">"https://api.streamvault.link/api/videos?page=1&amp;limit=20"</span> \
-  <span class="flag">-H</span> <span class="str">"Authorization: Bearer sv_live_YOUR_KEY"</span> \
-  <span class="flag">-H</span> <span class="str">"X-Workspace-Id: ws_YOUR_WORKSPACE"</span></pre>
+<!-- IMPORT -->
+<section class="doc-section" id="import-video">
+  <div class="ep-card">
+    <div class="ep-header" onclick="toggleEp(this)">
+      <span class="ep-method m-post">POST</span>
+      <span class="ep-path">/api/import</span>
+      <span class="ep-summary">Import video from URL</span>
+      <span class="ep-chevron">›</span>
+    </div>
+    <div class="ep-body">
+      <p class="ep-scope">Scope: <span class="scope-badge">uploads:write</span></p>
+      <table class="param-table">
+        <thead><tr><th>Body</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><span class="param-name">url</span><span class="param-required">required</span></td><td><span class="param-type">string</span></td><td class="pdesc">Direct URL to a video file</td></tr>
+          <tr><td><span class="param-name">title</span><span class="param-optional">optional</span></td><td><span class="param-type">string</span></td><td class="pdesc">Video title (auto-detected if omitted)</td></tr>
+        </tbody>
+      </table>
+      <div class="code-block"><div class="code-content active"><pre>curl -X POST BASE_URL/api/import \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com/video.mp4","title":"Imported"}'</pre></div></div>
     </div>
   </div>
-</div>
+</section>
+
+<!-- LIST -->
+<section class="doc-section" id="list-videos">
+  <div class="ep-card">
+    <div class="ep-header" onclick="toggleEp(this)">
+      <span class="ep-method m-get">GET</span>
+      <span class="ep-path">/api/videos</span>
+      <span class="ep-summary">List videos with cursor pagination</span>
+      <span class="ep-chevron">›</span>
+    </div>
+    <div class="ep-body">
+      <p class="ep-scope">Scope: <span class="scope-badge">videos:read</span></p>
+      <table class="param-table">
+        <thead><tr><th>Query</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><span class="param-name">cursor</span></td><td><span class="param-type">string</span></td><td class="pdesc">Pagination cursor from previous response</td></tr>
+          <tr><td><span class="param-name">limit</span></td><td><span class="param-type">int</span></td><td class="pdesc">1–100 (default 20)</td></tr>
+          <tr><td><span class="param-name">search</span></td><td><span class="param-type">string</span></td><td class="pdesc">Filter by title</td></tr>
+          <tr><td><span class="param-name">status</span></td><td><span class="param-type">string</span></td><td class="pdesc"><code>ready</code> | <code>processing</code> | <code>error</code></td></tr>
+          <tr><td><span class="param-name">folder_id</span></td><td><span class="param-type">string</span></td><td class="pdesc">Filter by folder</td></tr>
+          <tr><td><span class="param-name">tag</span></td><td><span class="param-type">string</span></td><td class="pdesc">Filter by tag</td></tr>
+          <tr><td><span class="param-name">sort</span></td><td><span class="param-type">string</span></td><td class="pdesc"><code>newest</code> | <code>oldest</code> | <code>title</code> | <code>views</code></td></tr>
+        </tbody>
+      </table>
+      <div class="code-block"><div class="code-content active"><pre>curl "BASE_URL/api/videos?limit=10&amp;status=ready&amp;sort=newest" \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID"</pre></div></div>
+      <p style="font-size:12px;color:var(--muted);margin-top:8px;"><strong>Response 200</strong></p>
+      <div class="code-block"><div class="code-content active"><pre>{
+  <span class="str">"videos"</span>: [{ <span class="str">"id"</span>: <span class="str">"..."</span>, <span class="str">"title"</span>: <span class="str">"..."</span>, ... }],
+  <span class="str">"nextCursor"</span>: <span class="str">"eyJpZCI6Li4u"</span>,
+  <span class="str">"hasMore"</span>: <span class="kw">true</span>
+}</pre></div></div>
+
+      <!-- TRY IT -->
+      <div class="try-it">
+        <h4><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> Try it live</h4>
+        <div class="try-it-row"><label>API Key</label><input type="text" id="try-list-key" placeholder="sv_live_..."></div>
+        <div class="try-it-row"><label>Workspace</label><input type="text" id="try-list-ws" placeholder="Your workspace ID"></div>
+        <button class="try-btn" onclick="tryListVideos()">Send Request</button>
+        <div class="try-response" id="try-list-response"></div>
+      </div>
+    </div>
+  </div>
+</section>
 
 <!-- GET VIDEO -->
-<div class="endpoint" id="get-video">
-  <div class="ep-header" onclick="toggleEp(this)">
-    <span class="ep-method m-get">GET</span>
-    <span class="ep-path">/api/videos/<span class="param">{id}</span></span>
-    <span class="ep-summary">Get a single video</span>
-    <span class="ep-chevron">▼</span>
-  </div>
-  <div class="ep-body">
-    <div class="code-block-wrap">
-      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
-      <pre class="code"><span class="url">curl</span> https://api.streamvault.link/api/videos/vid_a1b2c3 \
-  <span class="flag">-H</span> <span class="str">"Authorization: Bearer sv_live_YOUR_KEY"</span> \
-  <span class="flag">-H</span> <span class="str">"X-Workspace-Id: ws_YOUR_WORKSPACE"</span></pre>
+<section class="doc-section" id="get-video">
+  <div class="ep-card">
+    <div class="ep-header" onclick="toggleEp(this)">
+      <span class="ep-method m-get">GET</span>
+      <span class="ep-path">/api/videos/:id</span>
+      <span class="ep-summary">Get video details</span>
+      <span class="ep-chevron">›</span>
     </div>
-    <div class="responses">
-      <div class="resp"><span class="resp-code r2xx">200</span><span class="resp-text">Full video object with embedConfig and AI fields</span></div>
-      <div class="resp"><span class="resp-code r4xx">404</span><span class="resp-text">Video not found</span></div>
+    <div class="ep-body">
+      <p class="ep-scope">Scope: <span class="scope-badge">videos:read</span></p>
+      <div class="code-block"><div class="code-content active"><pre>curl BASE_URL/api/videos/VIDEO_ID \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID"</pre></div></div>
+      <p style="font-size:12px;color:var(--muted);margin-top:8px;"><strong>Response 200</strong></p>
+      <div class="code-block"><div class="code-content active"><pre>{
+  <span class="str">"id"</span>: <span class="str">"abc123"</span>,
+  <span class="str">"title"</span>: <span class="str">"Product Demo"</span>,
+  <span class="str">"status"</span>: <span class="str">"ready"</span>,
+  <span class="str">"duration"</span>: <span class="num">125.4</span>,
+  <span class="str">"size"</span>: <span class="num">52428800</span>,
+  <span class="str">"qualities"</span>: [<span class="str">"360p"</span>, <span class="str">"720p"</span>, <span class="str">"1080p"</span>],
+  <span class="str">"visibility"</span>: <span class="str">"public"</span>,
+  <span class="str">"views"</span>: <span class="num">1234</span>,
+  <span class="str">"thumbnail"</span>: <span class="str">"https://cdn.../thumb.jpg"</span>,
+  <span class="str">"m3u8Url"</span>: <span class="str">"https://cdn.../master.m3u8"</span>,
+  <span class="str">"tags"</span>: [<span class="str">"demo"</span>],
+  <span class="str">"created_at"</span>: <span class="num">1716000000</span>
+}</pre></div></div>
     </div>
   </div>
-</div>
+</section>
 
 <!-- UPDATE VIDEO -->
-<div class="endpoint" id="update-video">
-  <div class="ep-header" onclick="toggleEp(this)">
-    <span class="ep-method m-patch">PATCH</span>
-    <span class="ep-path">/api/videos/<span class="param">{id}</span></span>
-    <span class="ep-summary">Update metadata, visibility, or schedule publishing</span>
-    <span class="ep-chevron">▼</span>
-  </div>
-  <div class="ep-body">
-    <div class="params-label">Request body</div>
-    <table>
-      <thead><tr><th>Field</th><th>Type</th><th></th><th>Description</th></tr></thead>
-      <tbody>
-        <tr><td class="pname">title</td><td class="ptype">string</td><td><span class="popt">optional</span></td><td class="pdesc">New title</td></tr>
-        <tr><td class="pname">description</td><td class="ptype">string</td><td><span class="popt">optional</span></td><td class="pdesc">New description</td></tr>
-        <tr><td class="pname">visibility</td><td class="ptype">string</td><td><span class="popt">optional</span></td><td class="pdesc"><code>public</code> · <code>private</code> · <code>password</code></td></tr>
-        <tr><td class="pname">folder_id</td><td class="ptype">string|null</td><td><span class="popt">optional</span></td><td class="pdesc">Move to folder (null to remove)</td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<!-- DELETE VIDEO -->
-<div class="endpoint" id="delete-video">
-  <div class="ep-header" onclick="toggleEp(this)">
-    <span class="ep-method m-delete">DELETE</span>
-    <span class="ep-path">/api/videos/<span class="param">{id}</span></span>
-    <span class="ep-summary">Delete video and all files permanently</span>
-    <span class="ep-chevron">▼</span>
-  </div>
-  <div class="ep-body">
-    <div class="callout callout-warn"><span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span><span>Permanently deletes HLS segments, thumbnails, and transcriptions. Cannot be undone.</span></div>
-    <div class="responses">
-      <div class="resp"><span class="resp-code r2xx">200</span><span class="resp-text"><code>{"success":true}</code></span></div>
-      <div class="resp"><span class="resp-code r4xx">404</span><span class="resp-text">Video not found</span></div>
+<section class="doc-section" id="update-video">
+  <div class="ep-card">
+    <div class="ep-header" onclick="toggleEp(this)">
+      <span class="ep-method m-patch">PATCH</span>
+      <span class="ep-path">/api/videos/:id</span>
+      <span class="ep-summary">Update video metadata</span>
+      <span class="ep-chevron">›</span>
+    </div>
+    <div class="ep-body">
+      <p class="ep-scope">Scope: <span class="scope-badge">videos:write</span></p>
+      <table class="param-table">
+        <thead><tr><th>Body</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><span class="param-name">title</span></td><td><span class="param-type">string</span></td><td class="pdesc">New title</td></tr>
+          <tr><td><span class="param-name">description</span></td><td><span class="param-type">string</span></td><td class="pdesc">New description</td></tr>
+          <tr><td><span class="param-name">visibility</span></td><td><span class="param-type">string</span></td><td class="pdesc"><code>public</code> | <code>private</code> | <code>unlisted</code> | <code>password</code></td></tr>
+          <tr><td><span class="param-name">password</span></td><td><span class="param-type">string</span></td><td class="pdesc">Required when visibility = password</td></tr>
+          <tr><td><span class="param-name">folder_id</span></td><td><span class="param-type">string|null</span></td><td class="pdesc">Move to folder (null = root)</td></tr>
+          <tr><td><span class="param-name">tags</span></td><td><span class="param-type">string[]</span></td><td class="pdesc">Replace tags array</td></tr>
+        </tbody>
+      </table>
+      <div class="code-block"><div class="code-content active"><pre>curl -X PATCH BASE_URL/api/videos/VIDEO_ID \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Updated","tags":["api","v2"]}'</pre></div></div>
     </div>
   </div>
-</div>
+</section>
+
+<!-- DELETE VIDEO -->
+<section class="doc-section" id="delete-video">
+  <div class="ep-card">
+    <div class="ep-header" onclick="toggleEp(this)">
+      <span class="ep-method m-delete">DELETE</span>
+      <span class="ep-path">/api/videos/:id</span>
+      <span class="ep-summary">Delete video permanently</span>
+      <span class="ep-chevron">›</span>
+    </div>
+    <div class="ep-body">
+      <p class="ep-scope">Scope: <span class="scope-badge">videos:delete</span></p>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:8px;">Removes the video, all transcoded qualities, thumbnails, and S3 objects. Returns <code>204</code>.</p>
+      <div class="code-block"><div class="code-content active"><pre>curl -X DELETE BASE_URL/api/videos/VIDEO_ID \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID"</pre></div></div>
+    </div>
+  </div>
+</section>
 
 <!-- BULK -->
-<div class="endpoint" id="bulk-videos">
-  <div class="ep-header" onclick="toggleEp(this)">
-    <span class="ep-method m-post">POST</span>
-    <span class="ep-path">/api/videos/bulk</span>
-    <span class="ep-summary">Bulk delete, move, or change visibility (up to 200)</span>
-    <span class="ep-chevron">▼</span>
+<section class="doc-section" id="bulk-videos">
+  <div class="ep-card">
+    <div class="ep-header" onclick="toggleEp(this)">
+      <span class="ep-method m-post">POST</span>
+      <span class="ep-path">/api/videos/bulk</span>
+      <span class="ep-summary">Bulk operations (max 200)</span>
+      <span class="ep-chevron">›</span>
+    </div>
+    <div class="ep-body">
+      <p class="ep-scope">Scope: <span class="scope-badge">videos:delete</span> or <span class="scope-badge">videos:write</span></p>
+      <table class="param-table">
+        <thead><tr><th>Body</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><span class="param-name">action</span><span class="param-required">required</span></td><td><span class="param-type">string</span></td><td class="pdesc"><code>delete</code> | <code>move</code> | <code>visibility</code></td></tr>
+          <tr><td><span class="param-name">videoIds</span><span class="param-required">required</span></td><td><span class="param-type">string[]</span></td><td class="pdesc">Up to 200 video IDs</td></tr>
+          <tr><td><span class="param-name">folderId</span></td><td><span class="param-type">string|null</span></td><td class="pdesc">For <code>move</code> action</td></tr>
+          <tr><td><span class="param-name">visibility</span></td><td><span class="param-type">string</span></td><td class="pdesc">For <code>visibility</code> action</td></tr>
+        </tbody>
+      </table>
+      <div class="code-block"><div class="code-content active"><pre>curl -X POST BASE_URL/api/videos/bulk \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"delete","videoIds":["id1","id2","id3"]}'</pre></div></div>
+    </div>
   </div>
-  <div class="ep-body">
-    <div class="params-label">Request body</div>
-    <table>
-      <thead><tr><th>Field</th><th>Type</th><th></th><th>Description</th></tr></thead>
-      <tbody>
-        <tr><td class="pname">ids</td><td class="ptype">string[]</td><td><span class="preq">required</span></td><td class="pdesc">Video IDs (max 200)</td></tr>
-        <tr><td class="pname">action</td><td class="ptype">string</td><td><span class="preq">required</span></td><td class="pdesc"><code>delete</code> · <code>move</code> · <code>visibility</code></td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
+</section>
 
 <div class="doc-divider"></div>
 
 <!-- ═══════════════════ PLAYBACK ═══════════════════ -->
-<div class="section-tag" style="margin-bottom:8px">Playback</div>
-<h2 class="section-heading" style="margin-bottom:24px">Playback &amp; Delivery</h2>
+<section class="doc-section" id="video-token">
+  <div class="section-tag">Playback</div>
+  <h2 class="section-heading">Playback & Delivery</h2>
+  <div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-get">GET</span><span class="ep-path">/api/videos/:id/token</span><span class="ep-summary">Signed playback token for HLS</span><span class="ep-chevron">›</span></div><div class="ep-body"><p class="ep-scope">Scope: <span class="scope-badge">videos:read</span> — Required to access AES-128 encrypted segments.</p><div class="code-block"><div class="code-content active"><pre>curl BASE_URL/api/videos/VIDEO_ID/token \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID"</pre></div></div><p style="font-size:12px;color:var(--muted);margin-top:8px;"><strong>Response:</strong> <code>{ "token": "eyJ...", "expiresIn": 14400 }</code></p></div></div>
+</section>
 
-<div class="endpoint" id="video-token">
-  <div class="ep-header" onclick="toggleEp(this)">
-    <span class="ep-method m-get">GET</span>
-    <span class="ep-path">/api/videos/<span class="param">{id}</span>/token</span>
-    <span class="ep-summary">Get 15-min signed HLS playback token</span>
-    <span class="ep-chevron">▼</span>
-  </div>
-  <div class="ep-body">
-    <p class="pdesc" style="margin-bottom:14px">Append <code>?token=TOKEN</code> to HLS URLs. Auto-renews 2 min before expiry.</p>
-    <div class="code-block-wrap">
-      <pre class="code">{ <span class="key">"token"</span>: <span class="str">"sv_tok_ab12cd34..."</span>, <span class="key">"ttl"</span>: <span class="num">900</span>, <span class="key">"renewAfter"</span>: <span class="num">780</span> }</pre>
-    </div>
-  </div>
-</div>
+<section class="doc-section" id="video-views">
+  <div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-post">POST</span><span class="ep-path">/api/videos/:id/views</span><span class="ep-summary">Increment view count</span><span class="ep-chevron">›</span></div><div class="ep-body"><p style="font-size:12px;color:var(--muted);">No auth. Throttled: 1 per IP per video per 10s.</p><div class="code-block"><div class="code-content active"><pre>curl -X POST BASE_URL/api/videos/VIDEO_ID/views</pre></div></div></div></div>
+</section>
 
-<div class="endpoint" id="download-link">
-  <div class="ep-header" onclick="toggleEp(this)">
-    <span class="ep-method m-post">POST</span>
-    <span class="ep-path">/api/videos/<span class="param">{id}</span>/download-link</span>
-    <span class="ep-summary">Generate signed download URL (10 min) <span class="ep-badge">Pro+</span></span>
-    <span class="ep-chevron">▼</span>
-  </div>
-  <div class="ep-body">
-    <div class="code-block-wrap">
-      <pre class="code">{ <span class="key">"url"</span>: <span class="str">"https://cdn.streamvault.link/originals/vid_a1b2c3.mp4?..."</span>, <span class="key">"ttl"</span>: <span class="num">600</span> }</pre>
-    </div>
-  </div>
-</div>
+<section class="doc-section" id="download-link">
+  <div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-post">POST</span><span class="ep-path">/api/videos/:id/download</span><span class="ep-summary">Generate download URL</span><span class="ep-chevron">›</span></div><div class="ep-body"><p class="ep-scope">Scope: <span class="scope-badge">videos:read</span></p><table class="param-table"><thead><tr><th>Body</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><span class="param-name">quality</span></td><td><span class="param-type">string</span></td><td class="pdesc"><code>360p</code>|<code>720p</code>|<code>1080p</code>|<code>original</code></td></tr></tbody></table><div class="code-block"><div class="code-content active"><pre>curl -X POST BASE_URL/api/videos/VIDEO_ID/download \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"quality":"1080p"}'</pre></div></div></div></div>
+</section>
 
-<div class="endpoint" id="retry-transcode">
-  <div class="ep-header" onclick="toggleEp(this)">
-    <span class="ep-method m-post">POST</span>
-    <span class="ep-path">/api/videos/<span class="param">{id}</span>/retry</span>
-    <span class="ep-summary">Retry a failed transcoding job</span>
-    <span class="ep-chevron">▼</span>
-  </div>
-  <div class="ep-body">
-    <div class="responses">
-      <div class="resp"><span class="resp-code r2xx">200</span><span class="resp-text"><code>{"queued":true}</code></span></div>
-      <div class="resp"><span class="resp-code r4xx">409</span><span class="resp-text">Video not in error state</span></div>
-    </div>
-  </div>
-</div>
+<section class="doc-section" id="retry-transcode">
+  <div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-post">POST</span><span class="ep-path">/api/videos/:id/retry</span><span class="ep-summary">Retry failed transcode</span><span class="ep-chevron">›</span></div><div class="ep-body"><p class="ep-scope">Scope: <span class="scope-badge">videos:write</span></p><div class="code-block"><div class="code-content active"><pre>curl -X POST BASE_URL/api/videos/VIDEO_ID/retry \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID"</pre></div></div></div></div>
+</section>
 
 <div class="doc-divider"></div>
 
-<!-- ═══════════════════ ORGANIZATION ═══════════════════ -->
-<div class="section-tag" style="margin-bottom:8px">Organization</div>
-<h2 class="section-heading" style="margin-bottom:24px"> <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg> Folders &amp; Playlists</h2>
-
-<div class="endpoint" id="list-folders">
-  <div class="ep-header" onclick="toggleEp(this)">
-    <span class="ep-method m-get">GET</span>
-    <span class="ep-path">/api/folders</span>
-    <span class="ep-summary">List all folders</span>
-    <span class="ep-chevron">▼</span>
-  </div>
-  <div class="ep-body">
-    <div class="code-block-wrap">
-      <pre class="code">[{ <span class="key">"id"</span>: <span class="str">"fld_x1"</span>, <span class="key">"name"</span>: <span class="str">"Marketing"</span>, <span class="key">"video_count"</span>: <span class="num">14</span> }]</pre>
-    </div>
-  </div>
-</div>
-
-<div class="endpoint" id="create-folder">
-  <div class="ep-header" onclick="toggleEp(this)">
-    <span class="ep-method m-post">POST</span>
-    <span class="ep-path">/api/folders</span>
-    <span class="ep-summary">Create a folder</span>
-    <span class="ep-chevron">▼</span>
-  </div>
-  <div class="ep-body">
-    <table>
-      <thead><tr><th>Field</th><th>Type</th><th></th><th>Description</th></tr></thead>
-      <tbody>
-        <tr><td class="pname">name</td><td class="ptype">string</td><td><span class="preq">required</span></td><td class="pdesc">Folder name</td></tr>
-        <tr><td class="pname">parent_id</td><td class="ptype">string|null</td><td><span class="popt">optional</span></td><td class="pdesc">Parent for nesting</td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
-
-<div class="endpoint" id="list-playlists">
-  <div class="ep-header" onclick="toggleEp(this)">
-    <span class="ep-method m-get">GET</span>
-    <span class="ep-path">/api/playlists</span>
-    <span class="ep-summary">List playlists</span>
-    <span class="ep-chevron">▼</span>
-  </div>
-  <div class="ep-body">
-    <div class="code-block-wrap">
-      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
-      <pre class="code"><span class="url">curl</span> https://api.streamvault.link/api/playlists \
-  <span class="flag">-H</span> <span class="str">"Authorization: Bearer sv_live_YOUR_KEY"</span> \
-  <span class="flag">-H</span> <span class="str">"X-Workspace-Id: ws_YOUR_WORKSPACE"</span></pre>
-    </div>
-  </div>
-</div>
-
-<div class="endpoint" id="create-playlist">
-  <div class="ep-header" onclick="toggleEp(this)">
-    <span class="ep-method m-post">POST</span>
-    <span class="ep-path">/api/playlists</span>
-    <span class="ep-summary">Create a playlist</span>
-    <span class="ep-chevron">▼</span>
-  </div>
-  <div class="ep-body">
-    <table>
-      <thead><tr><th>Field</th><th>Type</th><th></th><th>Description</th></tr></thead>
-      <tbody>
-        <tr><td class="pname">title</td><td class="ptype">string</td><td><span class="preq">required</span></td><td class="pdesc">Playlist title</td></tr>
-        <tr><td class="pname">video_ids</td><td class="ptype">string[]</td><td><span class="popt">optional</span></td><td class="pdesc">Initial videos</td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
+<!-- ═══════════════════ PROGRESS ═══════════════════ -->
+<section class="doc-section" id="get-progress">
+  <div class="section-tag">Progress</div>
+  <h2 class="section-heading">Playback Progress</h2>
+  <p class="section-desc">Track playback position per user for "continue watching" experiences.</p>
+  <div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-get">GET</span><span class="ep-path">/api/videos/:id/progress</span><span class="ep-summary">Get playback position</span><span class="ep-chevron">›</span></div><div class="ep-body"><div class="code-block"><div class="code-content active"><pre>curl BASE_URL/api/videos/VIDEO_ID/progress \
+  -H "Authorization: Bearer sv_live_YOUR_KEY"</pre></div></div><p style="font-size:12px;color:var(--muted);margin-top:8px;"><strong>Response:</strong> <code>{ "position": 65.4 }</code></p></div></div>
+</section>
+<section class="doc-section" id="save-progress">
+  <div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-post">POST</span><span class="ep-path">/api/videos/:id/progress</span><span class="ep-summary">Save playback position</span><span class="ep-chevron">›</span></div><div class="ep-body"><table class="param-table"><thead><tr><th>Body</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><span class="param-name">position</span><span class="param-required">required</span></td><td><span class="param-type">number</span></td><td class="pdesc">Playback position in seconds</td></tr></tbody></table><div class="code-block"><div class="code-content active"><pre>curl -X POST BASE_URL/api/videos/VIDEO_ID/progress \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"position":65.4}'</pre></div></div></div></div>
+</section>
+<section class="doc-section" id="delete-progress">
+  <div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-delete">DELETE</span><span class="ep-path">/api/videos/:id/progress</span><span class="ep-summary">Reset progress</span><span class="ep-chevron">›</span></div><div class="ep-body"><div class="code-block"><div class="code-content active"><pre>curl -X DELETE BASE_URL/api/videos/VIDEO_ID/progress \
+  -H "Authorization: Bearer sv_live_YOUR_KEY"</pre></div></div></div></div>
+</section>
 
 <div class="doc-divider"></div>
 
-<!-- ═══════════════════ AI ═══════════════════ -->
-<div class="section-tag" style="margin-bottom:8px">AI & Subs</div>
-<h2 class="section-heading" style="margin-bottom:24px"> <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M12 2v9"/><line x1="8" y1="6" x2="16" y2="6"/><circle cx="8" cy="16" r="1" fill="currentColor"/><circle cx="16" cy="16" r="1" fill="currentColor"/></svg> AI &amp; Transcriptions</h2>
+<!-- ═══════════════════ FOLDERS ═══════════════════ -->
+<section class="doc-section" id="list-folders">
+  <div class="section-tag">Folders</div>
+  <h2 class="section-heading">Folders</h2>
+  <p class="section-desc">Hierarchical folder structure within workspaces. Videos inside deleted folders become unfoldered.</p>
+  <div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-get">GET</span><span class="ep-path">/api/folders</span><span class="ep-summary">List all folders</span><span class="ep-chevron">›</span></div><div class="ep-body"><div class="code-block"><div class="code-content active"><pre>curl BASE_URL/api/folders \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID"</pre></div></div></div></div>
+</section>
+<section class="doc-section" id="create-folder">
+  <div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-post">POST</span><span class="ep-path">/api/folders</span><span class="ep-summary">Create folder</span><span class="ep-chevron">›</span></div><div class="ep-body"><table class="param-table"><thead><tr><th>Body</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><span class="param-name">name</span><span class="param-required">required</span></td><td><span class="param-type">string</span></td><td class="pdesc">Folder name</td></tr><tr><td><span class="param-name">parent_id</span></td><td><span class="param-type">string|null</span></td><td class="pdesc">Parent folder (null = root)</td></tr></tbody></table><div class="code-block"><div class="code-content active"><pre>curl -X POST BASE_URL/api/folders \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Tutorials"}'</pre></div></div></div></div>
+</section>
+<section class="doc-section" id="update-folder">
+  <div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-patch">PATCH</span><span class="ep-path">/api/folders/:id</span><span class="ep-summary">Rename or move folder</span><span class="ep-chevron">›</span></div><div class="ep-body"><table class="param-table"><thead><tr><th>Body</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><span class="param-name">name</span></td><td><span class="param-type">string</span></td><td class="pdesc">New name</td></tr><tr><td><span class="param-name">parent_id</span></td><td><span class="param-type">string|null</span></td><td class="pdesc">New parent (circular refs blocked)</td></tr></tbody></table><div class="code-block"><div class="code-content active"><pre>curl -X PATCH BASE_URL/api/folders/FOLDER_ID \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Renamed"}'</pre></div></div></div></div>
+</section>
+<section class="doc-section" id="delete-folder">
+  <div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-delete">DELETE</span><span class="ep-path">/api/folders/:id</span><span class="ep-summary">Delete folder tree</span><span class="ep-chevron">›</span></div><div class="ep-body"><div class="code-block"><div class="code-content active"><pre>curl -X DELETE BASE_URL/api/folders/FOLDER_ID \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID"</pre></div></div></div></div>
+</section>
 
-<div class="endpoint" id="transcribe">
-  <div class="ep-header" onclick="toggleEp(this)">
-    <span class="ep-method m-post">POST</span>
-    <span class="ep-path">/api/videos/<span class="param">{id}</span>/transcribe</span>
-    <span class="ep-summary">Transcribe audio with Whisper <span class="ep-badge">Pro+</span></span>
-    <span class="ep-chevron">▼</span>
-  </div>
-  <div class="ep-body">
-    <p class="pdesc" style="margin-bottom:14px">Async. Listen for <code>transcription.complete</code> webhook. Supports: en, es, fr, de, it, pt, nl, pl, ru, ja, zh.</p>
-    <div class="responses">
-      <div class="resp"><span class="resp-code r2xx">202</span><span class="resp-text">Job queued</span></div>
-      <div class="resp"><span class="resp-code r4xx">403</span><span class="resp-text">Pro plan required</span></div>
-    </div>
-  </div>
-</div>
+<div class="doc-divider"></div>
 
-<div class="endpoint" id="get-vtt">
-  <div class="ep-header" onclick="toggleEp(this)">
-    <span class="ep-method m-get">GET</span>
-    <span class="ep-path">/api/videos/<span class="param">{id}</span>/transcription.vtt</span>
-    <span class="ep-summary">Download WebVTT subtitles</span>
-    <span class="ep-chevron">▼</span>
-  </div>
-  <div class="ep-body">
-    <p class="pdesc">Returns VTT with <code>Content-Type: text/vtt</code>. Available after transcription completes.</p>
-  </div>
-</div>
+<!-- ═══════════════════ PLAYLISTS ═══════════════════ -->
+<section class="doc-section" id="list-playlists">
+  <div class="section-tag">Playlists</div>
+  <h2 class="section-heading">Playlists</h2>
+  <p class="section-desc">Ordered collections of videos. Public playlists can be embedded.</p>
+  <div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-get">GET</span><span class="ep-path">/api/playlists</span><span class="ep-summary">List playlists</span><span class="ep-chevron">›</span></div><div class="ep-body"><div class="code-block"><div class="code-content active"><pre>curl BASE_URL/api/playlists \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID"</pre></div></div></div></div>
+</section>
+<section class="doc-section" id="get-playlist"><div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-get">GET</span><span class="ep-path">/api/playlists/:id</span><span class="ep-summary">Get playlist with videos</span><span class="ep-chevron">›</span></div><div class="ep-body"><div class="code-block"><div class="code-content active"><pre>curl BASE_URL/api/playlists/PLAYLIST_ID \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID"</pre></div></div></div></div></section>
+<section class="doc-section" id="create-playlist"><div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-post">POST</span><span class="ep-path">/api/playlists</span><span class="ep-summary">Create playlist</span><span class="ep-chevron">›</span></div><div class="ep-body"><table class="param-table"><thead><tr><th>Body</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><span class="param-name">title</span><span class="param-required">required</span></td><td><span class="param-type">string</span></td><td class="pdesc">Playlist title</td></tr><tr><td><span class="param-name">description</span></td><td><span class="param-type">string</span></td><td class="pdesc">Description</td></tr><tr><td><span class="param-name">visibility</span></td><td><span class="param-type">string</span></td><td class="pdesc"><code>public</code> | <code>private</code></td></tr></tbody></table><div class="code-block"><div class="code-content active"><pre>curl -X POST BASE_URL/api/playlists \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Course Videos","visibility":"public"}'</pre></div></div></div></div></section>
+<section class="doc-section" id="update-playlist"><div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-patch">PATCH</span><span class="ep-path">/api/playlists/:id</span><span class="ep-summary">Update playlist</span><span class="ep-chevron">›</span></div><div class="ep-body"><div class="code-block"><div class="code-content active"><pre>curl -X PATCH BASE_URL/api/playlists/PLAYLIST_ID \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Updated Title"}'</pre></div></div></div></div></section>
+<section class="doc-section" id="delete-playlist"><div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-delete">DELETE</span><span class="ep-path">/api/playlists/:id</span><span class="ep-summary">Delete playlist</span><span class="ep-chevron">›</span></div><div class="ep-body"><div class="code-block"><div class="code-content active"><pre>curl -X DELETE BASE_URL/api/playlists/PLAYLIST_ID \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID"</pre></div></div></div></div></section>
+<section class="doc-section" id="playlist-videos"><div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-post">POST</span><span class="ep-path">/api/playlists/:id/videos</span><span class="ep-summary">Add/remove/reorder videos</span><span class="ep-chevron">›</span></div><div class="ep-body"><table class="param-table"><thead><tr><th>Method</th><th>Path</th><th>Body</th></tr></thead><tbody><tr><td><span class="ep-method m-post" style="font-size:9px;">POST</span></td><td class="pdesc"><code>/api/playlists/:id/videos</code></td><td class="pdesc"><code>{ "videoId": "..." }</code></td></tr><tr><td><span class="ep-method m-delete" style="font-size:9px;">DEL</span></td><td class="pdesc"><code>/api/playlists/:id/videos/:videoId</code></td><td class="pdesc">—</td></tr><tr><td><span class="ep-method m-post" style="font-size:9px;">POST</span></td><td class="pdesc"><code>/api/playlists/:id/videos/reorder</code></td><td class="pdesc"><code>{ "videoIds": [...] }</code></td></tr></tbody></table><div class="code-block"><div class="code-content active"><pre>curl -X POST BASE_URL/api/playlists/PL_ID/videos \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"videoId":"VIDEO_ID"}'</pre></div></div></div></div></section>
 
-<div class="endpoint" id="analytics">
-  <div class="ep-header" onclick="toggleEp(this)">
-    <span class="ep-method m-get">GET</span>
-    <span class="ep-path">/api/videos/<span class="param">{id}</span>/analytics</span>
-    <span class="ep-summary">Video analytics (views, watch time, engagement)</span>
-    <span class="ep-chevron">▼</span>
-  </div>
-  <div class="ep-body">
-    <table>
-      <thead><tr><th>Param</th><th>Type</th><th>Description</th></tr></thead>
-      <tbody>
-        <tr><td class="pname">start_date</td><td class="ptype">string</td><td class="pdesc">YYYY-MM-DD</td></tr>
-        <tr><td class="pname">end_date</td><td class="ptype">string</td><td class="pdesc">YYYY-MM-DD</td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
+<div class="doc-divider"></div>
+
+<!-- ═══════════════════ CHAPTERS ═══════════════════ -->
+<section class="doc-section" id="list-chapters">
+  <div class="section-tag">Chapters</div>
+  <h2 class="section-heading">Chapters</h2>
+  <p class="section-desc">Navigable markers in the player timeline. Exportable as WebVTT.</p>
+  <div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-get">GET</span><span class="ep-path">/api/videos/:videoId/chapters</span><span class="ep-summary">List chapters</span><span class="ep-chevron">›</span></div><div class="ep-body"><div class="code-block"><div class="code-content active"><pre>curl BASE_URL/api/videos/VIDEO_ID/chapters \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID"</pre></div></div><p style="font-size:12px;color:var(--muted);margin-top:8px;">Also: <code>GET .../chapters/export.vtt</code> for WebVTT format.</p></div></div>
+</section>
+<section class="doc-section" id="create-chapter"><div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-post">POST</span><span class="ep-path">/api/videos/:videoId/chapters</span><span class="ep-summary">Create chapter</span><span class="ep-chevron">›</span></div><div class="ep-body"><table class="param-table"><thead><tr><th>Body</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><span class="param-name">title</span><span class="param-required">required</span></td><td><span class="param-type">string</span></td><td class="pdesc">Chapter title</td></tr><tr><td><span class="param-name">start_time</span><span class="param-required">required</span></td><td><span class="param-type">number</span></td><td class="pdesc">Start (seconds)</td></tr><tr><td><span class="param-name">end_time</span><span class="param-required">required</span></td><td><span class="param-type">number</span></td><td class="pdesc">End (seconds)</td></tr></tbody></table><div class="code-block"><div class="code-content active"><pre>curl -X POST BASE_URL/api/videos/VIDEO_ID/chapters \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Intro","start_time":0,"end_time":30}'</pre></div></div></div></div></section>
+<section class="doc-section" id="update-chapter"><div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-put">PUT</span><span class="ep-path">/api/videos/:videoId/chapters/:id</span><span class="ep-summary">Update chapter</span><span class="ep-chevron">›</span></div><div class="ep-body"><div class="code-block"><div class="code-content active"><pre>curl -X PUT BASE_URL/api/videos/VIDEO_ID/chapters/CH_ID \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Updated","end_time":45}'</pre></div></div></div></div></section>
+<section class="doc-section" id="delete-chapter"><div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-delete">DELETE</span><span class="ep-path">/api/videos/:videoId/chapters/:id</span><span class="ep-summary">Delete chapter</span><span class="ep-chevron">›</span></div><div class="ep-body"><div class="code-block"><div class="code-content active"><pre>curl -X DELETE BASE_URL/api/videos/VIDEO_ID/chapters/CH_ID \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID"</pre></div></div><p style="font-size:12px;color:var(--muted);margin-top:8px;">Reorder: <code>PATCH .../chapters/reorder</code> with <code>{ "ids": [...] }</code></p></div></div></section>
+
+<div class="doc-divider"></div>
+
+<!-- ═══════════════════ TRACKS ═══════════════════ -->
+<section class="doc-section" id="list-tracks">
+  <div class="section-tag">Tracks</div>
+  <h2 class="section-heading">Subtitle & Audio Tracks</h2>
+  <p class="section-desc">Upload VTT/SRT subtitles or alternate audio tracks. SRT files are auto-converted to VTT.</p>
+  <div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-get">GET</span><span class="ep-path">/api/videos/:videoId/tracks</span><span class="ep-summary">List tracks</span><span class="ep-chevron">›</span></div><div class="ep-body"><div class="code-block"><div class="code-content active"><pre>curl BASE_URL/api/videos/VIDEO_ID/tracks \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID"</pre></div></div></div></div>
+</section>
+<section class="doc-section" id="upload-track"><div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-post">POST</span><span class="ep-path">/api/videos/:videoId/tracks</span><span class="ep-summary">Upload track</span><span class="ep-chevron">›</span></div><div class="ep-body"><table class="param-table"><thead><tr><th>Form Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><span class="param-name">file</span><span class="param-required">required</span></td><td><span class="param-type">file</span></td><td class="pdesc">.vtt, .srt, .mp3, .aac</td></tr><tr><td><span class="param-name">kind</span><span class="param-required">required</span></td><td><span class="param-type">string</span></td><td class="pdesc"><code>subtitles</code>|<code>captions</code>|<code>audio</code></td></tr><tr><td><span class="param-name">language</span><span class="param-required">required</span></td><td><span class="param-type">string</span></td><td class="pdesc">ISO 639-1 (en, es, fr...)</td></tr><tr><td><span class="param-name">label</span></td><td><span class="param-type">string</span></td><td class="pdesc">Display label</td></tr><tr><td><span class="param-name">default</span></td><td><span class="param-type">boolean</span></td><td class="pdesc">Set as default</td></tr></tbody></table><div class="code-block"><div class="code-content active"><pre>curl -X POST BASE_URL/api/videos/VIDEO_ID/tracks \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID" \
+  -F "file=@subs-en.vtt" -F "kind=subtitles" \
+  -F "language=en" -F "label=English"</pre></div></div></div></div></section>
+<section class="doc-section" id="update-track"><div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-patch">PATCH</span><span class="ep-path">/api/videos/:videoId/tracks/:trackId</span><span class="ep-summary">Update track</span><span class="ep-chevron">›</span></div><div class="ep-body"><div class="code-block"><div class="code-content active"><pre>curl -X PATCH BASE_URL/api/videos/VIDEO_ID/tracks/TRACK_ID \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"label":"English (CC)","default":true}'</pre></div></div></div></div></section>
+<section class="doc-section" id="delete-track"><div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-delete">DELETE</span><span class="ep-path">/api/videos/:videoId/tracks/:trackId</span><span class="ep-summary">Delete track</span><span class="ep-chevron">›</span></div><div class="ep-body"><div class="code-block"><div class="code-content active"><pre>curl -X DELETE BASE_URL/api/videos/VIDEO_ID/tracks/TRACK_ID \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID"</pre></div></div></div></div></section>
+
+<div class="doc-divider"></div>
+
+<!-- ═══════════════════ TRANSCRIPTIONS ═══════════════════ -->
+<section class="doc-section" id="transcribe">
+  <div class="section-tag">Transcriptions</div>
+  <h2 class="section-heading">AI Transcriptions</h2>
+  <p class="section-desc">Whisper-powered speech-to-text. Async processing with webhook notification on completion.</p>
+  <div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-post">POST</span><span class="ep-path">/api/videos/:videoId/transcriptions</span><span class="ep-summary">Start transcription</span><span class="ep-chevron">›</span></div><div class="ep-body"><table class="param-table"><thead><tr><th>Body</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><span class="param-name">language</span><span class="param-required">required</span></td><td><span class="param-type">string</span></td><td class="pdesc">ISO 639-1: en, es, fr, de, pt, it, ja, ko, zh, ru, ar</td></tr></tbody></table><div class="code-block"><div class="code-content active"><pre>curl -X POST BASE_URL/api/videos/VIDEO_ID/transcriptions \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"language":"en"}'</pre></div></div><p style="font-size:12px;color:var(--muted);margin-top:8px;"><strong>Response 202:</strong> <code>{ "id": "tr_...", "status": "queued" }</code></p><div class="callout callout-info"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg><span>Async. Subscribe to <code>transcription.complete</code> webhook or poll the list endpoint.</span></div></div></div>
+</section>
+<section class="doc-section" id="list-transcriptions"><div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-get">GET</span><span class="ep-path">/api/videos/:videoId/transcriptions</span><span class="ep-summary">List transcriptions</span><span class="ep-chevron">›</span></div><div class="ep-body"><div class="code-block"><div class="code-content active"><pre>curl BASE_URL/api/videos/VIDEO_ID/transcriptions \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID"</pre></div></div></div></div></section>
+<section class="doc-section" id="get-vtt"><div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-get">GET</span><span class="ep-path">/api/videos/:videoId/transcriptions/:lang/subtitles.vtt</span><span class="ep-summary">Download VTT</span><span class="ep-chevron">›</span></div><div class="ep-body"><p style="font-size:12px;color:var(--muted);margin-bottom:8px;">Returns <code>text/vtt</code>. Optional query: <code>?offset=2.5</code> to shift timestamps.</p><div class="code-block"><div class="code-content active"><pre>curl BASE_URL/api/videos/VIDEO_ID/transcriptions/en/subtitles.vtt \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID" -o subs.vtt</pre></div></div></div></div></section>
+<section class="doc-section" id="search-transcriptions"><div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-get">GET</span><span class="ep-path">/api/videos/:videoId/transcriptions/search</span><span class="ep-summary">Search in subtitles</span><span class="ep-chevron">›</span></div><div class="ep-body"><table class="param-table"><thead><tr><th>Query</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><span class="param-name">q</span><span class="param-required">required</span></td><td><span class="param-type">string</span></td><td class="pdesc">Search text</td></tr><tr><td><span class="param-name">lang</span></td><td><span class="param-type">string</span></td><td class="pdesc">Filter language</td></tr></tbody></table><div class="code-block"><div class="code-content active"><pre>curl "BASE_URL/api/videos/VIDEO_ID/transcriptions/search?q=hello" \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID"</pre></div></div></div></div></section>
+<section class="doc-section" id="delete-transcription"><div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-delete">DELETE</span><span class="ep-path">/api/videos/:videoId/transcriptions/:id</span><span class="ep-summary">Delete transcription</span><span class="ep-chevron">›</span></div><div class="ep-body"><div class="code-block"><div class="code-content active"><pre>curl -X DELETE BASE_URL/api/videos/VIDEO_ID/transcriptions/TR_ID \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID"</pre></div></div></div></div></section>
+
+<div class="doc-divider"></div>
+
+<!-- ═══════════════════ ANALYTICS ═══════════════════ -->
+<section class="doc-section" id="analytics">
+  <div class="section-tag">Analytics</div>
+  <h2 class="section-heading">Analytics</h2>
+  <p class="section-desc">Per-video analytics: views, retention curves, devices, geography, and real-time viewers.</p>
+  <div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-get">GET</span><span class="ep-path">/api/videos/:videoId/analytics</span><span class="ep-summary">Full analytics report</span><span class="ep-chevron">›</span></div><div class="ep-body"><p class="ep-scope">Scope: <span class="scope-badge">analytics:read</span> &middot; Query: <code>?days=7|30|90</code></p><div class="code-block"><div class="code-content active"><pre>curl "BASE_URL/api/videos/VIDEO_ID/analytics?days=30" \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID"</pre></div></div><p style="font-size:12px;color:var(--muted);margin-top:8px;"><strong>Response</strong> includes: uniqueViewers, totalPlays, completionRate, avgWatchTime, retention[], dailyPlays[], devices{}, browsers{}, countries{}</p></div></div>
+</section>
+<section class="doc-section" id="analytics-live"><div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-get">GET</span><span class="ep-path">/api/videos/:videoId/analytics/live</span><span class="ep-summary">Real-time viewers (5min window)</span><span class="ep-chevron">›</span></div><div class="ep-body"><p class="ep-scope">Scope: <span class="scope-badge">analytics:read</span></p><div class="code-block"><div class="code-content active"><pre>curl BASE_URL/api/videos/VIDEO_ID/analytics/live \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID"</pre></div></div><p style="font-size:12px;color:var(--muted);margin-top:8px;"><strong>Response:</strong> <code>{ "liveViewers": 42 }</code></p></div></div></section>
+<section class="doc-section" id="analytics-export"><div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-get">GET</span><span class="ep-path">/api/videos/:videoId/analytics/export.csv</span><span class="ep-summary">Export CSV (rate limited)</span><span class="ep-chevron">›</span></div><div class="ep-body"><p class="ep-scope">Scope: <span class="scope-badge">analytics:read</span> &middot; 5 req/min &middot; Full analytics tier required</p><div class="code-block"><div class="code-content active"><pre>curl BASE_URL/api/videos/VIDEO_ID/analytics/export.csv \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID" -o report.csv</pre></div></div></div></div></section>
 
 <div class="doc-divider"></div>
 
 <!-- ═══════════════════ WEBHOOKS ═══════════════════ -->
-<div class="section-tag" style="margin-bottom:8px">Webhooks</div>
-<h2 class="section-heading" style="margin-bottom:24px"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg> Webhooks</h2>
-
-<div class="endpoint" id="list-webhooks">
-  <div class="ep-header" onclick="toggleEp(this)">
-    <span class="ep-method m-get">GET</span>
-    <span class="ep-path">/api/webhooks</span>
-    <span class="ep-summary">List configured webhooks</span>
-    <span class="ep-chevron">▼</span>
-  </div>
-  <div class="ep-body">
-    <div class="code-block-wrap">
-      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
-      <pre class="code"><span class="url">curl</span> https://api.streamvault.link/api/webhooks \
-  <span class="flag">-H</span> <span class="str">"Authorization: Bearer sv_live_YOUR_KEY"</span> \
-  <span class="flag">-H</span> <span class="str">"X-Workspace-Id: ws_YOUR_WORKSPACE"</span></pre>
-    </div>
-  </div>
-</div>
-
-<div class="endpoint" id="create-webhook">
-  <div class="ep-header" onclick="toggleEp(this)">
-    <span class="ep-method m-post">POST</span>
-    <span class="ep-path">/api/webhooks</span>
-    <span class="ep-summary">Create a webhook endpoint</span>
-    <span class="ep-chevron">▼</span>
-  </div>
-  <div class="ep-body">
-    <table>
-      <thead><tr><th>Field</th><th>Type</th><th></th><th>Description</th></tr></thead>
-      <tbody>
-        <tr><td class="pname">url</td><td class="ptype">string</td><td><span class="preq">required</span></td><td class="pdesc">HTTPS endpoint URL</td></tr>
-        <tr><td class="pname">events</td><td class="ptype">string[]</td><td><span class="preq">required</span></td><td class="pdesc">Events to subscribe</td></tr>
-        <tr><td class="pname">secret</td><td class="ptype">string</td><td><span class="popt">optional</span></td><td class="pdesc">HMAC secret (auto-generated if omitted)</td></tr>
-      </tbody>
-    </table>
-    <div class="params-label">Available events</div>
-    <div class="event-list">
-      <span class="event-badge">video.ready</span>
-      <span class="event-badge">video.error</span>
-      <span class="event-badge">video.deleted</span>
-      <span class="event-badge">transcription.complete</span>
-      <span class="event-badge">transcription.error</span>
-    </div>
-    <div class="callout callout-info">
-      <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><circle cx="12" cy="16" r="1"/><rect x="3" y="10" width="18" height="12" rx="2"/><path d="M7 10V7a5 5 0 0110 0v3"/></svg></span>
-      <span>Payloads signed with HMAC-SHA256. Verify <code>X-StreamVault-Signature</code> header.</span>
-    </div>
-  </div>
-</div>
+<section class="doc-section" id="list-webhooks">
+  <div class="section-tag">Webhooks</div>
+  <h2 class="section-heading">Webhooks</h2>
+  <p class="section-desc">Receive HMAC-SHA256 signed HTTP callbacks. Events: <code>video.ready</code>, <code>video.failed</code>, <code>video.deleted</code>, <code>transcription.complete</code>, or <code>*</code> (all).</p>
+  <div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-get">GET</span><span class="ep-path">/api/webhooks</span><span class="ep-summary">List webhooks</span><span class="ep-chevron">›</span></div><div class="ep-body"><div class="code-block"><div class="code-content active"><pre>curl BASE_URL/api/webhooks \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID"</pre></div></div></div></div>
+</section>
+<section class="doc-section" id="create-webhook"><div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-post">POST</span><span class="ep-path">/api/webhooks</span><span class="ep-summary">Create webhook</span><span class="ep-chevron">›</span></div><div class="ep-body"><table class="param-table"><thead><tr><th>Body</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><span class="param-name">url</span><span class="param-required">required</span></td><td><span class="param-type">string</span></td><td class="pdesc">HTTPS endpoint</td></tr><tr><td><span class="param-name">events</span><span class="param-required">required</span></td><td><span class="param-type">string[]</span></td><td class="pdesc">Event types to subscribe</td></tr></tbody></table><div class="code-block"><div class="code-content active"><pre>curl -X POST BASE_URL/api/webhooks \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://your-app.com/hook","events":["video.ready","*"]}'</pre></div></div><div class="callout callout-tip"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span>Response includes a <code>secret</code> (shown once). Verify: <code>X-Webhook-Signature: sha256=HMAC(secret, rawBody)</code></span></div></div></div></section>
+<section class="doc-section" id="update-webhook"><div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-patch">PATCH</span><span class="ep-path">/api/webhooks/:id</span><span class="ep-summary">Update webhook</span><span class="ep-chevron">›</span></div><div class="ep-body"><table class="param-table"><thead><tr><th>Body</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><span class="param-name">url</span></td><td><span class="param-type">string</span></td><td class="pdesc">New URL</td></tr><tr><td><span class="param-name">events</span></td><td><span class="param-type">string[]</span></td><td class="pdesc">Updated events</td></tr><tr><td><span class="param-name">enabled</span></td><td><span class="param-type">boolean</span></td><td class="pdesc">Enable/disable</td></tr></tbody></table><div class="code-block"><div class="code-content active"><pre>curl -X PATCH BASE_URL/api/webhooks/WH_ID \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"enabled":false}'</pre></div></div></div></div></section>
+<section class="doc-section" id="delete-webhook"><div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-delete">DELETE</span><span class="ep-path">/api/webhooks/:id</span><span class="ep-summary">Delete webhook</span><span class="ep-chevron">›</span></div><div class="ep-body"><div class="code-block"><div class="code-content active"><pre>curl -X DELETE BASE_URL/api/webhooks/WH_ID \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID"</pre></div></div></div></div></section>
+<section class="doc-section" id="webhook-deliveries"><div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-get">GET</span><span class="ep-path">/api/webhooks/:id/deliveries</span><span class="ep-summary">Delivery history</span><span class="ep-chevron">›</span></div><div class="ep-body"><p style="font-size:12px;color:var(--muted);margin-bottom:8px;">Last 50 delivery attempts with status codes and latency.</p><div class="code-block"><div class="code-content active"><pre>curl BASE_URL/api/webhooks/WH_ID/deliveries \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID"</pre></div></div></div></div></section>
 
 <div class="doc-divider"></div>
 
 <!-- ═══════════════════ WORKSPACES ═══════════════════ -->
-<div class="section-tag" style="margin-bottom:8px">Workspaces</div>
-<h2 class="section-heading" style="margin-bottom:24px">Workspaces &amp; API Keys</h2>
-
-<div class="endpoint" id="list-workspaces">
-  <div class="ep-header" onclick="toggleEp(this)">
-    <span class="ep-method m-get">GET</span>
-    <span class="ep-path">/api/workspaces</span>
-    <span class="ep-summary">List your workspaces</span>
-    <span class="ep-chevron">▼</span>
-  </div>
-  <div class="ep-body">
-    <div class="code-block-wrap">
-      <button class="copy-btn" onclick="copyCode(this)">Copy</button>
-      <pre class="code"><span class="url">curl</span> https://api.streamvault.link/api/workspaces \
-  <span class="flag">-H</span> <span class="str">"Authorization: Bearer YOUR_JWT_TOKEN"</span></pre>
-    </div>
-  </div>
-</div>
-
-<div class="endpoint" id="create-apikey">
-  <div class="ep-header" onclick="toggleEp(this)">
-    <span class="ep-method m-post">POST</span>
-    <span class="ep-path">/api/workspaces/<span class="param">{id}</span>/apikeys</span>
-    <span class="ep-summary">Create API key <span class="ep-badge">Pro+</span></span>
-    <span class="ep-chevron">▼</span>
-  </div>
-  <div class="ep-body">
-    <table>
-      <thead><tr><th>Field</th><th>Type</th><th></th><th>Description</th></tr></thead>
-      <tbody>
-        <tr><td class="pname">name</td><td class="ptype">string</td><td><span class="preq">required</span></td><td class="pdesc">Display name</td></tr>
-        <tr><td class="pname">permissions</td><td class="ptype">string[]</td><td><span class="popt">optional</span></td><td class="pdesc"><code>read</code>, <code>write</code></td></tr>
-      </tbody>
-    </table>
-    <div class="callout callout-warn">
-      <span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
-      <span>The API key is shown <strong>once</strong>. Save it immediately — you won't see it again.</span>
-    </div>
-  </div>
-</div>
+<section class="doc-section" id="list-workspaces">
+  <div class="section-tag">Workspaces</div>
+  <h2 class="section-heading">Workspaces</h2>
+  <p class="section-desc">Multi-tenant workspace management. Invite team members and manage roles.</p>
+  <div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-get">GET</span><span class="ep-path">/api/workspaces</span><span class="ep-summary">List workspaces</span><span class="ep-chevron">›</span></div><div class="ep-body"><div class="code-block"><div class="code-content active"><pre>curl BASE_URL/api/workspaces \
+  -H "Authorization: Bearer sv_live_YOUR_KEY"</pre></div></div></div></div>
+</section>
+<section class="doc-section" id="create-workspace"><div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-post">POST</span><span class="ep-path">/api/workspaces</span><span class="ep-summary">Create workspace</span><span class="ep-chevron">›</span></div><div class="ep-body"><table class="param-table"><thead><tr><th>Body</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><span class="param-name">name</span><span class="param-required">required</span></td><td><span class="param-type">string</span></td><td class="pdesc">Workspace name</td></tr><tr><td><span class="param-name">slug</span></td><td><span class="param-type">string</span></td><td class="pdesc">URL slug (auto-generated)</td></tr></tbody></table><div class="code-block"><div class="code-content active"><pre>curl -X POST BASE_URL/api/workspaces \
+  -H "Authorization: Bearer YOUR_JWT" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"New Project"}'</pre></div></div></div></div></section>
+<section class="doc-section" id="get-workspace"><div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-get">GET</span><span class="ep-path">/api/workspaces/:id</span><span class="ep-summary">Get workspace details</span><span class="ep-chevron">›</span></div><div class="ep-body"><div class="code-block"><div class="code-content active"><pre>curl BASE_URL/api/workspaces/WS_ID \
+  -H "Authorization: Bearer sv_live_YOUR_KEY"</pre></div></div></div></div></section>
+<section class="doc-section" id="update-workspace"><div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-patch">PATCH</span><span class="ep-path">/api/workspaces/:id</span><span class="ep-summary">Update workspace</span><span class="ep-chevron">›</span></div><div class="ep-body"><div class="code-block"><div class="code-content active"><pre>curl -X PATCH BASE_URL/api/workspaces/WS_ID \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: WS_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Renamed"}'</pre></div></div></div></div></section>
+<section class="doc-section" id="delete-workspace"><div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-delete">DELETE</span><span class="ep-path">/api/workspaces/:id</span><span class="ep-summary">Delete workspace (owner)</span><span class="ep-chevron">›</span></div><div class="ep-body"><div class="callout callout-warn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span>Permanently deletes all videos, folders, playlists, analytics, and settings.</span></div><div class="code-block"><div class="code-content active"><pre>curl -X DELETE BASE_URL/api/workspaces/WS_ID \
+  -H "Authorization: Bearer YOUR_JWT" \
+  -H "X-Workspace-Id: WS_ID"</pre></div></div></div></div></section>
+<section class="doc-section" id="workspace-members"><div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-get">GET</span><span class="ep-path">/api/workspaces/:id/members</span><span class="ep-summary">List members & invites</span><span class="ep-chevron">›</span></div><div class="ep-body"><table class="param-table"><thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead><tbody><tr><td><span class="ep-method m-post" style="font-size:9px;">POST</span></td><td class="pdesc"><code>.../invite</code></td><td class="pdesc"><code>{"email":"...","role":"viewer"}</code></td></tr><tr><td><span class="ep-method m-patch" style="font-size:9px;">PATCH</span></td><td class="pdesc"><code>.../members/:userId</code></td><td class="pdesc"><code>{"role":"admin"}</code></td></tr><tr><td><span class="ep-method m-delete" style="font-size:9px;">DEL</span></td><td class="pdesc"><code>.../members/:userId</code></td><td class="pdesc">Remove member</td></tr></tbody></table><div class="code-block"><div class="code-content active"><pre>curl BASE_URL/api/workspaces/WS_ID/members \
+  -H "Authorization: Bearer sv_live_YOUR_KEY" \
+  -H "X-Workspace-Id: WS_ID"</pre></div></div></div></div></section>
 
 <div class="doc-divider"></div>
 
-<!-- ═══════════════════ SYSTEM ═══════════════════ -->
-<div class="section-tag" style="margin-bottom:8px">System</div>
-<h2 class="section-heading" style="margin-bottom:24px"> <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> System</h2>
+<!-- ═══════════════════ API KEYS ═══════════════════ -->
+<section class="doc-section" id="list-apikeys">
+  <div class="section-tag">API Keys</div>
+  <h2 class="section-heading">API Key Management</h2>
+  <p class="section-desc">Create and revoke scoped API keys. Requires Pro+ plan. Keys use JWT authentication to manage.</p>
+  <div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-get">GET</span><span class="ep-path">/api/apikeys</span><span class="ep-summary">List keys (secrets hidden)</span><span class="ep-chevron">›</span></div><div class="ep-body"><div class="code-block"><div class="code-content active"><pre>curl BASE_URL/api/apikeys \
+  -H "Authorization: Bearer YOUR_JWT" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID"</pre></div></div></div></div>
+</section>
+<section class="doc-section" id="create-apikey"><div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-post">POST</span><span class="ep-path">/api/apikeys</span><span class="ep-summary">Create API key</span><span class="ep-chevron">›</span></div><div class="ep-body"><table class="param-table"><thead><tr><th>Body</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><span class="param-name">name</span><span class="param-required">required</span></td><td><span class="param-type">string</span></td><td class="pdesc">Key name</td></tr><tr><td><span class="param-name">scopes</span><span class="param-required">required</span></td><td><span class="param-type">string[]</span></td><td class="pdesc">Permission scopes</td></tr></tbody></table><div class="code-block"><div class="code-content active"><pre>curl -X POST BASE_URL/api/apikeys \
+  -H "Authorization: Bearer YOUR_JWT" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"CI/CD Pipeline","scopes":["uploads:write","videos:read"]}'</pre></div></div><div class="callout callout-warn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span>The response includes the full <code>key</code> value <strong>once</strong>. Store it immediately in a secure location.</span></div></div></div></section>
+<section class="doc-section" id="delete-apikey"><div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-delete">DELETE</span><span class="ep-path">/api/apikeys/:id</span><span class="ep-summary">Revoke key (immediate)</span><span class="ep-chevron">›</span></div><div class="ep-body"><p style="font-size:12px;color:var(--muted);margin-bottom:8px;">All requests using this key will immediately return 401.</p><div class="code-block"><div class="code-content active"><pre>curl -X DELETE BASE_URL/api/apikeys/KEY_ID \
+  -H "Authorization: Bearer YOUR_JWT" \
+  -H "X-Workspace-Id: YOUR_WORKSPACE_ID"</pre></div></div></div></div></section>
 
-<div class="endpoint" id="health">
-  <div class="ep-header" onclick="toggleEp(this)">
-    <span class="ep-method m-get">GET</span>
-    <span class="ep-path">/health</span>
-    <span class="ep-summary">Health check (no auth required)</span>
-    <span class="ep-chevron">▼</span>
-  </div>
-  <div class="ep-body">
-    <div class="code-block-wrap">
-      <pre class="code">{
-  <span class="key">"status"</span>: <span class="str">"healthy"</span>,
-  <span class="key">"timestamp"</span>: <span class="num">1714500000</span>,
-  <span class="key">"services"</span>: { <span class="key">"database"</span>: <span class="str">"ok"</span>, <span class="key">"storage"</span>: <span class="str">"ok"</span>, <span class="key">"queue"</span>: <span class="str">"ok"</span> }
-}</pre>
-    </div>
-  </div>
-</div>
+<div class="doc-divider"></div>
 
-</div><!-- content-area -->
+<!-- ═══════════════════ HEALTH ═══════════════════ -->
+<section class="doc-section" id="health">
+  <div class="section-tag">System</div>
+  <h2 class="section-heading">System Status</h2>
+  <div class="ep-card"><div class="ep-header" onclick="toggleEp(this)"><span class="ep-method m-get">GET</span><span class="ep-path">/api/health</span><span class="ep-summary">Health check (no auth)</span><span class="ep-chevron">›</span></div><div class="ep-body"><div class="code-block"><div class="code-content active"><pre>curl BASE_URL/api/health</pre></div></div><p style="font-size:12px;color:var(--muted);margin-top:8px;"><strong>Response 200:</strong></p><div class="code-block"><div class="code-content active"><pre>{
+  <span class="str">"status"</span>: <span class="str">"ok"</span>,
+  <span class="str">"version"</span>: <span class="str">"1.0.0"</span>,
+  <span class="str">"uptime"</span>: <span class="num">86400</span>,
+  <span class="str">"database"</span>: <span class="str">"connected"</span>,
+  <span class="str">"storage"</span>: <span class="str">"connected"</span>,
+  <span class="str">"queue"</span>: <span class="str">"connected"</span>
+}</pre></div></div></div></div>
+</section>
+
+</div><!-- /.content-area -->
+
+<!-- FOOTER -->
+<footer class="sv-footer">
+  <a href="/" style="font-family:var(--mono);font-weight:700;color:var(--accent2);font-size:14px;text-decoration:none;">Stream<span style="color:var(--muted);font-weight:400;">Vault</span></a>
+  <div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:center;">
+    <a href="/referidos">Referidos</a>
+    <a href="/privacy">Privacidad</a>
+    <a href="/terms">Términos</a>
+    <a href="/cookies">Cookies</a>
+    <a href="/gdpr">GDPR</a>
+    <a href="/status">Estado</a>
+    <a href="/api-docs">API</a>
+  </div>
+  <span>&copy; 2026 StreamVault &middot; <a href="https://myscreators.com" target="_blank" rel="noopener" style="color:var(--muted);">Una marca de M&S Creators S.A.S.</a></span>
+</footer>
+
 </main>
-
-</div><!-- page-layout -->
+</div><!-- /.page-layout -->
 
 <script>
-// Dynamic branding + live base URL
-const _apiBase = location.origin;
-document.querySelectorAll('.base-url-val').forEach(el => { el.textContent = _apiBase; });
-document.querySelectorAll('pre.code').forEach(pre => {
-  pre.innerHTML = pre.innerHTML.replace(/https:\/\/api\.streamvault\.link/g, _apiBase)
-                               .replace(/https:\/\/cdn\.streamvault\.link/g, _apiBase);
-});
-fetch('/api/settings').then(r=>r.json()).then(s=>{
-  const n = s.siteName||'StreamVault';
-  document.title = n+' API — Developer Documentation';
-  const h1 = document.querySelector('.api-hero h1');
-  if (h1) h1.innerHTML = n+' <span class="gradient-text">API</span>';
-  if (s.supportEmail) { document.querySelectorAll('[data-contact-email]').forEach(el=>{ el.href='mailto:'+s.supportEmail; el.textContent=s.supportEmail; }); }
-}).catch(()=>{});
-// Toggle endpoint expand/collapse
-function toggleEp(header) {
-  const body = header.nextElementSibling;
-  const chevron = header.querySelector('.ep-chevron');
-  body.classList.toggle('open');
-  chevron.classList.toggle('open');
-}
-
-// Switch code tabs
-function switchTab(tab, group, lang) {
-  const parent = tab.closest('.ep-body');
-  parent.querySelectorAll('.code-tab').forEach(t => t.classList.remove('active'));
-  tab.classList.add('active');
-  parent.querySelectorAll('[id^="' + group + '-"]').forEach(c => c.style.display = 'none');
-  const target = parent.querySelector('#' + group + '-' + lang);
-  if (target) target.style.display = 'block';
-}
-
-// Copy code
-function copyCode(btn) {
-  const pre = btn.nextElementSibling;
-  navigator.clipboard.writeText(pre.textContent).then(() => {
-    btn.textContent = 'Copied!';
-    btn.classList.add('copied');
-    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
-  });
-}
-
-// Scroll spy for sidebar
-const sbLinks = document.querySelectorAll('.sb-link');
-const observer = new IntersectionObserver(entries => {
-  entries.forEach(entry => {
-    if (entry.isIntersecting) {
-      const id = entry.target.id;
-      sbLinks.forEach(l => l.classList.remove('active'));
-      const active = document.querySelector(`.sb-link[href="#${id}"]`);
-      if (active) active.classList.add('active');
-    }
-  });
-}, { rootMargin: '-80px 0px -66% 0px' });
-
-document.querySelectorAll('.doc-section, .endpoint').forEach(el => {
-  if (el.id) observer.observe(el);
-});
-
-// Sidebar link click
-sbLinks.forEach(link => {
-  link.addEventListener('click', () => {
-    sbLinks.forEach(l => l.classList.remove('active'));
-    link.classList.add('active');
-  });
-});
-// Search logic & Shortcut
-const searchInput = document.getElementById('api-search');
-const kbdSymbol = document.getElementById('kbd-symbol');
-const endpoints = document.querySelectorAll('.endpoint');
-const docSections = document.querySelectorAll('.doc-section');
-
-if (navigator.platform.toUpperCase().indexOf('MAC') === -1) {
-  kbdSymbol.textContent = 'Ctrl';
-}
-
-window.addEventListener('keydown', (e) => {
-  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-    e.preventDefault();
-    searchInput.focus();
-  }
-});
-
-searchInput.addEventListener('input', (e) => {
-  const q = e.target.value.toLowerCase();
-  endpoints.forEach(ep => {
-    const text = ep.innerText.toLowerCase();
-    ep.style.display = text.includes(q) ? '' : 'none';
-  });
-  docSections.forEach(sec => {
-    const text = sec.innerText.toLowerCase();
-    sec.style.display = text.includes(q) ? '' : 'none';
-  });
-});
-
-// Nav auth detection
 (function(){
-  const t = localStorage.getItem('sv_access_token') || sessionStorage.getItem('sv_access_token') || localStorage.getItem('sv_token') || localStorage.getItem('sv_refresh_token') || sessionStorage.getItem('sv_refresh_token');
-  if (t) {
-    const dash = document.getElementById('api-nav-dash');
-    if (dash) {
-      let r = '';
-      try { r = JSON.parse(localStorage.getItem('sv_user') || sessionStorage.getItem('sv_user') || '{}')?.platform_role || ''; } catch {}
-      if (r === 'super_admin') dash.href = '/admin';
-      dash.style.display = 'inline-flex';
-    }
-  } else {
-    document.getElementById('api-nav-login').style.display = 'inline-flex';
-    document.getElementById('api-nav-register').style.display = 'inline-flex';
-  }
+  const host = location.hostname;
+  let base = 'https://api.streamvault.link';
+  if(host === 'localhost' || host === '127.0.0.1') base = location.origin;
+  document.querySelectorAll('pre').forEach(el => { el.innerHTML = el.innerHTML.replace(/BASE_URL/g, base); });
+  const d = document.getElementById('base-url-display');
+  if(d) d.textContent = base;
+  window._BASE = base;
 })();
+
+function toggleEp(h){ h.parentElement.classList.toggle('open'); }
+
+function switchTab(tab, lang){
+  const block = tab.closest('.code-block');
+  block.querySelectorAll('.code-tab').forEach(t => t.classList.remove('active'));
+  block.querySelectorAll('.code-content').forEach(c => c.classList.remove('active'));
+  tab.classList.add('active');
+  block.querySelector('.code-content[data-lang="'+lang+'"]').classList.add('active');
+}
+
+function copyCode(btn){
+  const block = btn.closest('.code-block');
+  const pre = block.querySelector('.code-content.active pre') || block.querySelector('.code-content pre');
+  if(!pre) return;
+  navigator.clipboard.writeText(pre.textContent).then(()=>{ btn.textContent='Copied!'; setTimeout(()=>btn.textContent='Copy',1500); });
+}
+
+// Scroll spy
+(function(){
+  const links = document.querySelectorAll('.sb-link[href^="#"]');
+  const secs = [];
+  links.forEach(l => { const el = document.getElementById(l.getAttribute('href').slice(1)); if(el) secs.push({el,link:l}); });
+  function spy(){ let cur=secs[0]; for(const s of secs){ if(s.el.getBoundingClientRect().top<=100) cur=s; } links.forEach(l=>l.classList.remove('active')); if(cur)cur.link.classList.add('active'); }
+  window.addEventListener('scroll',spy,{passive:true}); spy();
+})();
+
+// Search
+(function(){
+  const input = document.getElementById('api-search');
+  if(!input) return;
+  input.addEventListener('input', function(){
+    const q = this.value.toLowerCase().trim();
+    document.querySelectorAll('.ep-card,.doc-section').forEach(el => {
+      el.classList.toggle('ep-hidden', q && !el.textContent.toLowerCase().includes(q));
+    });
+  });
+})();
+
+document.addEventListener('keydown', e => { if((e.metaKey||e.ctrlKey)&&e.key==='k'){ e.preventDefault(); document.getElementById('api-search')?.focus(); }});
+(function(){ if(!navigator.platform?.toUpperCase().includes('MAC')){ const s=document.getElementById('kbd-symbol'); if(s) s.textContent='Ctrl+'; }})();
+
+// Nav auth
+(function(){
+  const t = localStorage.getItem('token');
+  if(t){ document.getElementById('api-nav-dash').style.display=''; }
+  else { document.getElementById('api-nav-login').style.display=''; document.getElementById('api-nav-register').style.display=''; }
+})();
+
+// Try it - Health
+function tryHealth(){
+  const el = document.getElementById('try-health-response');
+  el.textContent = 'Sending...'; el.className = 'try-response visible';
+  fetch(window._BASE + '/api/health').then(r=>r.json()).then(d=>{
+    el.textContent = JSON.stringify(d, null, 2); el.className = 'try-response visible';
+  }).catch(e=>{ el.textContent = 'Error: ' + e.message; el.className = 'try-response visible error'; });
+}
+
+// Try it - List Videos
+function tryListVideos(){
+  const key = document.getElementById('try-list-key').value.trim();
+  const ws = document.getElementById('try-list-ws').value.trim();
+  const el = document.getElementById('try-list-response');
+  if(!key||!ws){ el.textContent='Please enter API key and workspace ID'; el.className='try-response visible error'; return; }
+  el.textContent = 'Sending...'; el.className = 'try-response visible';
+  fetch(window._BASE + '/api/videos?limit=5', { headers: { 'Authorization': 'Bearer ' + key, 'X-Workspace-Id': ws }})
+    .then(r=>r.json()).then(d=>{ el.textContent = JSON.stringify(d, null, 2); el.className = 'try-response visible'; })
+    .catch(e=>{ el.textContent = 'Error: ' + e.message; el.className = 'try-response visible error'; });
+}
 </script>
-<script src="/js/cookie-banner.js"></script>
 </body>
 </html>

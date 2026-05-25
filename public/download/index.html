@@ -15,10 +15,10 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 
 /* ── Topbar ── */
 .topbar{position:sticky;top:0;z-index:100;background:rgba(10,10,15,.94);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-bottom:1px solid var(--border);padding:0 40px;height:56px;display:flex;align-items:center;justify-content:space-between;}
-.brand{font-family:var(--mono);font-size:16px;font-weight:700;color:var(--accent2);text-decoration:none;letter-spacing:-.5px;}
+.brand{font-family:var(--mono);font-size:16px;font-weight:700;color:var(--accent2);text-decoration:none;letter-spacing:-.5px;flex-shrink:0;}
 .brand span{color:var(--muted);font-weight:400;}
-.nav-links{display:flex;gap:8px;}
-.nav-btn{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:10px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-size:13px;font-weight:600;cursor:pointer;text-decoration:none;transition:.14s;font-family:var(--sans);}
+.nav-links{display:flex;gap:8px;flex-shrink:0;}
+.nav-btn{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:10px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-size:13px;font-weight:600;cursor:pointer;text-decoration:none;transition:.14s;font-family:var(--sans);white-space:nowrap;}
 .nav-btn:hover{border-color:var(--accent);background:rgba(124,108,250,.08);}
 .nav-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
 .nav-btn.primary:hover{background:#6a5be8;}
@@ -121,7 +121,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 @media(max-width:640px){
   .topbar{padding:0 16px;}
   .page{padding:16px 16px 60px;}
-  .sv-footer{padding:16px 20px;}
+  .sv-footer{padding:16px;flex-direction:column;align-items:center;text-align:center;}
   .q-row{flex-wrap:wrap;}
   .q-info-sub{display:none;}
   .q-actions{width:100%;justify-content:stretch;}
@@ -155,7 +155,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 
 <footer class="sv-footer">
   <a href="/" style="font-family:var(--mono);font-weight:700;color:var(--accent2);font-size:14px;text-decoration:none;">Stream<span style="color:var(--muted);font-weight:400;">Vault</span></a>
-  <div style="display:flex;gap:16px;flex-wrap:wrap;">
+  <div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:center;">
     <a href="/referidos">Referidos</a>
     <a href="/privacy">Privacidad</a>
     <a href="/terms">Términos</a>
