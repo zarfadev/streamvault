@@ -844,6 +844,16 @@ async function processVideo(videoId, inputPath, title, options = {}) {
                 logger.warn({ videoId, quality: name, err: e.message }, 'S3 upload of secondary quality failed — se reintentará en sync final');
               }
             }));
+
+            // CRITICAL: re-upload master.m3u8 with ALL qualities and immediately
+            // invalidate CloudFront. Without this, CloudFront keeps serving the
+            // Phase-1 master.m3u8 (primary quality only) and players see only 1 quality.
+            try {
+              await s3.uploadMasterPlaylist(path.join(outputDir, 'master.m3u8'), workspaceId, videoId);
+              logger.info({ videoId, qualities: done }, '[transcoder] master.m3u8 re-uploaded after Phase 2 multi-output — CDN invalidated');
+            } catch (e) {
+              logger.warn({ videoId, err: e.message }, 'Phase 2 multi-output master.m3u8 re-upload failed — will retry in final sync');
+            }
           }
         } catch (err) {
           logger.warn({ videoId, err: err.message },
@@ -877,6 +887,17 @@ async function processVideo(videoId, inputPath, title, options = {}) {
             logger.error({ videoId, preset: preset.name, err: err.message }, 'Secondary quality transcode failed — continuando con las siguientes');
           }
         }
+
+        // CRITICAL: re-upload master.m3u8 after all sequential qualities finish
+        // and immediately invalidate CloudFront. Mirrors the multi-output path above.
+        if (s3.isS3Enabled()) {
+          try {
+            await s3.uploadMasterPlaylist(path.join(outputDir, 'master.m3u8'), workspaceId, videoId);
+            logger.info({ videoId, qualities: done }, '[transcoder] master.m3u8 re-uploaded after Phase 2 sequential — CDN invalidated');
+          } catch (e) {
+            logger.warn({ videoId, err: e.message }, 'Phase 2 sequential master.m3u8 re-upload failed — will retry in final sync');
+          }
+        }
       }
     }
 
@@ -904,6 +925,10 @@ async function processVideo(videoId, inputPath, title, options = {}) {
     if (s3.isS3Enabled() && done.length) {
       try {
         const finalUp = await s3.uploadVideoDirectory(outputDir, workspaceId, videoId);
+        // Safety-net invalidation: ensures the final master.m3u8 (with all qualities
+        // + embedded audio/subtitle tracks) is served by CDN immediately, even if
+        // the Phase-2 uploadMasterPlaylist call above was skipped or failed.
+        await s3.invalidateCDN([`/${finalUp.objectPrefix}/master.m3u8`]).catch(() => {});
         await db.prepare(`UPDATE videos SET qualities=?, hls_cdn_url=?, s3_object_prefix=? WHERE id=?`)
           .run(JSON.stringify(done), finalUp.cdnMasterUrl, finalUp.objectPrefix, videoId);
         if (process.env.DELETE_LOCAL_AFTER_S3 === '1') {

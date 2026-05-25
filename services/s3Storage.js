@@ -114,16 +114,30 @@ const S3_UPLOAD_CONCURRENCY = 12;
 
 /**
  * Upload one file to S3, returning a promise.  Internal helper.
+ *
+ * Cache-Control strategy:
+ *   • .m3u8 playlists — "no-cache, no-store, must-revalidate"
+ *     HLS playlists are rewritten multiple times during the two-phase
+ *     transcoding pipeline (Phase 1 = primary quality only, Phase 2 = all
+ *     qualities). Without this header CloudFront caches the Phase-1 version
+ *     and players see only ONE quality until the CDN TTL expires naturally.
+ *   • Everything else (.ts segments, .jpg, .vtt, …) — 1-year immutable cache.
+ *     Segments are content-addressed and never modified after creation, so a
+ *     long cache is safe and greatly reduces S3 → CloudFront egress costs.
  */
 function _uploadOneFile(client, localPath, key) {
   const { Upload } = require('@aws-sdk/lib-storage');
+  const isPlaylist = key.endsWith('.m3u8');
   const upload = new Upload({
     client,
     params: {
-      Bucket:      cfg.s3Bucket,
-      Key:         key,
-      Body:        fs.createReadStream(localPath),
-      ContentType: mimeFor(localPath),
+      Bucket:       cfg.s3Bucket,
+      Key:          key,
+      Body:         fs.createReadStream(localPath),
+      ContentType:  mimeFor(localPath),
+      CacheControl: isPlaylist
+        ? 'no-cache, no-store, must-revalidate'
+        : 'public, max-age=31536000, immutable',
     },
     // 16 MB parts × 8 concurrent = up to 128 MB in-flight per file.
     // For HLS .ts segments (<5 MB) multipart doesn't trigger, but these
@@ -200,6 +214,44 @@ async function uploadQualityDir(qualityDir, workspaceId, videoId, quality) {
       )
     );
   }
+}
+
+/**
+ * Upload only master.m3u8 for a video to S3 and immediately invalidate the CDN.
+ *
+ * Called after EVERY master.m3u8 rebuild during multi-phase transcoding so that
+ * CloudFront always serves the latest quality list:
+ *
+ *   Phase 1 → uploadVideoDirectory (includes master.m3u8 with primary quality only)
+ *   Phase 2 → uploadMasterPlaylist  (master.m3u8 now has ALL qualities)
+ *   Final   → uploadVideoDirectory  + invalidateCDN (safety net)
+ *
+ * Without explicit re-upload + invalidation after Phase 2, CloudFront keeps
+ * serving the Phase-1 master.m3u8 (1 quality) until its TTL expires, even
+ * though S3 has the correct multi-quality version.
+ *
+ * @param {string} localMasterPath  Absolute path to the local master.m3u8
+ * @param {string} workspaceId
+ * @param {string} videoId
+ * @returns {Promise<string>}       CDN URL of the uploaded master.m3u8
+ */
+async function uploadMasterPlaylist(localMasterPath, workspaceId, videoId) {
+  const client    = getClient();
+  const keyPrefix = [cfg.s3KeyPrefix || 'streamvault', workspaceId, videoId]
+    .filter(Boolean).join('/');
+  const key = `${keyPrefix}/master.m3u8`;
+
+  // _uploadOneFile already sets CacheControl: no-cache for .m3u8 files
+  await _uploadOneFile(client, localMasterPath, key);
+
+  // Immediately purge the cached Phase-1 version from CloudFront so the next
+  // player request fetches the updated multi-quality master.m3u8 from S3.
+  await invalidateCDN([`/${key}`]);
+
+  const cdnBase = cfg.cdnBaseUrl
+    ? cfg.cdnBaseUrl.replace(/\/$/, '')
+    : `https://${cfg.s3Bucket}.s3.${cfg.awsRegion}.amazonaws.com`;
+  return `${cdnBase}/${key}`;
 }
 
 /**
@@ -413,6 +465,7 @@ module.exports = {
   uploadFile,
   uploadVideoDirectory,
   uploadQualityDir,
+  uploadMasterPlaylist,
   uploadSourceFile,
   downloadSourceFile,
   deleteObject,
