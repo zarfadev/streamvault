@@ -1,7 +1,8 @@
 /**
  * StreamVault — tokens y utilidades compartidas (landing, login, dashboard)
  */
-html { background: #0a0a0f; }
+html { background: #0a0a0f; overflow-x: hidden; }
+body { overflow-x: hidden; }
 :root {
   --bg: #0a0a0f;
   --surface: #111118;
@@ -1204,8 +1205,16 @@ body.nav-open .nav-backdrop{display:block;opacity:1;pointer-events:auto;}
 /* ── Global Header & Footer Responsive ───────────────────────────── */
 @media (max-width: 640px) {
   nav { padding: 0 16px !important; }
+  /* Ocultar nav-links (solo landing page — tiene hamburger propio) */
   .nav-links { display: none !important; }
-  .nav-actions .nav-btn-ghost, .nav-actions .nav-btn-primary, .nav-right .nav-back, .nav-right #nav-dash, .nav-right #nav-login { display: none !important; }
+  /* Solo ocultar los botones de la landing (.nav-actions).
+     Las páginas secundarias (watch, privacy, etc.) usan .nav-right
+     con un único botón (dashboard O login) que SÍ debe mostrarse en móvil. */
+  .nav-actions .nav-btn-ghost,
+  .nav-actions .nav-btn-primary { display: none !important; }
+  /* Adaptar .nav-right en páginas secundarias a móvil */
+  .nav-right .nav-back { font-size: 12px; gap: 5px; }
+  .nav-right .nav-btn  { padding: 7px 12px; font-size: 12px; }
   .sv-footer { padding: 24px 20px !important; flex-direction: column !important; align-items: center !important; text-align: center !important; gap: 16px !important; }
   .sv-footer div { justify-content: center; }
 }

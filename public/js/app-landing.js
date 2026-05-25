@@ -493,16 +493,23 @@ function renderPlansError() {
   // Swap ALL "Iniciar sesión" / "Empezar gratis" CTAs to "Ir al dashboard"
   const dashBtn = `<a href="${_dest}" class="nav-btn-primary" style="white-space:nowrap;">Ir al dashboard →</a>`;
 
-  // Desktop nav actions
+  // Desktop nav actions — IMPORTANT: preserve the hamburger button so mobile nav still works.
+  // The hamburger is inside .nav-actions; replacing innerHTML removes it from the DOM and
+  // breaks the mobile drawer. We save the element reference, replace the HTML, then re-append.
   const navActions = document.querySelector('.nav-actions');
   if (navActions) {
+    const hamburger = navActions.querySelector('.nav-hamburger');
     navActions.innerHTML = dashBtn;
+    if (hamburger) {
+      navActions.appendChild(hamburger);
+    }
   }
 
-  // Mobile drawer actions
+  // Mobile drawer actions — replace login/register links with a single dashboard link.
+  // Keep all the non-action anchor links (section links like #how-it-works) intact.
   const mobileActions = document.querySelector('.nav-mobile-actions');
   if (mobileActions) {
-    mobileActions.innerHTML = `<a href="${_dest}" class="nav-btn-primary">Ir al dashboard →</a>`;
+    mobileActions.innerHTML = `<a href="${_dest}" class="nav-btn-primary" style="flex:1;text-align:center;">Ir al dashboard →</a>`;
   }
 
   // Any CTA buttons with register links on the page

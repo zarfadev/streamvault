@@ -1530,17 +1530,23 @@ video::cue {
   /* Desactivar tooltips en touch */
   [data-tooltip]::after { display: none !important; }
 
-  /* Settings menu centrado y siempre abre hacia arriba en touch */
+  /* Settings / quality / CC menus en touch:
+     Usar position:fixed anclado sobre el dock para no quedar recortado
+     por el overflow:hidden del player-inner. */
   .quality-menu, .cc-menu, .speed-menu, .settings-menu {
-    bottom: calc(100% + 8px) !important;
+    position: fixed !important;
+    bottom: 90px !important;     /* por encima del dock (~80 px) */
     top: auto !important;
     left: 50% !important;
     right: auto !important;
-    transform: translateX(-50%) translateY(10px) !important;
-    min-width: min(320px, 90vw) !important;
-    max-width: 90vw !important;
-    max-height: 60vh !important;
+    transform: translateX(-50%) translateY(14px) !important;
+    min-width: min(320px, 92vw) !important;
+    max-width: 92vw !important;
+    max-height: min(60vh, calc(100dvh - 110px)) !important;
     overflow-y: auto !important;
+    border-radius: 16px !important;
+    /* Asegurar que se muestre sobre cualquier overlay del player */
+    z-index: 10000 !important;
   }
   .quality-menu.open, .cc-menu.open, .speed-menu.open, .settings-menu.open {
     transform: translateX(-50%) translateY(0) !important;
@@ -1617,4 +1623,49 @@ video::cue {
 @media (min-width: 641px) and (max-width: 1024px) {
   /* Botones medianos */
   .ctrl-btn { width: 42px; height: 42px; }
+}
+
+/* ── Landscape en teléfonos / tablets pequeños ───────────────────
+   Cuando el dispositivo gira horizontal y la altura es ≤ 500 px
+   (típico de teléfonos en landscape), el player debe llenar la
+   pantalla completa para que el video se vea sin barras negras.
+   ──────────────────────────────────────────────────────────────── */
+@media (orientation: landscape) and (max-height: 500px) {
+  /* Player de página: ignora el aspect-ratio fijo y ocupa toda la altura */
+  .player-page .player-wrap {
+    aspect-ratio: unset !important;
+    height: 100dvh !important;
+    height: 100vh !important; /* fallback sin dvh */
+    max-height: 100dvh !important;
+  }
+
+  /* El contenedor de página: sin padding ni margen extra */
+  .player-page .player-container {
+    padding: 0 !important;
+  }
+
+  /* Dock: padding horizontal mínimo + safe-area */
+  .player-progress-dock {
+    padding: 0 12px calc(6px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  /* Info debajo del player: ocultar en landscape para ganar espacio */
+  .player-page .video-info { display: none !important; }
+
+  /* Dock de ajustes: subir el menú un poco menos (dock más pequeño) */
+  .quality-menu, .cc-menu, .speed-menu, .settings-menu {
+    bottom: 72px !important;
+    max-height: min(55vh, calc(100dvh - 90px)) !important;
+  }
+}
+
+/* ── Landscape en tablets medianas (501 px – 768 px alto) ────────
+   iPads en landscape: el player se ve bien con aspect-ratio normal,
+   pero el dock y los menús necesitan ajustes menores.
+   ──────────────────────────────────────────────────────────────── */
+@media (orientation: landscape) and (min-height: 501px) and (max-height: 768px) {
+  .quality-menu, .cc-menu, .speed-menu, .settings-menu {
+    bottom: 80px !important;
+    max-height: min(58vh, calc(100dvh - 105px)) !important;
+  }
 }
