@@ -475,7 +475,7 @@ select.modal-input-role:focus {
   transition:background .1s,color .1s;border-radius:8px;
   white-space:nowrap;
 }
-.more-menu button:hover{background:var(--surface3);color:var(--text);}
+.more-menu button:hover{background:rgba(255,255,255,0.07);color:var(--text);}
 .more-menu button svg{flex-shrink:0;opacity:.7;}
 .more-menu button:hover svg{opacity:1;}
 

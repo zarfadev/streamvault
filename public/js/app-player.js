@@ -40,6 +40,8 @@ let currentSpeed = 1, hideUiTimer = null, spriteMeta = null, spriteImg = null;
 let audioTracks = [], currentAudioTrack = -1;
 // Flag: HLS manifest parsed — quality button/settings gear only visible after this
 let _manifestReady = false;
+// Flag: video has enough data to show frames — quality badge only shows after canplay
+let _videoCanPlay = false;
 let settingsView = 'main'; // 'main'|'quality'|'audio'|'subtitles'|'speed'
 let ccLang = null, subtitlesList = [];
 let _progressTimer = null, lastProgressPos = -15, lastEventMs = 0;
@@ -701,14 +703,16 @@ function updateQualityIndicator(levelIdx) {
   const h = levels[activeIdx]?.height;
   const q = _heightToQualityLabel(h);
 
-  if (!q || !levels.length) {
+  // Ocultar si no hay calidad válida, o si el video aún no tiene frames listos
+  if (!q || !levels.length || !_videoCanPlay) {
     btn.style.display = 'none';
     return;
   }
 
-  btn.style.display = 'inline-flex';
+  // Setear contenido ANTES de hacer visible para evitar flash de caja vacía
   label.textContent = q.text;
   btn.className = 'ctrl-btn quality-indicator-btn ' + q.cls;
+  btn.style.display = 'inline-flex';
 }
 
 function updateSettingsBadge() {
@@ -1371,6 +1375,14 @@ function initHls(m3u8Url) {
 }
 
 // ─── Video events ────────────────────────────────────────────
+// Mostrar quality badge solo cuando el video tiene frames listos (no durante buffering inicial)
+video.addEventListener('canplay', () => {
+  if (!_videoCanPlay) {
+    _videoCanPlay = true;
+    updateQualityIndicator();
+  }
+});
+
 let viewCounted = false;
 video.addEventListener('play', () => {
   updatePlayIcon(true);

@@ -89,11 +89,9 @@
         color: #a78bfa;
         text-decoration: none;
         font-weight: 600;
-        border-bottom: 1px solid rgba(167, 139, 250, 0.2);
         transition: all 0.2s;
       }
       .sv-cb__text a:hover {
-        border-bottom-color: #a78bfa;
         color: #c4b5fd;
       }
       .sv-cb__actions {
