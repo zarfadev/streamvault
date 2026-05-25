@@ -60,6 +60,8 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 .nav-btn:hover{border-color:var(--accent);background:rgba(124,108,250,.08);}
 .nav-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
 .nav-btn.primary:hover{background:#6a5be8;}
+.nav-back{font-size:13px;color:var(--muted);text-decoration:none;display:flex;align-items:center;gap:8px;transition:color 0.2s;white-space:nowrap;}
+.nav-back:hover{color:var(--text);text-decoration:none;}
 
 /* ── Footer ── */
 .sv-footer{border-top:1px solid var(--border);padding:28px 40px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--muted);margin-top:auto;}
@@ -184,6 +186,10 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
   .page{padding:20px 24px 48px;}
   .topbar{padding:0 24px;}
 }
+@media(max-width:400px){
+  .nav-back .nav-back-text{display:none;}
+  .nav-back{padding:6px 8px;border-radius:8px;border:1px solid var(--border2);}
+}
 @media(max-width:600px){
   .topbar{padding:0 16px;}
   .sv-footer{padding:16px;flex-direction:column;align-items:center;text-align:center;}
@@ -208,6 +214,10 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 <nav class="topbar">
   <a href="/" class="brand">Stream<span>Vault</span></a>
   <div class="nav-right">
+    <a href="/" class="nav-back">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+      <span class="nav-back-text">Volver al inicio</span>
+    </a>
     <a href="/dashboard" class="nav-btn" id="nav-dashboard" style="display:none;">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
       Dashboard
