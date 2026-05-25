@@ -3075,10 +3075,11 @@ function doLogout() {
         return `
     <div class="video-card" id="card-${v.id}">
       <div class="video-thumb" ${canPlay ? `onclick="openVideoPreview('${v.id}')" style="cursor:pointer;" title="Click para previsualizar"` : ''}>
+        <!-- Thumbnail siempre visible — onerror la oculta si no existe aún -->
+        <img class="thumb-cover" src="${thumbSrc}" alt="" loading="lazy" onerror="this.style.display='none'">
+        ${v.duration ? `<div class="video-duration-badge">${formatDuration(v.duration)}</div>` : ''}
         ${canPlay
-          ? `<img class="thumb-cover" src="${thumbSrc}" alt="" loading="lazy" onerror="this.style.display='none'">
-             ${v.duration ? `<div class="video-duration-badge">${formatDuration(v.duration)}</div>` : ''}
-             <div class="thumb-play-overlay" aria-hidden="true">
+          ? `<div class="thumb-play-overlay" aria-hidden="true">
                <div style="width:48px;height:48px;border-radius:50%;background:rgba(0,0,0,.65);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;">
                  <svg width="20" height="20" viewBox="0 0 24 24" fill="white" stroke="none"><polygon points="6 4 20 12 6 20 6 4"/></svg>
                </div>
