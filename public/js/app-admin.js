@@ -2690,13 +2690,15 @@ function renderAdLibraryTable() {
       <td><span style="font-size:11px;font-weight:700;color:${typeColor[c.type]||'var(--text)'};">${typeLabel[c.type]||c.type}</span></td>
       <td>${detail}</td>
       <td>${c.is_active ? '<span style="color:var(--green);font-size:12px;">●&nbsp;Activo</span>' : '<span style="color:var(--muted);font-size:12px;">○&nbsp;Inactivo</span>'}</td>
-      <td style="text-align:right;white-space:nowrap;">
-        <button class="btn btn-ghost btn-sm" onclick="useCreativeAsPlatformAdDirect('${esc(c.id)}')" title="Usar como Platform Ad" style="margin-right:4px;display:inline-flex;align-items:center;gap:4px;">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
-          Activar
-        </button>
-        <button class="btn btn-ghost btn-sm" onclick="editAdCreative('${esc(c.id)}')" style="margin-right:4px;">Editar</button>
-        <button class="btn btn-ghost btn-sm" style="color:var(--red);" onclick="deleteAdCreative('${esc(c.id)}','${esc(c.name)}')">Eliminar</button>
+      <td style="text-align:right;white-space:nowrap;vertical-align:middle;">
+        <div style="display:inline-flex;align-items:center;gap:6px;">
+          <button class="btn btn-ghost btn-sm" onclick="useCreativeAsPlatformAdDirect('${esc(c.id)}')" title="Usar como Platform Ad" style="display:inline-flex;align-items:center;gap:4px;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+            Activar
+          </button>
+          <button class="btn btn-ghost btn-sm" onclick="editAdCreative('${esc(c.id)}')">Editar</button>
+          <button class="btn btn-ghost btn-sm" style="color:var(--red);" onclick="deleteAdCreative('${esc(c.id)}','${esc(c.name)}')">Eliminar</button>
+        </div>
       </td>
     </tr>`;
   }).join('');
@@ -2769,11 +2771,88 @@ function renderAdCreativeFields() {
   });
 }
 
+/**
+ * Prefix all CSS selectors inside a <style> block with a scope class.
+ * Handles @media, @supports recursively. Keeps @keyframes/@font-face intact.
+ */
+function _prefixCssRules(css, prefix) {
+  let out = '', i = 0;
+  while (i < css.length) {
+    const ob = css.indexOf('{', i);
+    if (ob === -1) { out += css.slice(i); break; }
+    const seg = css.slice(i, ob).trimStart();
+    if (/^@(keyframes|font-face|import|charset|namespace)/i.test(seg)) {
+      // Pass through verbatim including its whole block
+      out += css.slice(i, ob + 1);
+      i = ob + 1;
+      let d = 1, j = i;
+      while (j < css.length && d) { if(css[j]==='{')d++;else if(css[j]==='}')d--; j++; }
+      out += css.slice(i, j); i = j;
+    } else if (/^@/i.test(seg)) {
+      // @media, @supports — keep rule header, recurse into body
+      out += seg + '{';
+      i = ob + 1;
+      let d = 1, j = i;
+      while (j < css.length && d) { if(css[j]==='{')d++;else if(css[j]==='}')d--; j++; }
+      out += _prefixCssRules(css.slice(i, j - 1), prefix) + '}';
+      i = j;
+    } else {
+      // Regular selector block
+      const scoped = seg.split(',').map(s => {
+        s = s.trim();
+        if (!s) return s;
+        if (s === ':root' || s === 'html' || s === 'body') return prefix;
+        if (/^(html|body)\s+/.test(s)) return prefix + ' ' + s.replace(/^(html|body)\s+/, '');
+        return prefix + ' ' + s;
+      }).join(', ');
+      out += scoped + '{';
+      i = ob + 1;
+      let d = 1, j = i;
+      while (j < css.length && d) { if(css[j]==='{')d++;else if(css[j]==='}')d--; j++; }
+      out += css.slice(i, j); i = j;
+    }
+  }
+  return out;
+}
+
+/**
+ * Parse banner HTML, scope any <style> tags to a unique class,
+ * sanitize dangerous tags/attrs, and return a scoped container element.
+ */
+function _buildScopedBanner(rawHtml, scopeId) {
+  const cls = 'sv-ab-' + (scopeId || Math.random().toString(36).slice(2, 9));
+  try {
+    const doc = new DOMParser().parseFromString(rawHtml, 'text/html');
+    // Scope CSS
+    doc.querySelectorAll('style').forEach(s => {
+      s.textContent = _prefixCssRules(s.textContent, '.' + cls);
+    });
+    // Sanitize
+    doc.querySelectorAll('script,iframe,object,embed,form,meta,link').forEach(n => n.remove());
+    doc.querySelectorAll('*').forEach(node => {
+      for (const attr of [...node.attributes]) {
+        if (/^on/i.test(attr.name) || (attr.name === 'href' && /^javascript:/i.test(attr.value.trim()))) {
+          node.removeAttribute(attr.name);
+        }
+      }
+    });
+    const wrap = document.createElement('div');
+    wrap.className = cls;
+    for (const child of doc.body.childNodes) wrap.appendChild(document.importNode(child, true));
+    return wrap;
+  } catch (_) {
+    const div = document.createElement('div');
+    div.textContent = rawHtml;
+    return div;
+  }
+}
+
 function previewBanner() {
   const html = document.getElementById('ac-banner-html').value;
   const prev = document.getElementById('ac-banner-preview');
   prev.style.display = 'block';
-  prev.innerHTML = html;
+  prev.innerHTML = '';
+  prev.appendChild(_buildScopedBanner(html, 'preview'));
 }
 
 function copyVastUrl() {
