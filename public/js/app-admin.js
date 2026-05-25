@@ -2568,7 +2568,7 @@ async function savePlatformAds({ silent = false } = {}) {
     });
 
     if (r.ok) {
-      if (!silent) toast(enabled ? '✅ Platform Ads activados' : 'Platform Ads guardados');
+      if (!silent) toast(enabled ? 'Platform Ads activados' : 'Platform Ads guardados');
     } else {
       toast('Error al guardar Platform Ads', 'error');
     }
@@ -2825,7 +2825,7 @@ async function saveAdCreative() {
       document.getElementById('ac-use-platform-btn').style.display = 'inline-flex';
     }
 
-    toast(id ? 'Creativo actualizado ✅' : 'Creativo creado ✅');
+    toast(id ? 'Creativo actualizado' : 'Creativo creado');
     await loadAdLibrary();
   } catch (e) {
     toast('Error de conexión', 'error');
@@ -2883,7 +2883,7 @@ async function useCreativeAsPlatformAdDirect(id) {
     const updated = { ...current, ad, enabled: true };
     const sr = await api('/api/admin/platform-ads', { method: 'PUT', body: JSON.stringify(updated) });
     if (sr.ok) {
-      toast(`✅ "${c.name}" activado como Platform Ad`);
+      toast(`"${c.name}" activado como Platform Ad`);
       closeModal('ad-creative-modal');
     } else {
       toast('Error al aplicar como Platform Ad', 'error');

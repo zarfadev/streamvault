@@ -44,7 +44,7 @@ async function initSvCaptcha() {
 
   // Reset visual
   piece.style.left = '2px';
-  piece.style.background = 'linear-gradient(135deg,#7c6cfa,#22d3a5)';
+  piece.style.background = 'linear-gradient(135deg,#7c6cfa,#5b4fd4)';
   piece.style.boxShadow = '0 4px 14px rgba(124,108,250,.5)';
   piece.style.cursor = 'grab';
   piece.style.transition = '';
@@ -131,7 +131,7 @@ async function initSvCaptcha() {
       status.style.color = '#ef4444';
       setTimeout(() => {
         piece.style.left = '2px';
-        piece.style.background = 'linear-gradient(135deg,#7c6cfa,#22d3a5)';
+        piece.style.background = 'linear-gradient(135deg,#7c6cfa,#5b4fd4)';
         piece.style.boxShadow = '0 4px 14px rgba(124,108,250,.5)';
         status.textContent = 'Desliza de nuevo';
         status.style.color = 'var(--muted)';
