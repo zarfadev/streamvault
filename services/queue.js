@@ -56,7 +56,7 @@ function makeBullQueue(name) {
     },
     defaultJobOptions: {
       attempts:          3,
-      timeout:           3_600_000, // 1 hour max per job
+      timeout:           6 * 3_600_000, // 6 horas max por job (videos grandes de 4-10GB pueden exceder 1hr)
       backoff:           { type: 'exponential', delay: 10_000 },
       removeOnComplete:  100,
       removeOnFail:      200,

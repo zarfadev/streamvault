@@ -533,11 +533,13 @@ async function processVideo(videoId, inputPath, title, options = {}) {
   let effectiveInputPath = inputPath;
   let tempSourcePath     = null;
   if (s3SourceKey) {
-    const os  = require('os');
     const ext = path.extname(s3SourceKey) || path.extname(inputPath || '') || '.mp4';
-    tempSourcePath     = path.join(os.tmpdir(), `sv-src-${videoId}${ext}`);
+    // Usar outputDir en lugar de /tmp para evitar llenar tmpfs en archivos grandes (4-10GB).
+    // El volumen sv_videos tiene más espacio disponible que el tmpfs del contenedor.
+    fs.mkdirSync(outputDir, { recursive: true });
+    tempSourcePath     = path.join(outputDir, `_source${ext}`);
     effectiveInputPath = tempSourcePath;
-    logger.info({ videoId, s3SourceKey }, 'Downloading source from S3');
+    logger.info({ videoId, s3SourceKey, tempSourcePath }, 'Downloading source from S3 to outputDir');
     await s3.downloadSourceFile(s3SourceKey, tempSourcePath);
     logger.info({ videoId, tempSourcePath }, 'Source downloaded — starting transcode');
   }
@@ -674,33 +676,44 @@ async function processVideo(videoId, inputPath, title, options = {}) {
 
     await onProgress(75);
 
-    // ── Phase 2: secondary qualities in background (non-blocking) ───────────────
+    // ── Phase 2: secondary qualities secuenciales (menor a mayor calidad) ───────
+    // Secuencial en lugar de paralelo para evitar:
+    //   - Saturación de CPU/RAM con múltiples FFmpeg simultáneos en videos grandes (4-10GB)
+    //   - Llenado de disco con varios outputs escritos en paralelo
+    //   - Timeouts del job por exceso de uso de recursos concurrentes
+    // Cada calidad usa todos los hilos disponibles (0 = auto), lo que es más rápido
+    // que el enfoque anterior de dividir hilos entre procesos paralelos.
+    // Orden: de menor a mayor calidad (360p → 480p → 1080p) — el usuario ve mejoras
+    // progresivas en la UI mientras el primario (720p) ya está disponible.
     if (secondaryPresets.length) {
-      const secThreads = Math.max(2, Math.floor(totalCpus / secondaryPresets.length));
-      await Promise.all(secondaryPresets.map(preset =>
-        transcodeQuality(effectiveInputPath, outputDir, preset, info, keyInfoPath, () => {}, secThreads)
-          .then(async name => {
-            done.push(name);
-            // Update qualities list as each one finishes
-            await db.prepare(`UPDATE videos SET qualities=? WHERE id=?`).run(JSON.stringify(done), videoId);
-            await rebuildMasterPlaylist(videoId, done).catch(() => {});
-            logger.info({ videoId, quality: name, total: done.length }, 'Secondary quality ready');
-            // Upload each secondary quality to S3 immediately so the segments
-            // are safely stored even if the final uploadVideoDirectory fails
-            // for large videos (OOM, network timeout, etc.).
-            // We don't update hls_cdn_url or master.m3u8 here — only segments.
-            if (s3.isS3Enabled()) {
-              const qualDir = path.join(outputDir, name);
-              try {
-                await s3.uploadQualityDir(qualDir, workspaceId, videoId, name);
-                logger.info({ videoId, quality: name }, 'Secondary quality uploaded to S3 incrementally');
-              } catch (e) {
-                logger.warn({ videoId, quality: name, err: e.message }, 'Incremental S3 upload for secondary quality failed — will retry in final sync');
-              }
+      // Ordenar de menor a mayor resolución
+      const sortedSecondary = [...secondaryPresets].sort((a, b) => a.height - b.height);
+      // Cada calidad usa todos los CPUs disponibles (0 = FFmpeg auto)
+      const secThreads = 0;
+
+      for (const preset of sortedSecondary) {
+        try {
+          const name = await transcodeQuality(effectiveInputPath, outputDir, preset, info, keyInfoPath, () => {}, secThreads);
+          done.push(name);
+          // Actualizar lista de calidades disponibles en DB
+          await db.prepare(`UPDATE videos SET qualities=? WHERE id=?`).run(JSON.stringify(done), videoId);
+          await rebuildMasterPlaylist(videoId, done).catch(() => {});
+          logger.info({ videoId, quality: name, total: done.length }, 'Secondary quality ready');
+          // Subir cada calidad a S3 inmediatamente para proteger contra fallos tardíos
+          // (OOM, timeout de red, etc.) en el upload final
+          if (s3.isS3Enabled()) {
+            const qualDir = path.join(outputDir, name);
+            try {
+              await s3.uploadQualityDir(qualDir, workspaceId, videoId, name);
+              logger.info({ videoId, quality: name }, 'Secondary quality uploaded to S3 incrementally');
+            } catch (e) {
+              logger.warn({ videoId, quality: name, err: e.message }, 'Incremental S3 upload failed — se reintentará en sync final');
             }
-          })
-          .catch(err => logger.error({ videoId, preset: preset.name, err: err.message }, 'Secondary quality transcode failed'))
-      ));
+          }
+        } catch (err) {
+          logger.error({ videoId, preset: preset.name, err: err.message }, 'Secondary quality transcode failed — continuando con las siguientes');
+        }
+      }
     }
 
     // ── Clean up key files now that ALL qualities are encoded ───────────────────

@@ -36,6 +36,7 @@ function hlsXhrSetup(xhr, url) {
 
 // ─── State ──────────────────────────────────────────────────
 let videoData = null, hls = null, levels = [], currentLevel = -1;
+let _hlsSourceUrl = null; // URL real del m3u8 — necesaria para AirPlay (Apple TV no admite blob://)
 let currentSpeed = 1, hideUiTimer = null, spriteMeta = null, spriteImg = null;
 let audioTracks = [], currentAudioTrack = -1;
 // Flag: HLS manifest parsed — quality button/settings gear only visible after this
@@ -496,15 +497,26 @@ function _doCastConnect() {
 }
 
 function checkAirPlay() {
+  const btn = document.getElementById('airplay-btn');
+  if (!btn) return;
   if (window.WebKitPlaybackTargetAvailabilityEvent) {
+    // Safari: el evento notifica cuándo hay dispositivos AirPlay disponibles en la red
     video.addEventListener('webkitplaybacktargetavailabilitychanged', e => {
-      document.getElementById('airplay-btn').style.display = e.availability === 'available' ? 'inline-flex' : 'none';
+      btn.style.display = e.availability === 'available' ? 'inline-flex' : 'none';
     });
   } else if (video.webkitShowPlaybackTargetPicker) {
-    document.getElementById('airplay-btn').style.display = 'inline-flex';
+    // Safari desktop más antiguo o Safari en iOS: mostrar siempre si la API existe
+    btn.style.display = 'inline-flex';
   }
 }
-function triggerAirPlay() { video.webkitShowPlaybackTargetPicker?.(); }
+function triggerAirPlay() {
+  // Nota: con HLS.js el video usa MSE (blob://). Antes de abrir el picker,
+  // no hacemos switch todavía — el switch ocurre via webkitcurrentplaybacktargetiswirelesschanged
+  // cuando el usuario selecciona un dispositivo AirPlay.
+  if (video.webkitShowPlaybackTargetPicker) {
+    video.webkitShowPlaybackTargetPicker();
+  }
+}
 
 // ─── Speed ───────────────────────────────────────────────────
 function setSpeed(v) {
@@ -1308,6 +1320,8 @@ function applySubStyle() {
 
 // ─── HLS init ────────────────────────────────────────────────
 function initHls(m3u8Url) {
+  _hlsSourceUrl = m3u8Url; // guardar para AirPlay (necesita URL real, no blob://)
+
   if (Hls.isSupported()) {
     hls = new Hls({
       enableWorker: true, lowLatencyMode: false,
@@ -1319,6 +1333,35 @@ function initHls(m3u8Url) {
     });
     hls.loadSource(m3u8Url);
     hls.attachMedia(video);
+
+    // ── AirPlay + HLS.js: Apple TV no puede recibir blob:// de MSE ──────────
+    // Cuando AirPlay conecta, cambiamos a native src (URL real del m3u8).
+    // Cuando AirPlay desconecta, reenganchamos HLS.js para tener ABR, calidades, etc.
+    video.addEventListener('webkitcurrentplaybacktargetiswirelesschanged', function _onAirPlayChange() {
+      if (video.webkitCurrentPlaybackTargetIsWireless) {
+        // AirPlay conectado → switch a native HLS para que Apple TV pueda reproducir
+        const pos    = video.currentTime;
+        const paused = video.paused;
+        hls.stopLoad();
+        hls.detachMedia();
+        video.src = _hlsSourceUrl;
+        video.load();
+        video.currentTime = pos;
+        if (!paused) video.play().catch(() => {});
+        logger.debug && logger.debug('AirPlay: switched to native HLS src');
+      } else {
+        // AirPlay desconectado → re-enganchar HLS.js
+        const pos = video.currentTime;
+        video.src = '';
+        hls.attachMedia(video);
+        hls.loadSource(_hlsSourceUrl);
+        hls.once(Hls.Events.MANIFEST_PARSED, () => {
+          video.currentTime = pos;
+          video.play().catch(() => {});
+        });
+        logger.debug && logger.debug('AirPlay: re-attached HLS.js');
+      }
+    }, { once: false });
 
     // Thumb seek video (lowest quality for previews)
     if (!spriteMeta) {
