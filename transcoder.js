@@ -51,6 +51,17 @@ const QUALITY_PRESETS = [
   { name: '4k',    height: 2160, vbr: '16000k', abr: '320k', profile: 'high'     },
 ];
 
+// Parse bitrate safely: '700k' → 700, '1.2m' → 1200, plain numbers also accepted
+function parseBitrateKbps(vbrStr) {
+  const s = String(vbrStr || '0').trim().toLowerCase();
+  const num = parseFloat(s);
+  if (isNaN(num)) return 0;
+  if (s.endsWith('m')) return Math.round(num * 1000);
+  if (s.endsWith('g')) return Math.round(num * 1000000);
+  // ends with 'k' or no suffix — value is already in kbps
+  return Math.round(num);
+}
+
 function probeVideo(inputPath) {
   return new Promise((resolve, reject) => {
     ffmpeg.ffprobe(inputPath, (err, metadata) => {
@@ -94,16 +105,6 @@ function transcodeQuality(inputPath, outputDir, preset, videoInfo, keyInfoPath, 
     // sc_threshold 0 disables mid-segment forced keyframes on scene changes —
     // critical for anime which has hundreds of cuts per minute.
     const gopSize  = Math.max(1, Math.round(sourceFps * HLS_TIME));
-    // Parse bitrate safely: '700k' → 700, '1.2m' → 1200, plain numbers also accepted
-    function parseBitrateKbps(vbrStr) {
-      const s = String(vbrStr || '0').trim().toLowerCase();
-      const num = parseFloat(s);
-      if (isNaN(num)) return 0;
-      if (s.endsWith('m')) return Math.round(num * 1000);
-      if (s.endsWith('g')) return Math.round(num * 1000000);
-      // ends with 'k' or no suffix — value is already in kbps
-      return Math.round(num);
-    }
     const vbrKbps = parseBitrateKbps(preset.vbr);
 
     const opts = [
@@ -148,6 +149,134 @@ function transcodeQuality(inputPath, outputDir, preset, videoInfo, keyInfoPath, 
 
     trackProcess(cmd);
     cmd.run();
+  });
+}
+
+/**
+ * transcodeMultiQuality — single FFmpeg pass, multiple HLS outputs.
+ *
+ * Reads the source file ONCE and encodes all requested quality presets
+ * simultaneously via filter_complex + split. This is 2-4× faster than
+ * running separate FFmpeg processes because:
+ *   • Heavy disk I/O (reading a 4–10 GB source) happens only once.
+ *   • The decode step is shared across all outputs.
+ *   • Total wall-clock time ≈ time to encode the SLOWEST (highest) quality,
+ *     not the SUM of all qualities.
+ *
+ * @param {string}   inputPath   — local source file
+ * @param {string}   outputDir   — base videos/{videoId}/ directory
+ * @param {object[]} presets     — array of QUALITY_PRESETS entries (2+ for any benefit)
+ * @param {object}   videoInfo   — probeVideo() result
+ * @param {string}   keyInfoPath — HLS AES-128 keyinfo file path (or null)
+ * @param {function} onProgress  — (fraction 0-1) progress callback
+ * @returns {Promise<string[]>}  — names of qualities that completed ('360p', '480p', …)
+ */
+function transcodeMultiQuality(inputPath, outputDir, presets, videoInfo, keyInfoPath, onProgress) {
+  return new Promise((resolve, reject) => {
+    const { spawn } = require('child_process');
+    const sourceFps  = videoInfo.fps    || 30;
+    const totalSecs  = videoInfo.duration || 0;
+    const HLS_TIME   = 4;
+    const gopSize    = Math.max(1, Math.round(sourceFps * HLS_TIME));
+    const keyintMin  = Math.max(1, Math.round(sourceFps / 2));
+    const N          = presets.length;
+
+    // ── filter_complex: split video stream N ways, scale each branch ─────────
+    const splitLabels  = presets.map((_, i) => `[v${i}raw]`).join('');
+    const splitFilter  = `[0:v]split=${N}${splitLabels}`;
+    const scaleFilters = presets.map((p, i) => {
+      const targetH = Math.min(p.height, videoInfo.height);
+      return `[v${i}raw]scale=-2:${targetH}:flags=fast_bilinear[v${i}out]`;
+    });
+    const filterComplex = [splitFilter, ...scaleFilters].join(';');
+
+    // ── Base FFmpeg args ──────────────────────────────────────────────────────
+    const args = [
+      '-hide_banner',
+      '-loglevel', 'warning',   // warnings + progress to stderr
+      '-stats',                  // show time= progress lines
+      '-i', inputPath,
+      '-filter_complex', filterComplex,
+    ];
+
+    // ── Per-output section ────────────────────────────────────────────────────
+    for (let i = 0; i < presets.length; i++) {
+      const p      = presets[i];
+      const vbrKbps = parseBitrateKbps(p.vbr);
+      const segDir  = path.join(outputDir, p.name);
+      fs.mkdirSync(segDir, { recursive: true });
+
+      args.push(
+        // Stream mapping
+        '-map', `[v${i}out]`,
+        '-map', '0:a:0?',          // '?' makes audio optional (video-only files)
+        // Video codec
+        '-c:v',          'libx264',
+        '-profile:v',    p.profile,
+        '-preset',       'ultrafast',
+        '-tune',         'fastdecode',
+        '-b:v',          p.vbr,
+        `-maxrate`,      `${Math.round(vbrKbps * 1.5)}k`,
+        `-bufsize`,      `${Math.round(vbrKbps * 2)}k`,
+        '-pix_fmt',      'yuv420p',
+        '-sc_threshold', '0',
+        '-g',            String(gopSize),
+        '-keyint_min',   String(keyintMin),
+        '-bf',           '0',
+        // Audio codec
+        '-c:a',   'aac',
+        '-b:a',   p.abr,
+        '-ar',    '48000',
+        // HLS muxer options
+        '-hls_time',             String(HLS_TIME),
+        '-hls_playlist_type',    'vod',
+        '-hls_segment_filename', path.join(segDir, 'seg%03d.ts'),
+        '-hls_flags',            'independent_segments',
+      );
+      // AES-128 encryption (per-output)
+      if (keyInfoPath) args.push('-hls_key_info_file', keyInfoPath);
+      args.push('-f', 'hls', path.join(segDir, 'index.m3u8'));
+    }
+
+    logger.info({ presets: presets.map(p => p.name), args: args.join(' ').slice(0, 400) },
+      '[transcoder] transcodeMultiQuality — launching FFmpeg');
+
+    const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+
+    // Register in the active-process set so graceful shutdown can kill it.
+    // ChildProcess.kill() has the same signature as fluent-ffmpeg's .kill(),
+    // so the killAllFFmpeg() loop works without changes.
+    _activeProcesses.add(proc);
+
+    let stderrBuf = '';
+    proc.stderr.on('data', chunk => {
+      const text = chunk.toString();
+      stderrBuf += text;
+      // Parse progress: "time=HH:MM:SS.ms" emitted by -stats
+      if (onProgress && totalSecs > 0) {
+        const m = text.match(/time=(\d+):(\d+):([\d.]+)/);
+        if (m) {
+          const secs = parseInt(m[1], 10) * 3600 + parseInt(m[2], 10) * 60 + parseFloat(m[3]);
+          onProgress(Math.min(1, secs / totalSecs));
+        }
+      }
+    });
+
+    proc.on('close', code => {
+      _activeProcesses.delete(proc);
+      if (code === 0) {
+        logger.info({ presets: presets.map(p => p.name) }, '[transcoder] transcodeMultiQuality — done');
+        resolve(presets.map(p => p.name));
+      } else {
+        const tail = stderrBuf.slice(-3000);
+        reject(new Error(`FFmpeg multi-output exited with code ${code}\n${tail}`));
+      }
+    });
+
+    proc.on('error', err => {
+      _activeProcesses.delete(proc);
+      reject(err);
+    });
   });
 }
 
@@ -676,42 +805,77 @@ async function processVideo(videoId, inputPath, title, options = {}) {
 
     await onProgress(75);
 
-    // ── Phase 2: secondary qualities secuenciales (menor a mayor calidad) ───────
-    // Secuencial en lugar de paralelo para evitar:
-    //   - Saturación de CPU/RAM con múltiples FFmpeg simultáneos en videos grandes (4-10GB)
-    //   - Llenado de disco con varios outputs escritos en paralelo
-    //   - Timeouts del job por exceso de uso de recursos concurrentes
-    // Cada calidad usa todos los hilos disponibles (0 = auto), lo que es más rápido
-    // que el enfoque anterior de dividir hilos entre procesos paralelos.
-    // Orden: de menor a mayor calidad (360p → 480p → 1080p) — el usuario ve mejoras
-    // progresivas en la UI mientras el primario (720p) ya está disponible.
+    // ── Phase 2: secondary qualities — single FFmpeg multi-output pass ───────────
+    // transcodeMultiQuality reads the source file ONCE and encodes all secondary
+    // qualities simultaneously using filter_complex + split. For a 4-10 GB source
+    // this eliminates repeated disk reads, cutting total Phase 2 time from
+    // Σ(each quality) down to ≈ max(each quality) — typically 2-4× faster.
+    //
+    // On failure (e.g. OOM on very large files) we automatically fall back to the
+    // proven sequential approach so the video still completes successfully.
     if (secondaryPresets.length) {
-      // Ordenar de menor a mayor resolución
       const sortedSecondary = [...secondaryPresets].sort((a, b) => a.height - b.height);
-      // Cada calidad usa todos los CPUs disponibles (0 = FFmpeg auto)
-      const secThreads = 0;
 
-      for (const preset of sortedSecondary) {
+      let multiOutputSucceeded = false;
+
+      if (sortedSecondary.length >= 2) {
+        // ── FAST PATH: one FFmpeg process, all secondary qualities at once ────
         try {
-          const name = await transcodeQuality(effectiveInputPath, outputDir, preset, info, keyInfoPath, () => {}, secThreads);
-          done.push(name);
-          // Actualizar lista de calidades disponibles en DB
+          logger.info({ videoId, qualities: sortedSecondary.map(p => p.name) },
+            '[transcoder] Phase 2 — multi-output FFmpeg (single read)');
+          const names = await transcodeMultiQuality(
+            effectiveInputPath, outputDir, sortedSecondary, info, keyInfoPath, () => {}
+          );
+          done.push(...names);
+          multiOutputSucceeded = true;
+
+          // Update DB + rebuild playlist with all new qualities at once
           await db.prepare(`UPDATE videos SET qualities=? WHERE id=?`).run(JSON.stringify(done), videoId);
           await rebuildMasterPlaylist(videoId, done).catch(() => {});
-          logger.info({ videoId, quality: name, total: done.length }, 'Secondary quality ready');
-          // Subir cada calidad a S3 inmediatamente para proteger contra fallos tardíos
-          // (OOM, timeout de red, etc.) en el upload final
+          logger.info({ videoId, qualities: names, total: done.length }, 'All secondary qualities ready (multi-output)');
+
+          // Upload all new quality dirs to S3 in parallel
           if (s3.isS3Enabled()) {
-            const qualDir = path.join(outputDir, name);
-            try {
-              await s3.uploadQualityDir(qualDir, workspaceId, videoId, name);
-              logger.info({ videoId, quality: name }, 'Secondary quality uploaded to S3 incrementally');
-            } catch (e) {
-              logger.warn({ videoId, quality: name, err: e.message }, 'Incremental S3 upload failed — se reintentará en sync final');
-            }
+            await Promise.all(names.map(async name => {
+              try {
+                await s3.uploadQualityDir(path.join(outputDir, name), workspaceId, videoId, name);
+                logger.info({ videoId, quality: name }, 'Secondary quality uploaded to S3 (multi-output batch)');
+              } catch (e) {
+                logger.warn({ videoId, quality: name, err: e.message }, 'S3 upload of secondary quality failed — se reintentará en sync final');
+              }
+            }));
           }
         } catch (err) {
-          logger.error({ videoId, preset: preset.name, err: err.message }, 'Secondary quality transcode failed — continuando con las siguientes');
+          logger.warn({ videoId, err: err.message },
+            '[transcoder] Multi-output FFmpeg failed — falling back to sequential');
+          multiOutputSucceeded = false;
+        }
+      }
+
+      // ── FALLBACK / SINGLE SECONDARY: sequential encode, one quality at a time ─
+      if (!multiOutputSucceeded) {
+        logger.info({ videoId, qualities: sortedSecondary.map(p => p.name) },
+          '[transcoder] Phase 2 — sequential fallback');
+        for (const preset of sortedSecondary) {
+          // Skip qualities that already completed in the failed multi-output attempt
+          if (done.includes(preset.name)) continue;
+          try {
+            const name = await transcodeQuality(effectiveInputPath, outputDir, preset, info, keyInfoPath, () => {}, 0);
+            done.push(name);
+            await db.prepare(`UPDATE videos SET qualities=? WHERE id=?`).run(JSON.stringify(done), videoId);
+            await rebuildMasterPlaylist(videoId, done).catch(() => {});
+            logger.info({ videoId, quality: name, total: done.length }, 'Secondary quality ready (sequential)');
+            if (s3.isS3Enabled()) {
+              try {
+                await s3.uploadQualityDir(path.join(outputDir, name), workspaceId, videoId, name);
+                logger.info({ videoId, quality: name }, 'Secondary quality uploaded to S3 incrementally');
+              } catch (e) {
+                logger.warn({ videoId, quality: name, err: e.message }, 'Incremental S3 upload failed — se reintentará en sync final');
+              }
+            }
+          } catch (err) {
+            logger.error({ videoId, preset: preset.name, err: err.message }, 'Secondary quality transcode failed — continuando con las siguientes');
+          }
         }
       }
     }
