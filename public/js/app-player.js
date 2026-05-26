@@ -1356,6 +1356,35 @@ function applySubStyle() {
   document.head.appendChild(style);
 }
 
+// ─── Native audio track sync helper (iOS HLS) ────────────────
+// Called at loadedmetadata AND on addtrack events because iOS
+// sometimes exposes audio tracks after the initial metadata event.
+function _syncNativeAudioTracks() {
+  if (!video.audioTracks || video.audioTracks.length < 2) return;
+  audioTracks = [];
+  for (let i = 0; i < video.audioTracks.length; i++) {
+    const t = video.audioTracks[i];
+    audioTracks.push({ name: t.label || t.language || ('Pista ' + (i + 1)), lang: t.language || '' });
+    if (t.enabled) currentAudioTrack = i;
+  }
+  if (currentAudioTrack < 0) currentAudioTrack = 0;
+  // Restore saved audio preference
+  const savedLang = localStorage.getItem('sv_audio_' + videoId);
+  if (savedLang) {
+    for (let i = 0; i < video.audioTracks.length; i++) {
+      if (video.audioTracks[i].language === savedLang || video.audioTracks[i].label === savedLang) {
+        video.audioTracks[i].enabled = true;
+        currentAudioTrack = i;
+      } else {
+        video.audioTracks[i].enabled = (i === 0 && currentAudioTrack !== i) ? false : video.audioTracks[i].enabled;
+      }
+    }
+  }
+  // Show settings gear if we now have audio tracks
+  const sbtn = document.getElementById('settings-btn');
+  if (sbtn && sbtn.style.display === 'none') sbtn.style.display = '';
+}
+
 // ─── HLS init ────────────────────────────────────────────────
 function initHls(m3u8Url) {
   _hlsSourceUrl = m3u8Url; // guardar para AirPlay (necesita URL real, no blob://)
@@ -1509,36 +1538,27 @@ function initHls(m3u8Url) {
       if (sbtn) sbtn.style.display = '';
 
       // ── Native audio tracks (iOS exposes video.audioTracks) ─
-      // Map them into our audioTracks / currentAudioTrack state
-      // so renderSettingsMenu() can show the Audio section.
-      if (video.audioTracks && video.audioTracks.length > 1) {
-        audioTracks = [];
-        for (let i = 0; i < video.audioTracks.length; i++) {
-          const t = video.audioTracks[i];
-          audioTracks.push({ name: t.label || t.language || ('Pista ' + (i + 1)), lang: t.language || '' });
-          if (t.enabled) currentAudioTrack = i;
-        }
-        if (currentAudioTrack < 0) currentAudioTrack = 0;
-
-        // Restore saved audio preference
-        const savedLang = localStorage.getItem('sv_audio_' + videoId);
-        if (savedLang) {
-          for (let i = 0; i < video.audioTracks.length; i++) {
-            if (video.audioTracks[i].language === savedLang || video.audioTracks[i].label === savedLang) {
-              video.audioTracks[i].enabled = true;
-              currentAudioTrack = i;
-            } else {
-              video.audioTracks[i].enabled = false;
-            }
-          }
-        }
-      }
+      // HLS audio tracks may be available at loadedmetadata or may
+      // arrive later via addtrack events — handle both cases.
+      _syncNativeAudioTracks();
 
       _manifestReady = true;
       updateSettingsBadge();
       renderSettingsMenu();
       video.play().catch(() => {});
     });
+
+    // Listen for audio tracks added after loadedmetadata (common on iOS HLS)
+    if (video.audioTracks) {
+      video.audioTracks.addEventListener('addtrack', () => {
+        _syncNativeAudioTracks();
+        renderSettingsMenu();
+      });
+      video.audioTracks.addEventListener('removetrack', () => {
+        _syncNativeAudioTracks();
+        renderSettingsMenu();
+      });
+    }
 
     // ── Subtitles via our custom VTT overlay ────────────────────
     // loadSubtitles() fetches track list from API and starts VTT loop,

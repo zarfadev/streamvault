@@ -1800,3 +1800,30 @@ video::cue {
     max-height: min(58vh, calc(100dvh - 105px)) !important;
   }
 }
+
+/* ── iOS native fullscreen — forzar landscape con CSS ────────────
+   iOS ignora screen.orientation.lock() en Safari. Al entrar en
+   webkitEnterFullscreen el video se muestra en portrait.
+   La solución: rotar el contenedor del player 90° via transform
+   cuando iOS activa su player nativo (clase .ios-native-fs).
+   La clase se añade/quita desde app-player.js en webkitbeginfullscreen
+   y webkitendfullscreen.
+   ──────────────────────────────────────────────────────────────── */
+@supports (-webkit-touch-callout: none) {
+  /* Solo Safari/iOS */
+  .player-wrap.ios-native-fs {
+    /* Rotar el wrapper 90° para simular landscape dentro del player nativo */
+    transform: rotate(90deg) !important;
+    transform-origin: center center !important;
+    /* El player nativo ocupa todo el alto → usar ese alto como ancho */
+    width: 100vh !important;
+    height: 100vw !important;
+    /* Centrar en el viewport iOS */
+    position: fixed !important;
+    top: 50% !important;
+    left: 50% !important;
+    margin-top: -50vw !important;
+    margin-left: -50vh !important;
+    z-index: 9999 !important;
+  }
+}
