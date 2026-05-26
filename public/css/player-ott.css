@@ -1422,10 +1422,15 @@ html.embed-root, html.embed-root body {
 }
 .player-page .share-btn.primary:hover { background: rgba(var(--pv-accent-rgb), 0.25); }
 
-/* ─── Native cue — no background (our custom overlay handles display) ── */
+/* ─── Native cue — completely invisible ─────────────────────────────── */
+/* Our custom VTT overlay (#sv-subtitle-display) handles ALL subtitle     */
+/* rendering. Native cues must be invisible to prevent double-subtitle    */
+/* bugs, especially when exiting iOS native fullscreen (webkitEnterFS).   */
 video::cue {
-  background: transparent;
-  color: #fff; font-size: 1em; line-height: 1.5;
+  background: transparent !important;
+  color: transparent !important;
+  font-size: 0 !important;
+  opacity: 0 !important;
 }
 
 /* ─── Quality / audio badge buttons ─────────────────────────── */

@@ -253,14 +253,22 @@ video.addEventListener('webkitbeginfullscreen', () => {
 });
 
 video.addEventListener('webkitendfullscreen', () => {
-  // Re-show our custom overlay
-  if (_subDisplay) _subDisplay.style.display = '';
-  // Disable all native tracks to prevent the double-subtitle bug:
-  // the iOS player may leave the track in 'showing' mode after exit.
+  // Step 1: immediately clear the custom overlay to avoid showing stale cues
+  if (_subDisplay) _subDisplay.innerHTML = '';
+  // Step 2: disable all native tracks — iOS may leave them in 'showing' after exit
   disableAllNativeTracks();
-  // Restart VTT loop if a subtitle was active — it was paused while iOS player was open
-  if (ccKey && _vttCues.length > 0 && !_vttTimer) {
-    _startVttLoop();
+  // Step 3: restore overlay visibility
+  if (_subDisplay) _subDisplay.style.display = '';
+  // Step 4: give the browser a frame to process the track mode changes,
+  // then restart the VTT loop. Without the delay the loop may render one
+  // frame before disableAllNativeTracks() takes effect, causing a flash.
+  if (ccKey && _vttCues.length > 0) {
+    if (_vttTimer) { _vttTimer.cancel(); _vttTimer = null; }
+    _vttLastRendered = ''; // force re-render on next tick
+    setTimeout(() => {
+      disableAllNativeTracks(); // double-ensure tracks are hidden
+      _startVttLoop();
+    }, 80);
   }
 });
 
