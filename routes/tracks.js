@@ -427,8 +427,12 @@ async function rebuildMasterPlaylist(videoId) {
     for (const t of audioTracks) {
       const isDefault = !!t.default_track ? 'YES' : 'NO';
       const relPath   = path.relative(path.join(__dirname, '..', 'videos', videoId), t.src_path);
+      // Use absolute URI so Safari/iOS native player can resolve the audio track.
+      // Relative URIs work for HLS.js but iOS Safari native player (webkitEnterFullscreen)
+      // requires absolute URIs to display the audio track selector in its HUD.
+      const audioUri  = `${cfg.appUrl}/videos/${videoId}/${relPath}`;
       lines.push(
-        `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",LANGUAGE="${t.language}",NAME="${t.label}",DEFAULT=${isDefault},AUTOSELECT=${isDefault},URI="${relPath}"`
+        `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",LANGUAGE="${t.language}",NAME="${t.label}",DEFAULT=${isDefault},AUTOSELECT=${isDefault},URI="${audioUri}"`
       );
     }
   }
