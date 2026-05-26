@@ -189,6 +189,37 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);line-height:
 /* ── SEARCH HIDE ── */
 .ep-hidden{display:none!important}
 
+/* ── AUTH BADGE ── */
+.auth-badge{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;padding:3px 10px;border-radius:99px;letter-spacing:.5px;text-transform:uppercase}
+.auth-badge.needs-auth{background:rgba(239,68,68,.1);color:#ef4444;border:1px solid rgba(239,68,68,.2)}
+.auth-badge.public-ep{background:rgba(34,197,94,.1);color:#22c55e;border:1px solid rgba(34,197,94,.2)}
+
+/* ── ANCHOR COPY ── */
+.sec-title,.ep-path-text{position:relative}
+.anchor-btn{opacity:0;margin-left:8px;background:none;border:none;cursor:pointer;color:var(--muted);padding:2px;transition:opacity .15s;vertical-align:middle;display:inline-flex}
+.sec-title:hover .anchor-btn,.ep-title-row:hover .anchor-btn{opacity:1}
+.anchor-btn:hover{color:var(--accent2)}
+.anchor-copied{color:var(--accent2)!important;opacity:1!important}
+
+/* ── QUICK LOGIN (modal tab) ── */
+.modal-tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:18px;gap:0}
+.modal-tab{padding:8px 16px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;transition:all .2s}
+.modal-tab.active{color:var(--accent2);border-bottom-color:var(--accent)}
+.modal-pane{display:none}.modal-pane.active{display:block}
+.modal-status{font-size:12px;margin-top:10px;padding:8px 12px;border-radius:7px;display:none}
+.modal-status.ok{background:rgba(34,197,94,.1);color:#22c55e;border:1px solid rgba(34,197,94,.2);display:block}
+.modal-status.err{background:rgba(239,68,68,.1);color:#ef4444;border:1px solid rgba(239,68,68,.2);display:block}
+
+/* ── RESPONSE EXAMPLE ── */
+.resp-ex{margin-top:0}
+.resp-code-header{display:flex;align-items:center;gap:8px;padding:10px 20px;border-bottom:1px solid rgba(255,255,255,.06);font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--muted)}
+.resp-code-pill{font-family:var(--mono);font-size:11px;font-weight:700;padding:2px 8px;border-radius:5px}
+.rp-200{background:rgba(34,197,94,.15);color:#22c55e}
+.rp-201{background:rgba(59,130,246,.15);color:#3b82f6}
+.rp-202{background:rgba(234,179,8,.15);color:#eab308}
+.rp-204{background:rgba(94,234,212,.15);color:#2dd4bf}
+.rp-err{background:rgba(239,68,68,.15);color:#ef4444}
+
 /* ── RESPONSIVE ── */
 @media(max-width:1100px){
   .ep-row{grid-template-columns:1fr}
@@ -235,19 +266,39 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);line-height:
 <div class="modal-bg" id="auth-modal">
   <div class="modal">
     <h3><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg> Autorizar Peticiones</h3>
-    <p>Ingresa tu API Key o JWT token para hacer pruebas en vivo directamente desde esta documentación.</p>
-    <label>API Key o JWT Token</label>
-    <input type="password" id="inp-token" placeholder="sv_live_... o eyJhbGciOi...">
-    <label>Workspace ID</label>
-    <input type="text" id="inp-ws" placeholder="Tu ID de workspace">
-    <div class="modal-actions">
-      <button class="btn btn-primary" onclick="saveAuth()">Guardar</button>
-      <button class="btn btn-ghost" onclick="clearAuth()">Limpiar</button>
-      <button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>
+    <div class="modal-tabs">
+      <button class="modal-tab active" onclick="switchModalTab(this,'pane-key')">API Key / JWT</button>
+      <button class="modal-tab" onclick="switchModalTab(this,'pane-login')">Login Rápido</button>
     </div>
-    <div class="callout c-tip" style="margin-top:14px;font-size:12px">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-      <span>Tus credenciales se guardan solo en tu navegador y nunca se envían a terceros.</span>
+    <!-- Pane 1: manual key -->
+    <div class="modal-pane active" id="pane-key">
+      <p style="font-size:13px;color:var(--muted);margin-bottom:4px">Pega tu API Key o token JWT para probar endpoints directamente.</p>
+      <label>API Key o JWT Token</label>
+      <input type="password" id="inp-token" placeholder="sv_live_... o eyJhbGciOi...">
+      <label>Workspace ID</label>
+      <input type="text" id="inp-ws" placeholder="Tu ID de workspace">
+      <div class="modal-actions">
+        <button class="btn btn-primary" onclick="saveAuth()">Guardar</button>
+        <button class="btn btn-ghost" onclick="clearAuth()">Limpiar</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>
+      </div>
+      <div class="callout c-tip" style="margin-top:14px;font-size:12px">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span>Tus credenciales se guardan solo en tu navegador y nunca se envían a terceros.</span>
+      </div>
+    </div>
+    <!-- Pane 2: quick login -->
+    <div class="modal-pane" id="pane-login">
+      <p style="font-size:13px;color:var(--muted);margin-bottom:4px">Inicia sesión con tu cuenta para obtener un JWT automáticamente.</p>
+      <label>Email</label>
+      <input type="email" id="inp-email" placeholder="tu@email.com">
+      <label>Contraseña</label>
+      <input type="password" id="inp-pass" placeholder="••••••••">
+      <div class="modal-actions">
+        <button class="btn btn-primary" onclick="quickLogin()">Iniciar Sesión</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>
+      </div>
+      <div id="login-status"></div>
     </div>
   </div>
 </div>
@@ -328,6 +379,13 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);line-height:
 
   <div class="sb-section">Sistema</div>
   <a class="sb-link" href="#health"><span class="sb-badge m-get">GET</span> Health</a>
+
+  <div class="sb-section">Guías</div>
+  <a class="sb-link" href="#pagination">Paginación</a>
+  <a class="sb-link" href="#rate-limits">Rate Limits</a>
+  <a class="sb-link" href="#webhook-payloads">Payloads Webhook</a>
+  <a class="sb-link" href="#sdk">SDK / Librerías</a>
+  <a class="sb-link" href="#changelog">Changelog</a>
 </aside>
 
 <div class="content-wrap">
@@ -1205,6 +1263,380 @@ form.append(<span class="str">'title'</span>, <span class="str">'Demo'</span>);
   </div>
 </div>
 
+<!-- ════ PAGINACIÓN ════ -->
+<div class="ep-row" id="pagination">
+  <div class="ep-left">
+    <div class="sec-label">Guías</div>
+    <div class="sec-title">Paginación por Cursor</div>
+    <p class="sec-desc">La API usa paginación basada en cursor (no por página). Esto garantiza resultados consistentes incluso cuando se agregan o eliminan elementos.</p>
+    <div class="callout c-info" style="margin-top:16px">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+      <span>El campo <code>nextCursor</code> devuelto es opaco — no lo modifiques, úsalo tal cual en la siguiente petición.</span>
+    </div>
+    <div class="params-heading" style="margin-top:20px">Flujo de paginación</div>
+    <div style="font-size:13px;color:var(--muted);line-height:1.8;margin-top:8px">
+      <p style="margin-bottom:8px"><strong>1.</strong> Primera petición — sin cursor:</p>
+      <code style="font-size:12px;background:var(--surface2);padding:4px 8px;border-radius:5px;display:block;margin-bottom:12px">GET /api/videos?limit=20</code>
+      <p style="margin-bottom:8px"><strong>2.</strong> Respuesta incluye <code>nextCursor</code> si hay más resultados:</p>
+      <code style="font-size:12px;background:var(--surface2);padding:4px 8px;border-radius:5px;display:block;margin-bottom:12px">{ "videos": [...], "nextCursor": "eyJpZCI6...", "hasMore": true }</code>
+      <p style="margin-bottom:8px"><strong>3.</strong> Siguiente página — pasa el cursor:</p>
+      <code style="font-size:12px;background:var(--surface2);padding:4px 8px;border-radius:5px;display:block">GET /api/videos?limit=20&amp;cursor=eyJpZCI6...</code>
+    </div>
+  </div>
+  <div class="ep-right">
+    <div class="rp-section">
+      <div class="rp-label">Ejemplo completo en JavaScript</div>
+      <div class="rp-code">
+        <button class="rp-copy" onclick="copyRp(this)">Copiar</button>
+        <pre class="rp-pre active"><span class="cm">// Obtener todos los videos con paginación automática</span>
+<span class="kw">async function</span> getAllVideos() {
+  <span class="kw">let</span> cursor = <span class="kw">null</span>;
+  <span class="kw">const</span> allVideos = [];
+
+  <span class="kw">do</span> {
+    <span class="kw">const</span> url = <span class="str">`BASE_URL/api/videos?limit=50`</span>
+      + (cursor ? <span class="str">`&amp;cursor=${cursor}`</span> : <span class="str">''</span>);
+
+    <span class="kw">const</span> res = <span class="kw">await</span> fetch(url, {
+      headers: { <span class="str">'Authorization'</span>: <span class="str">'Bearer sv_live_KEY'</span>,
+                 <span class="str">'X-Workspace-Id'</span>: <span class="str">'WS_ID'</span> }
+    });
+    <span class="kw">const</span> data = <span class="kw">await</span> res.json();
+
+    allVideos.push(...data.videos);
+    cursor = data.nextCursor;
+  } <span class="kw">while</span> (cursor);
+
+  <span class="kw">return</span> allVideos;
+}</pre>
+      </div>
+    </div>
+    <div class="rp-section" style="padding-top:16px">
+      <div class="rp-label">Respuesta paginada</div>
+      <div class="rp-code">
+        <pre class="rp-pre active">{
+  <span class="str">"videos"</span>: [ ... ],
+  <span class="str">"nextCursor"</span>: <span class="str">"eyJpZCI6MTIzfQ=="</span>,
+  <span class="str">"hasMore"</span>: <span class="kw">true</span>,
+  <span class="str">"total"</span>: <span class="num">847</span>
+}</pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════ RATE LIMITS ════ -->
+<div class="ep-row" id="rate-limits">
+  <div class="ep-left">
+    <div class="sec-label">Guías</div>
+    <div class="sec-title">Rate Limits</div>
+    <p class="sec-desc">Todos los endpoints están sujetos a límites de tasa. Los headers de respuesta indican el estado actual.</p>
+    <table class="resp-table" style="margin-top:18px">
+      <thead><tr><th>Endpoint</th><th>Límite</th><th>Ventana</th></tr></thead>
+      <tbody>
+        <tr><td>General</td><td>100 req</td><td>1 minuto</td></tr>
+        <tr><td><code>/api/upload</code></td><td>10 req</td><td>1 minuto</td></tr>
+        <tr><td><code>/auth/*</code></td><td>5 req</td><td>1 minuto</td></tr>
+        <tr><td><code>/api/videos/:id/views</code></td><td>1 req / IP / video</td><td>10 segundos</td></tr>
+        <tr><td><code>analytics/export.csv</code></td><td>5 req</td><td>1 minuto</td></tr>
+      </tbody>
+    </table>
+    <div class="callout c-warn" style="margin-top:16px">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span>Cuando se excede el límite se retorna <span class="rc r4" style="margin:0 4px">429</span> con header <code>Retry-After: N</code> indicando cuántos segundos esperar.</span>
+    </div>
+  </div>
+  <div class="ep-right">
+    <div class="rp-section">
+      <div class="rp-label">Headers de Rate Limit en la respuesta</div>
+      <div class="rp-code">
+        <pre class="rp-pre active">HTTP/1.1 <span class="num">200</span> OK
+X-RateLimit-Limit: <span class="num">100</span>
+X-RateLimit-Remaining: <span class="num">87</span>
+X-RateLimit-Reset: <span class="num">1716000060</span>
+
+<span class="cm"># Cuando se excede:</span>
+HTTP/1.1 <span class="num">429</span> Too Many Requests
+Retry-After: <span class="num">43</span>
+X-RateLimit-Limit: <span class="num">100</span>
+X-RateLimit-Remaining: <span class="num">0</span></pre>
+      </div>
+    </div>
+    <div class="rp-section" style="padding-top:16px">
+      <div class="rp-label">Manejo recomendado en código</div>
+      <div class="rp-code">
+        <button class="rp-copy" onclick="copyRp(this)">Copiar</button>
+        <pre class="rp-pre active"><span class="kw">async function</span> fetchWithRetry(url, opts, retries = <span class="num">3</span>) {
+  <span class="kw">const</span> res = <span class="kw">await</span> fetch(url, opts);
+
+  <span class="kw">if</span> (res.status === <span class="num">429</span> && retries > <span class="num">0</span>) {
+    <span class="kw">const</span> wait = (res.headers.get(<span class="str">'Retry-After'</span>) || <span class="num">5</span>) * <span class="num">1000</span>;
+    <span class="kw">await new</span> Promise(r => setTimeout(r, wait));
+    <span class="kw">return</span> fetchWithRetry(url, opts, retries - <span class="num">1</span>);
+  }
+
+  <span class="kw">return</span> res;
+}</pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════ WEBHOOK PAYLOADS ════ -->
+<div class="ep-row" id="webhook-payloads">
+  <div class="ep-left">
+    <div class="sec-label">Guías</div>
+    <div class="sec-title">Payloads de Webhooks</div>
+    <p class="sec-desc">Todos los webhooks se envían como <code>POST</code> con <code>Content-Type: application/json</code> y header de firma <code>X-Webhook-Signature: sha256=HMAC(secret,rawBody)</code>.</p>
+    <div class="params-heading" style="margin-top:20px">Estructura común</div>
+    <div style="font-size:13px;color:var(--muted);line-height:1.8;margin-top:8px">Todos los eventos comparten la misma envoltura base:</div>
+    <div style="font-size:12px;font-family:var(--mono);background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin-top:8px;line-height:1.7">
+      <div><span style="color:var(--accent2)">"event"</span>: <span style="color:#86efac">"video.ready"</span></div>
+      <div><span style="color:var(--accent2)">"timestamp"</span>: <span style="color:#bd93f9">1716000000</span></div>
+      <div><span style="color:var(--accent2)">"workspaceId"</span>: <span style="color:#86efac">"ws_abc123"</span></div>
+      <div><span style="color:var(--accent2)">"data"</span>: <span style="color:var(--muted)">{ ... objeto del evento ... }</span></div>
+    </div>
+    <div class="callout c-tip" style="margin-top:16px">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      <span>Verifica siempre la firma antes de procesar. El cuerpo raw (sin parsear) es el que se usa para el HMAC.</span>
+    </div>
+  </div>
+  <div class="ep-right">
+    <div class="rp-section">
+      <div class="rp-tabs">
+        <button class="rp-tab active" onclick="rpTab(this,'wh1')">video.ready</button>
+        <button class="rp-tab" onclick="rpTab(this,'wh2')">transcription.complete</button>
+        <button class="rp-tab" onclick="rpTab(this,'wh3')">video.failed</button>
+      </div>
+      <div class="rp-code">
+        <pre class="rp-pre active" data-lang="wh1">{
+  <span class="str">"event"</span>: <span class="str">"video.ready"</span>,
+  <span class="str">"timestamp"</span>: <span class="num">1716000000</span>,
+  <span class="str">"workspaceId"</span>: <span class="str">"ws_abc123"</span>,
+  <span class="str">"data"</span>: {
+    <span class="str">"id"</span>: <span class="str">"vid_xyz"</span>,
+    <span class="str">"title"</span>: <span class="str">"Mi Video"</span>,
+    <span class="str">"duration"</span>: <span class="num">125.4</span>,
+    <span class="str">"qualities"</span>: [<span class="str">"360p"</span>, <span class="str">"720p"</span>, <span class="str">"1080p"</span>],
+    <span class="str">"m3u8Url"</span>: <span class="str">"https://cdn.../master.m3u8"</span>,
+    <span class="str">"thumbnailUrl"</span>: <span class="str">"https://cdn.../thumb.jpg"</span>
+  }
+}</pre>
+        <pre class="rp-pre" data-lang="wh2">{
+  <span class="str">"event"</span>: <span class="str">"transcription.complete"</span>,
+  <span class="str">"timestamp"</span>: <span class="num">1716000060</span>,
+  <span class="str">"workspaceId"</span>: <span class="str">"ws_abc123"</span>,
+  <span class="str">"data"</span>: {
+    <span class="str">"videoId"</span>: <span class="str">"vid_xyz"</span>,
+    <span class="str">"language"</span>: <span class="str">"es"</span>,
+    <span class="str">"duration"</span>: <span class="num">125.4</span>,
+    <span class="str">"segments"</span>: <span class="num">42</span>,
+    <span class="str">"vttUrl"</span>: <span class="str">"https://.../subtitles.vtt"</span>
+  }
+}</pre>
+        <pre class="rp-pre" data-lang="wh3">{
+  <span class="str">"event"</span>: <span class="str">"video.failed"</span>,
+  <span class="str">"timestamp"</span>: <span class="num">1716000030</span>,
+  <span class="str">"workspaceId"</span>: <span class="str">"ws_abc123"</span>,
+  <span class="str">"data"</span>: {
+    <span class="str">"id"</span>: <span class="str">"vid_xyz"</span>,
+    <span class="str">"title"</span>: <span class="str">"Mi Video"</span>,
+    <span class="str">"error"</span>: <span class="str">"Codec no soportado"</span>
+  }
+}</pre>
+      </div>
+    </div>
+    <div class="rp-section" style="padding-top:16px">
+      <div class="rp-label">Verificación de firma (Node.js)</div>
+      <div class="rp-code">
+        <button class="rp-copy" onclick="copyRp(this)">Copiar</button>
+        <pre class="rp-pre active"><span class="kw">const</span> crypto = require(<span class="str">'crypto'</span>);
+
+<span class="kw">function</span> verifyWebhook(rawBody, signature, secret) {
+  <span class="kw">const</span> expected = <span class="str">'sha256='</span> + crypto
+    .createHmac(<span class="str">'sha256'</span>, secret)
+    .update(rawBody)
+    .digest(<span class="str">'hex'</span>);
+  <span class="kw">return</span> crypto.timingSafeEqual(
+    Buffer.from(signature), Buffer.from(expected)
+  );
+}</pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════ SDK ════ -->
+<div class="ep-row" id="sdk">
+  <div class="ep-left">
+    <div class="sec-label">Guías</div>
+    <div class="sec-title">SDK / Librerías</div>
+    <p class="sec-desc">No existe aún un SDK oficial, pero puedes usar este wrapper reutilizable directamente en tu proyecto.</p>
+    <div class="callout c-tip" style="margin-top:16px">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      <span>Guarda este módulo en <code>lib/streamvault.js</code> e impórtalo en toda tu app.</span>
+    </div>
+  </div>
+  <div class="ep-right">
+    <div class="rp-section">
+      <div class="rp-tabs">
+        <button class="rp-tab active" onclick="rpTab(this,'sdk-js')">JavaScript</button>
+        <button class="rp-tab" onclick="rpTab(this,'sdk-py')">Python</button>
+      </div>
+      <div class="rp-code">
+        <button class="rp-copy" onclick="copyRp(this)">Copiar</button>
+        <pre class="rp-pre active" data-lang="sdk-js"><span class="cm">// lib/streamvault.js</span>
+<span class="kw">class</span> StreamVault {
+  <span class="kw">constructor</span>(apiKey, workspaceId, base = <span class="str">'BASE_URL'</span>) {
+    <span class="kw">this</span>.headers = {
+      <span class="str">'Authorization'</span>: <span class="str">`Bearer ${apiKey}`</span>,
+      <span class="str">'X-Workspace-Id'</span>: workspaceId,
+      <span class="str">'Content-Type'</span>: <span class="str">'application/json'</span>
+    };
+    <span class="kw">this</span>.base = base;
+  }
+
+  <span class="kw">async</span> req(method, path, body) {
+    <span class="kw">const</span> res = <span class="kw">await</span> fetch(<span class="kw">this</span>.base + path, {
+      method, headers: <span class="kw">this</span>.headers,
+      body: body ? JSON.stringify(body) : <span class="kw">undefined</span>
+    });
+    <span class="kw">if</span> (!res.ok) <span class="kw">throw await</span> res.json();
+    <span class="kw">return</span> res.status === <span class="num">204</span> ? <span class="kw">null</span> : res.json();
+  }
+
+  listVideos(params = {}) {
+    <span class="kw">const</span> q = <span class="kw">new</span> URLSearchParams(params).toString();
+    <span class="kw">return this</span>.req(<span class="str">'GET'</span>, <span class="str">`/api/videos?${q}`</span>);
+  }
+  getVideo(id) { <span class="kw">return this</span>.req(<span class="str">'GET'</span>, <span class="str">`/api/videos/${id}`</span>); }
+  updateVideo(id, data) { <span class="kw">return this</span>.req(<span class="str">'PATCH'</span>, <span class="str">`/api/videos/${id}`</span>, data); }
+  deleteVideo(id) { <span class="kw">return this</span>.req(<span class="str">'DELETE'</span>, <span class="str">`/api/videos/${id}`</span>); }
+  importVideo(url, title) { <span class="kw">return this</span>.req(<span class="str">'POST'</span>, <span class="str">'/api/import'</span>, {url, title}); }
+  listFolders() { <span class="kw">return this</span>.req(<span class="str">'GET'</span>, <span class="str">'/api/folders'</span>); }
+  createWebhook(url, events) { <span class="kw">return this</span>.req(<span class="str">'POST'</span>, <span class="str">'/api/webhooks'</span>, {url, events}); }
+}
+
+module.exports = StreamVault;
+
+<span class="cm">// Uso:</span>
+<span class="cm">// const sv = new StreamVault('sv_live_KEY', 'ws_ID');</span>
+<span class="cm">// const { videos } = await sv.listVideos({ limit: 10 });</span></pre>
+        <pre class="rp-pre" data-lang="sdk-py"><span class="cm"># lib/streamvault.py</span>
+<span class="kw">import</span> requests
+
+<span class="kw">class</span> StreamVault:
+    <span class="kw">def</span> __init__(self, api_key, workspace_id,
+                 base=<span class="str">"BASE_URL"</span>):
+        self.base = base
+        self.headers = {
+            <span class="str">"Authorization"</span>: f<span class="str">"Bearer {api_key}"</span>,
+            <span class="str">"X-Workspace-Id"</span>: workspace_id,
+            <span class="str">"Content-Type"</span>: <span class="str">"application/json"</span>
+        }
+
+    <span class="kw">def</span> req(self, method, path, body=None):
+        r = requests.request(
+            method, self.base + path,
+            headers=self.headers, json=body
+        )
+        r.raise_for_status()
+        <span class="kw">return</span> r.json() <span class="kw">if</span> r.text <span class="kw">else</span> None
+
+    <span class="kw">def</span> list_videos(self, **kw):
+        <span class="kw">return</span> self.req(<span class="str">"GET"</span>, <span class="str">"/api/videos"</span>)
+    <span class="kw">def</span> get_video(self, id):
+        <span class="kw">return</span> self.req(<span class="str">"GET"</span>, f<span class="str">"/api/videos/{id}"</span>)
+    <span class="kw">def</span> delete_video(self, id):
+        <span class="kw">return</span> self.req(<span class="str">"DELETE"</span>, f<span class="str">"/api/videos/{id}"</span>)
+    <span class="kw">def</span> import_video(self, url, title=None):
+        <span class="kw">return</span> self.req(<span class="str">"POST"</span>, <span class="str">"/api/import"</span>,
+                        {<span class="str">"url"</span>: url, <span class="str">"title"</span>: title})
+
+<span class="cm"># sv = StreamVault("sv_live_KEY", "ws_ID")</span>
+<span class="cm"># data = sv.list_videos()</span></pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════ CHANGELOG ════ -->
+<div class="ep-row full-width" id="changelog">
+  <div class="ep-left">
+    <div class="sec-label">Guías</div>
+    <div class="sec-title">Changelog</div>
+    <p class="sec-desc">Historial de cambios de la API. Los cambios incompatibles siempre se anuncian con antelación.</p>
+
+    <div style="margin-top:24px">
+      <!-- v1.3 -->
+      <div style="display:flex;gap:20px;margin-bottom:32px">
+        <div style="flex-shrink:0;width:100px">
+          <div style="font-size:12px;font-weight:700;font-family:var(--mono);color:var(--accent2)">v1.3</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">May 2026</div>
+        </div>
+        <div style="flex:1;border-left:2px solid var(--border);padding-left:20px">
+          <div style="font-size:14px;font-weight:700;margin-bottom:10px">Sistema de Facturación y Pagos</div>
+          <ul style="font-size:13px;color:var(--muted);line-height:2;list-style:none;padding:0">
+            <li style="display:flex;align-items:center;gap:8px"><span class="rc r2" style="font-size:9px">NEW</span> Worker de expiración de planes automático</li>
+            <li style="display:flex;align-items:center;gap:8px"><span class="rc r2" style="font-size:9px">NEW</span> Webhooks de facturación (PayPal, Stripe, DLocal)</li>
+            <li style="display:flex;align-items:center;gap:8px"><span class="rc r2" style="font-size:9px">NEW</span> Idempotency keys para pagos</li>
+            <li style="display:flex;align-items:center;gap:8px"><span style="background:rgba(59,130,246,.15);color:#3b82f6;font-size:9px;font-weight:700;padding:1px 6px;border-radius:4px">IMP</span> Verificación de webhooks PayPal desde DB</li>
+          </ul>
+        </div>
+      </div>
+      <!-- v1.2 -->
+      <div style="display:flex;gap:20px;margin-bottom:32px">
+        <div style="flex-shrink:0;width:100px">
+          <div style="font-size:12px;font-weight:700;font-family:var(--mono);color:var(--accent2)">v1.2</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">Abr 2026</div>
+        </div>
+        <div style="flex:1;border-left:2px solid var(--border);padding-left:20px">
+          <div style="font-size:14px;font-weight:700;margin-bottom:10px">DMCA, Seguridad y Multi-Gateway</div>
+          <ul style="font-size:13px;color:var(--muted);line-height:2;list-style:none;padding:0">
+            <li style="display:flex;align-items:center;gap:8px"><span class="rc r2" style="font-size:9px">NEW</span> Soporte DMCA con suspensión automática</li>
+            <li style="display:flex;align-items:center;gap:8px"><span class="rc r2" style="font-size:9px">NEW</span> Multi-gateway de pagos (Stripe + PayPal + Binance + DLocal)</li>
+            <li style="display:flex;align-items:center;gap:8px"><span class="rc r2" style="font-size:9px">NEW</span> Rate limiting avanzado con fingerprinting</li>
+            <li style="display:flex;align-items:center;gap:8px"><span class="rc r2" style="font-size:9px">NEW</span> Permisos jerárquicos por feature</li>
+          </ul>
+        </div>
+      </div>
+      <!-- v1.1 -->
+      <div style="display:flex;gap:20px;margin-bottom:32px">
+        <div style="flex-shrink:0;width:100px">
+          <div style="font-size:12px;font-weight:700;font-family:var(--mono);color:var(--accent2)">v1.1</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">Feb 2026</div>
+        </div>
+        <div style="flex:1;border-left:2px solid var(--border);padding-left:20px">
+          <div style="font-size:14px;font-weight:700;margin-bottom:10px">Embed, Analytics y OTT</div>
+          <ul style="font-size:13px;color:var(--muted);line-height:2;list-style:none;padding:0">
+            <li style="display:flex;align-items:center;gap:8px"><span class="rc r2" style="font-size:9px">NEW</span> Sistema de embed con dominio custom</li>
+            <li style="display:flex;align-items:center;gap:8px"><span class="rc r2" style="font-size:9px">NEW</span> Analytics por tier: retención, heatmap, geo</li>
+            <li style="display:flex;align-items:center;gap:8px"><span class="rc r2" style="font-size:9px">NEW</span> Player OTT con Chromecast y AirPlay</li>
+            <li style="display:flex;align-items:center;gap:8px"><span class="rc r2" style="font-size:9px">NEW</span> API de pistas de audio y capítulos</li>
+          </ul>
+        </div>
+      </div>
+      <!-- v1.0 -->
+      <div style="display:flex;gap:20px">
+        <div style="flex-shrink:0;width:100px">
+          <div style="font-size:12px;font-weight:700;font-family:var(--mono);color:var(--accent2)">v1.0</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">Ene 2026</div>
+        </div>
+        <div style="flex:1;border-left:2px solid var(--border);padding-left:20px">
+          <div style="font-size:14px;font-weight:700;margin-bottom:10px">Lanzamiento inicial</div>
+          <ul style="font-size:13px;color:var(--muted);line-height:2;list-style:none;padding:0">
+            <li style="display:flex;align-items:center;gap:8px"><span class="rc r2" style="font-size:9px">NEW</span> Upload y transcodificación HLS adaptativa</li>
+            <li style="display:flex;align-items:center;gap:8px"><span class="rc r2" style="font-size:9px">NEW</span> Transcripción IA con Whisper</li>
+            <li style="display:flex;align-items:center;gap:8px"><span class="rc r2" style="font-size:9px">NEW</span> Workspaces multi-tenant</li>
+            <li style="display:flex;align-items:center;gap:8px"><span class="rc r2" style="font-size:9px">NEW</span> API Keys con scopes granulares</li>
+            <li style="display:flex;align-items:center;gap:8px"><span class="rc r2" style="font-size:9px">NEW</span> Webhooks HMAC-SHA256</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- FOOTER -->
 <footer class="sv-footer">
   <a href="/" style="font-family:var(--mono);font-weight:700;color:var(--accent2);text-decoration:none;font-size:14px">Stream<span style="color:var(--muted);font-weight:400">Vault</span></a>
@@ -1334,6 +1766,77 @@ function copyRp(btn){
 // Keyboard shortcut
 document.addEventListener('keydown', e=>{ if((e.metaKey||e.ctrlKey)&&e.key==='k'){ e.preventDefault(); document.getElementById('api-search')?.focus(); }});
 (function(){ if(!navigator.platform?.toUpperCase().includes('MAC')){ const s=document.getElementById('kbd-sym'); if(s) s.textContent='Ctrl+K'; }})();
+
+// Modal tabs
+function switchModalTab(btn, paneId){
+  btn.parentElement.querySelectorAll('.modal-tab').forEach(t=>t.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.modal-pane').forEach(p=>p.classList.remove('active'));
+  document.getElementById(paneId).classList.add('active');
+}
+
+// Quick Login
+async function quickLogin(){
+  const email = document.getElementById('inp-email').value.trim();
+  const pass = document.getElementById('inp-pass').value;
+  const st = document.getElementById('login-status');
+  if(!email||!pass){ st.className='modal-status err'; st.textContent='Ingresa tu email y contraseña.'; return; }
+  st.className='modal-status'; st.textContent='Iniciando sesión...'; st.style.display='block';
+  try {
+    const res = await fetch(window._BASE+'/auth/login', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email,password:pass}) });
+    const data = await res.json();
+    if(!res.ok){ st.className='modal-status err'; st.textContent=data.error||'Error al iniciar sesión'; return; }
+    const token = data.accessToken || data.token;
+    const ws = data.workspaces?.[0]?.id || '';
+    localStorage.setItem('sv_api_token', token);
+    if(ws) localStorage.setItem('sv_api_ws', ws);
+    document.getElementById('inp-token').value = token;
+    document.getElementById('inp-ws').value = ws;
+    st.className='modal-status ok'; st.textContent='Sesión iniciada. Token guardado.';
+    renderAuthBar();
+    setTimeout(closeModal, 1200);
+  } catch(e){ st.className='modal-status err'; st.textContent='Error de red: '+e.message; }
+}
+
+// Anchor copy buttons
+(function(){
+  // Add anchor button to each ep-row with an id
+  $$('.ep-row[id], .ep-block[id]').forEach(row=>{
+    const id = row.id;
+    const title = row.querySelector('.sec-title, .ep-path-text');
+    if(!title||title.querySelector('.anchor-btn')) return;
+    const btn = document.createElement('button');
+    btn.className = 'anchor-btn';
+    btn.title = 'Copiar enlace';
+    btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>`;
+    btn.onclick = ()=>{
+      navigator.clipboard.writeText(location.origin+location.pathname+'#'+id).then(()=>{
+        btn.classList.add('anchor-copied');
+        setTimeout(()=>btn.classList.remove('anchor-copied'),1500);
+      });
+    };
+    title.appendChild(btn);
+  });
+})();
+
+// Auth/public badges on ep-right panels
+(function(){
+  const rows = $$('.ep-row[id]');
+  rows.forEach(row=>{
+    const right = row.querySelector('.ep-right');
+    if(!right) return;
+    const scopeLine = row.querySelector('.ep-scope-line');
+    const isPublic = !scopeLine;
+    const firstPanel = right.querySelector('.rp-section, .try-panel');
+    if(!firstPanel) return;
+    const badge = document.createElement('div');
+    badge.style.cssText = 'padding:12px 24px 0;';
+    badge.innerHTML = isPublic
+      ? `<span class="auth-badge public-ep"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20"/></svg> Sin autenticación</span>`
+      : `<span class="auth-badge needs-auth"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg> Requiere token</span>`;
+    right.insertBefore(badge, right.firstChild);
+  });
+})();
 
 // Close modal on bg click
 document.getElementById('auth-modal').addEventListener('click', function(e){ if(e.target===this) closeModal(); });
