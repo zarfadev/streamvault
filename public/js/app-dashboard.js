@@ -5086,6 +5086,82 @@ function copyLink(id, type) {
     // ─── PLAYLISTS ───────────────────────────────────────────────
     // ════════════════════════════════════════════════════════════
     let _allPlaylists = [];
+    let _plViewMode = localStorage.getItem('sv_pl_view') || 'grid';
+
+    function setPlViewMode(mode) {
+      _plViewMode = mode;
+      localStorage.setItem('sv_pl_view', mode);
+      document.getElementById('pl-view-grid-btn')?.classList.toggle('active', mode === 'grid');
+      document.getElementById('pl-view-list-btn')?.classList.toggle('active', mode === 'list');
+      const c = document.getElementById('playlists-grid');
+      if (c) { c.style.display = mode === 'list' ? 'block' : 'grid'; }
+      renderPlaylists();
+    }
+
+    function _initPlToggle() {
+      document.getElementById('pl-view-grid-btn')?.classList.toggle('active', _plViewMode === 'grid');
+      document.getElementById('pl-view-list-btn')?.classList.toggle('active', _plViewMode === 'list');
+      const c = document.getElementById('playlists-grid');
+      if (c) { c.style.display = _plViewMode === 'list' ? 'block' : 'grid'; }
+    }
+
+    function _plItemHtml(pl) {
+      const vBadge = `<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;flex-shrink:0;${pl.visibility==='public'?'background:rgba(34,211,165,0.12);color:var(--green);border:1px solid rgba(34,211,165,0.2);':'background:rgba(248,113,113,0.1);color:var(--red);border:1px solid rgba(248,113,113,0.2);'}">${pl.visibility==='public'?'PÚBLICA':'PRIVADA'}</span>`;
+      if (_plViewMode === 'list') {
+        return `<div style="display:flex;align-items:center;gap:14px;padding:10px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:6px;transition:border-color .14s,box-shadow .14s;" onmouseover="this.style.borderColor='var(--border2)';this.style.boxShadow='0 4px 16px rgba(0,0,0,.18)'" onmouseout="this.style.borderColor='var(--border)';this.style.boxShadow=''">
+          <div style="width:48px;height:36px;background:var(--surface3);border-radius:6px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:var(--muted);">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:14px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(pl.title)}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px;">${pl.video_count||0} video${(pl.video_count||0)!==1?'s':''}${pl.description ? ` · ${esc(pl.description.slice(0,55))}${pl.description.length>55?'…':''}` : ''}</div>
+          </div>
+          ${vBadge}
+          <div style="display:flex;gap:4px;flex-shrink:0;">
+            <button class="action-btn" title="Ver videos" style="padding:6px 8px;" onclick="openPlaylistVideosModal('${pl.id}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg></button>
+            <button class="action-btn" title="Ver en página" style="padding:6px 8px;" onclick="window.open('${BASE}/playlist/${pl.id}','_blank')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button>
+            <button class="action-btn copy-btn" title="Copiar link" style="padding:6px 8px;" onclick="copyPlaylistLink('${pl.id}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg></button>
+            <button class="action-btn copy-btn" title="Copiar embed" style="padding:6px 8px;" onclick="copyPlaylistEmbed('${pl.id}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></button>
+            <button class="action-btn" title="Editar" style="padding:6px 8px;" onclick="openEditPlaylistModal('${pl.id}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+            <button class="action-btn del-btn" title="Eliminar" style="padding:6px 8px;" onclick="deletePlaylist('${pl.id}')"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg></button>
+          </div>
+        </div>`;
+      }
+      // Grid card
+      return `<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;transition:transform .18s var(--ease-out),box-shadow .18s,border-color .14s;" onmouseover="this.style.transform='translateY(-3px)';this.style.boxShadow='0 12px 40px rgba(0,0,0,.35)';this.style.borderColor='var(--border2)'" onmouseout="this.style.transform='';this.style.boxShadow='';this.style.borderColor='var(--border)'">
+        <div style="padding:18px 18px 14px;">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px;">
+            <div style="font-size:14px;font-weight:700;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(pl.title)}</div>
+            ${vBadge}
+          </div>
+          ${pl.description ? `<p style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${esc(pl.description)}</p>` : ''}
+          <div style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/></svg>
+            ${pl.video_count||0} video${(pl.video_count||0)!==1?'s':''}
+          </div>
+        </div>
+        <div style="padding:12px 18px 16px;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="action-btn" style="font-size:12px;padding:6px 12px;" onclick="openPlaylistVideosModal('${pl.id}')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> Ver videos
+          </button>
+          <button class="action-btn" style="font-size:12px;padding:6px 12px;" onclick="window.open('${BASE}/playlist/${pl.id}','_blank')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg> Ver
+          </button>
+          <button class="action-btn copy-btn" style="font-size:12px;padding:6px 12px;" onclick="copyPlaylistLink('${pl.id}')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg> Link
+          </button>
+          <button class="action-btn copy-btn" style="font-size:12px;padding:6px 12px;" onclick="copyPlaylistEmbed('${pl.id}')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg> Embed
+          </button>
+          <button class="action-btn" style="font-size:12px;padding:6px 12px;" onclick="openEditPlaylistModal('${pl.id}')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Editar
+          </button>
+          <button class="action-btn del-btn" style="font-size:12px;padding:6px 12px;" onclick="deletePlaylist('${pl.id}')">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg> Eliminar
+          </button>
+        </div>
+      </div>`;
+    }
 
     async function loadPlaylists() {
       const grid = document.getElementById('playlists-grid');
@@ -5133,42 +5209,8 @@ function copyLink(id, type) {
         grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;"><div class="empty-state-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="15" y2="18"/><polygon points="17 15 22 18 17 21" fill="currentColor" stroke="none"/></svg></div><h3>Sin playlists</h3><p>Crea tu primera playlist para organizar y compartir tus videos.</p><button class="btn btn-primary btn-sm empty-state-cta" onclick="openCreatePlaylistModal()">Nueva playlist</button></div>`;
         return;
       }
-      grid.innerHTML = _allPlaylists.map(pl => `
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;transition:transform .18s var(--ease-out),box-shadow .18s,border-color .14s;" onmouseover="this.style.transform='translateY(-3px)';this.style.boxShadow='0 12px 40px rgba(0,0,0,.35)';this.style.borderColor='var(--border2)'" onmouseout="this.style.transform='';this.style.boxShadow='';this.style.borderColor='var(--border)'">
-          <div style="padding:18px 18px 14px;">
-            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px;">
-              <div style="font-size:14px;font-weight:700;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(pl.title)}</div>
-              <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;flex-shrink:0;${pl.visibility==='public'?'background:rgba(34,211,165,0.12);color:var(--green);border:1px solid rgba(34,211,165,0.2);':'background:rgba(248,113,113,0.1);color:var(--red);border:1px solid rgba(248,113,113,0.2);'}">${pl.visibility==='public'?'PÚBLICA':'PRIVADA'}</span>
-            </div>
-            ${pl.description ? `<p style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${esc(pl.description)}</p>` : ''}
-            <div style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/></svg>
-              ${pl.video_count || 0} video${(pl.video_count||0)!==1?'s':''}
-            </div>
-          </div>
-          <div style="padding:12px 18px 16px;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="action-btn" style="font-size:12px;padding:6px 12px;" onclick="openPlaylistVideosModal('${pl.id}')">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              Ver videos
-            </button>
-            <button class="action-btn copy-btn" style="font-size:12px;padding:6px 12px;" onclick="copyPlaylistLink('${pl.id}')">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
-              Link
-            </button>
-            <button class="action-btn copy-btn" style="font-size:12px;padding:6px 12px;" onclick="copyPlaylistEmbed('${pl.id}')">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-              Embed
-            </button>
-            <button class="action-btn" style="font-size:12px;padding:6px 12px;" onclick="openEditPlaylistModal('${pl.id}')">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-              Editar
-            </button>
-            <button class="action-btn del-btn" style="font-size:12px;padding:6px 12px;" onclick="deletePlaylist('${pl.id}')">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
-              Eliminar
-            </button>
-          </div>
-        </div>`).join('');
+      _initPlToggle();
+      grid.innerHTML = _allPlaylists.map(pl => _plItemHtml(pl)).join('');
     }
 
     // ─── Playlist client-side filter/sort ────────────────────────
@@ -5207,42 +5249,7 @@ function copyLink(id, type) {
         return;
       }
 
-      grid.innerHTML = list.map(pl => `
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;transition:transform .18s var(--ease-out),box-shadow .18s,border-color .14s;" onmouseover="this.style.transform='translateY(-3px)';this.style.boxShadow='0 12px 40px rgba(0,0,0,.35)';this.style.borderColor='var(--border2)'" onmouseout="this.style.transform='';this.style.boxShadow='';this.style.borderColor='var(--border)'">
-          <div style="padding:18px 18px 14px;">
-            <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px;">
-              <div style="font-size:14px;font-weight:700;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(pl.title)}</div>
-              <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;flex-shrink:0;${pl.visibility==='public'?'background:rgba(34,211,165,0.12);color:var(--green);border:1px solid rgba(34,211,165,0.2);':'background:rgba(248,113,113,0.1);color:var(--red);border:1px solid rgba(248,113,113,0.2);'}">${pl.visibility==='public'?'PÚBLICA':'PRIVADA'}</span>
-            </div>
-            ${pl.description ? `<p style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${esc(pl.description)}</p>` : ''}
-            <div style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/></svg>
-              ${pl.video_count || 0} video${(pl.video_count||0)!==1?'s':''}
-            </div>
-          </div>
-          <div style="padding:12px 18px 16px;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="action-btn" style="font-size:12px;padding:6px 12px;" onclick="openPlaylistVideosModal('${pl.id}')">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-              Ver videos
-            </button>
-            <button class="action-btn copy-btn" style="font-size:12px;padding:6px 12px;" onclick="copyPlaylistLink('${pl.id}')">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
-              Link
-            </button>
-            <button class="action-btn copy-btn" style="font-size:12px;padding:6px 12px;" onclick="copyPlaylistEmbed('${pl.id}')">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-              Embed
-            </button>
-            <button class="action-btn" style="font-size:12px;padding:6px 12px;" onclick="openEditPlaylistModal('${pl.id}')">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-              Editar
-            </button>
-            <button class="action-btn del-btn" style="font-size:12px;padding:6px 12px;" onclick="deletePlaylist('${pl.id}')">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
-              Eliminar
-            </button>
-          </div>
-        </div>`).join('');
+      grid.innerHTML = list.map(pl => _plItemHtml(pl)).join('');
     }
 
     function openCreatePlaylistModal() {
@@ -5328,22 +5335,29 @@ function copyLink(id, type) {
       overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.65);backdrop-filter:blur(8px);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;';
       overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
       overlay.innerHTML = `
-        <div style="background:var(--surface);border:1px solid var(--border2);border-radius:20px;width:100%;max-width:560px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.6);">
-          <div style="padding:20px 24px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);">
-            <h3 style="font-size:1.1rem;font-weight:700;">${esc(plTitle)}</h3>
+        <div style="background:var(--surface);border:1px solid var(--border2);border-radius:20px;width:100%;max-width:700px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 80px rgba(0,0,0,.6);">
+          <div style="padding:20px 24px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);">
+            <div>
+              <h3 style="font-size:1.1rem;font-weight:700;margin:0 0 2px;">${esc(plTitle)}</h3>
+              <div style="font-size:12px;color:var(--muted);">Gestiona los videos de esta playlist</div>
+            </div>
             <button class="btn btn-ghost" onclick="this.closest('[data-sv-overlay]').remove()" style="padding:4px 10px;font-size:18px;line-height:1;border-radius:8px;flex-shrink:0;" aria-label="Cerrar">×</button>
           </div>
-          <div style="padding:14px 24px 10px;border-bottom:1px solid var(--border);">
-            <div style="display:flex;gap:8px;align-items:flex-start;">
+          <div style="padding:14px 24px 12px;border-bottom:1px solid var(--border);background:var(--surface2);">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:8px;">Agregar video</div>
+            <div style="display:flex;gap:8px;align-items:center;">
               <div style="position:relative;flex:1;" id="pl-picker-wrap">
                 <svg style="position:absolute;left:10px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--muted);" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 <input type="text" id="pl-picker-input" autocomplete="off" spellcheck="false"
-                  placeholder="Buscar video…"
-                  style="width:100%;box-sizing:border-box;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;color:var(--text);padding:8px 12px 8px 30px;font-size:13px;font-family:var(--sans);outline:none;">
-                <div id="pl-picker-dropdown" style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,.45);z-index:10;max-height:220px;overflow-y:auto;"></div>
+                  placeholder="Busca un video por título…"
+                  style="width:100%;box-sizing:border-box;background:var(--surface);border:1px solid var(--border2);border-radius:9px;color:var(--text);padding:9px 12px 9px 32px;font-size:13px;font-family:var(--sans);outline:none;transition:border-color .15s;" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'">
+                <div id="pl-picker-dropdown" style="display:none;position:absolute;top:calc(100% + 5px);left:0;right:0;background:var(--surface);border:1px solid var(--border2);border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.55);z-index:20;max-height:300px;overflow-y:auto;"></div>
                 <input type="hidden" id="pl-add-video-sel" value="">
               </div>
-              <button class="btn btn-primary" style="padding:8px 16px;font-size:13px;flex-shrink:0;" onclick="addVideoToPlaylist('${plId}',this)">Agregar</button>
+              <button class="btn btn-primary" style="padding:9px 20px;font-size:13px;flex-shrink:0;border-radius:9px;" onclick="addVideoToPlaylist('${plId}',this)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Agregar
+              </button>
             </div>
           </div>
           <div id="pl-videos-list" style="padding:16px 24px 24px;overflow-y:auto;flex:1;"></div>
@@ -5367,12 +5381,14 @@ function copyLink(id, type) {
           drop.innerHTML = filtered.slice(0, 80).map(v => {
             const thumb = v.thumbnailUrl || `/videos/${v.id}/thumb.jpg`;
             const dur = v.duration ? (() => { const s=Math.floor(v.duration); const m=Math.floor(s/60); const sec=s%60; return `${m}:${String(sec).padStart(2,'0')}`; })() : '';
-            return `<div data-vid="${v.id}" style="display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border);font-size:13px;" onmouseover="this.style.background='var(--surface3)'" onmouseout="this.style.background=''">
-              <div style="width:56px;height:32px;background:var(--surface3);border-radius:4px;flex-shrink:0;overflow:hidden;position:relative;">
+            return `<div data-vid="${v.id}" style="display:flex;align-items:center;gap:12px;padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);" onmouseover="this.style.background='var(--surface3)'" onmouseout="this.style.background=''">
+              <div style="width:80px;height:46px;background:var(--surface3);border-radius:6px;flex-shrink:0;overflow:hidden;position:relative;">
                 <img src="${thumb}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none'">
-                ${dur ? `<span style="position:absolute;bottom:2px;right:2px;background:rgba(0,0,0,.75);color:#fff;font-size:9px;padding:1px 3px;border-radius:2px;line-height:1.4;">${dur}</span>` : ''}
+                ${dur ? `<span style="position:absolute;bottom:3px;right:3px;background:rgba(0,0,0,.8);color:#fff;font-size:9px;padding:1px 4px;border-radius:3px;line-height:1.5;font-weight:600;">${dur}</span>` : ''}
               </div>
-              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${esc(v.title)}</span>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:13px;color:var(--text);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${esc(v.title)}</div>
+              </div>
             </div>`;
           }).join('');
         }
@@ -5408,18 +5424,20 @@ function copyLink(id, type) {
             const thumb = v.thumbnailUrl || `/videos/${v.id}/thumb.jpg`;
             const dur = v.duration ? (() => { const s=Math.floor(v.duration); const m=Math.floor(s/60); const sec=s%60; return `${m}:${String(sec).padStart(2,'0')}`; })() : '';
             return `
-            <div data-vid="${esc(v.id)}" style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface2);border-radius:8px;border:1px solid var(--border2);margin-bottom:6px;">
-              <div style="width:56px;height:32px;background:var(--surface3);border-radius:4px;flex-shrink:0;overflow:hidden;position:relative;">
+            <div data-vid="${esc(v.id)}" style="display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--surface2);border-radius:10px;border:1px solid var(--border2);margin-bottom:8px;transition:border-color .12s;" onmouseover="this.style.borderColor='var(--border2)'" onmouseout="this.style.borderColor='var(--border2)'">
+              <span style="font-size:11px;font-weight:700;color:var(--muted);width:20px;text-align:center;flex-shrink:0;">${v.position+1}</span>
+              <div style="width:80px;height:46px;background:var(--surface3);border-radius:6px;flex-shrink:0;overflow:hidden;position:relative;">
                 <img src="${thumb}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none'">
-                ${dur ? `<span style="position:absolute;bottom:2px;right:2px;background:rgba(0,0,0,.75);color:#fff;font-size:9px;padding:1px 3px;border-radius:2px;line-height:1.4;">${dur}</span>` : ''}
+                ${dur ? `<span style="position:absolute;bottom:3px;right:3px;background:rgba(0,0,0,.8);color:#fff;font-size:9px;padding:1px 4px;border-radius:3px;line-height:1.5;font-weight:600;">${dur}</span>` : ''}
               </div>
-              <div style="flex:1;min-width:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(v.title)}</div>
-              <div style="display:flex;align-items:center;gap:4px;margin-right:4px;">
-                <button onclick="reorderPlaylistVideo('${plId}', '${v.id}', ${v.position}, -1, this)" style="background:var(--surface3);border:1px solid var(--border2);border-radius:4px;color:var(--text);cursor:pointer;padding:2px 6px;font-size:10px;" title="Subir">▲</button>
-                <span style="font-size:11px;color:var(--muted);width:24px;text-align:center;">#${v.position+1}</span>
-                <button onclick="reorderPlaylistVideo('${plId}', '${v.id}', ${v.position}, 1, this)" style="background:var(--surface3);border:1px solid var(--border2);border-radius:4px;color:var(--text);cursor:pointer;padding:2px 6px;font-size:10px;" title="Bajar">▼</button>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:13px;font-weight:500;color:var(--text);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${esc(v.title)}</div>
               </div>
-              <button onclick="removeFromPlaylist('${plId}','${v.id}',this)" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:18px;padding:2px 6px;line-height:1;flex-shrink:0;" title="Quitar"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+              <div style="display:flex;flex-direction:column;gap:3px;flex-shrink:0;">
+                <button onclick="reorderPlaylistVideo('${plId}', '${v.id}', ${v.position}, -1, this)" style="background:var(--surface3);border:1px solid var(--border2);border-radius:4px;color:var(--muted);cursor:pointer;padding:3px 8px;font-size:10px;line-height:1;" title="Subir">▲</button>
+                <button onclick="reorderPlaylistVideo('${plId}', '${v.id}', ${v.position}, 1, this)" style="background:var(--surface3);border:1px solid var(--border2);border-radius:4px;color:var(--muted);cursor:pointer;padding:3px 8px;font-size:10px;line-height:1;" title="Bajar">▼</button>
+              </div>
+              <button onclick="removeFromPlaylist('${plId}','${v.id}',this)" style="background:none;border:1px solid transparent;border-radius:6px;color:var(--muted);cursor:pointer;padding:6px;line-height:1;flex-shrink:0;transition:color .12s,border-color .12s;" title="Quitar" onmouseover="this.style.color='var(--red)';this.style.borderColor='rgba(248,113,113,.3)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='transparent'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
             </div>`;
           }).join('');
         }
