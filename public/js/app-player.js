@@ -230,6 +230,40 @@ document.addEventListener('fullscreenchange', _handleFsChange);
 document.addEventListener('webkitfullscreenchange', _handleFsChange);
 updateFsIcon();
 
+// ─── iOS native fullscreen (webkitEnterFullscreen) ────────────
+// Standard fullscreenchange does NOT fire for iOS native player.
+// Instead, the <video> element fires webkitbeginfullscreen / webkitendfullscreen.
+//
+// webkitbeginfullscreen: activate native <track> so iOS shows subtitles in its HUD
+// webkitendfullscreen:   disable native tracks + clear VTT overlay to avoid
+//                        the double-subtitle bug (native track still 'showing'
+//                        while our custom overlay is also rendering cues).
+video.addEventListener('webkitbeginfullscreen', () => {
+  // Activate matching native track for the iOS player's subtitle HUD
+  if (ccLang) {
+    let applied = false;
+    for (let i = 0; i < video.textTracks.length; i++) {
+      const match = video.textTracks[i].language === ccLang;
+      video.textTracks[i].mode = (match && !applied) ? 'showing' : 'hidden';
+      if (match) applied = true;
+    }
+  }
+  // Make sure our custom overlay is hidden while iOS native player is shown
+  if (_subDisplay) _subDisplay.style.display = 'none';
+});
+
+video.addEventListener('webkitendfullscreen', () => {
+  // Re-show our custom overlay
+  if (_subDisplay) _subDisplay.style.display = '';
+  // Disable all native tracks to prevent the double-subtitle bug:
+  // the iOS player may leave the track in 'showing' mode after exit.
+  disableAllNativeTracks();
+  // Restart VTT loop if a subtitle was active — it was paused while iOS player was open
+  if (ccKey && _vttCues.length > 0 && !_vttTimer) {
+    _startVttLoop();
+  }
+});
+
 function togglePip() {
   if (document.pictureInPictureElement) {
     document.exitPictureInPicture().catch(() => {});
