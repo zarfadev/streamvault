@@ -7137,25 +7137,60 @@ function copyLink(id, type) {
     function initOnboarding() {
       const key = onboardingKey();
       if (!key) return;
-      // Show onboarding until all steps are done OR user explicitly dismisses it.
-      // No time-based cutoff — a returning user with pending steps should still see it.
-      if (localStorage.getItem(key)) return;
+      if (localStorage.getItem(key)) return; // permanently done
+      // Always render (so the badge indicator is up to date)
       renderOnboarding();
-      // Only auto-open if at least one non-trivial step is pending (not just 2FA)
+      // Auto-open only if not dismissed this session AND has pending critical steps
       const emailVerified = !!(authUser?.email_verified);
-      const hasVideos = allVideosCache && allVideosCache.length > 0;
-      const hasPlayerColor = !!(authWorkspace?.settings?.embedColor);
+      const hasVideos = !!(allVideosCache && allVideosCache.length > 0);
       if (!emailVerified || !hasVideos) {
-        document.getElementById('onboarding-overlay').style.display = 'flex';
+        if (!sessionStorage.getItem(key + '_skip')) {
+          document.getElementById('onboarding-overlay').style.display = 'flex';
+        }
       }
     }
 
+    // Minimiza el overlay sin guardar nada — el badge sigue visible y se puede reabrir
+    function minimizeOnboarding() {
+      const el = document.getElementById('onboarding-overlay');
+      if (el) { el.style.opacity = '0'; setTimeout(() => { el.style.display = 'none'; el.style.opacity = '1'; }, 280); }
+    }
+
+    // Navega a Configuración y hace scroll + highlight directo al color picker
+    function goToColorPicker() {
+      goSection(null, 'settings');
+      minimizeOnboarding();
+      setTimeout(() => {
+        const colorRow = document.getElementById('cfg-color-hex')?.closest('div[style]') ||
+                         document.getElementById('cfg-color-picker')?.parentElement;
+        const colorInput = document.getElementById('cfg-color-hex');
+        if (colorRow) {
+          colorRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          colorRow.style.transition = 'box-shadow .3s';
+          colorRow.style.boxShadow = '0 0 0 3px rgba(124,108,250,.5)';
+          setTimeout(() => { colorRow.style.boxShadow = ''; colorRow.style.transition = ''; }, 2200);
+        }
+        if (colorInput) colorInput.focus();
+      }, 380);
+    }
+
+    // Marca el paso embed como visto y navega a videos
+    function learnEmbed() {
+      if (authWorkspace) localStorage.setItem('sv_ob_embed_' + authWorkspace.id, '1');
+      goSection(null, 'videos');
+      minimizeOnboarding();
+      setTimeout(() => {
+        toast('Haz clic en el ícono </> de cualquier video para copiar el embed', 'info', 5000);
+      }, 400);
+    }
+
     function renderOnboarding() {
-      const emailVerified = !!(authUser?.email_verified);
-      const twoFaOn       = !!(authUser?.twoFactorEnabled);
-      const hasVideos     = !!(allVideosCache && allVideosCache.length > 0);
+      const emailVerified  = !!(authUser?.email_verified);
+      const twoFaOn        = !!(authUser?.twoFactorEnabled);
+      const hasVideos      = !!(allVideosCache && allVideosCache.length > 0);
       const hasPlayerColor = !!(authWorkspace?.settings?.embedColor);
-      const hasSharedEmbed= !!(authWorkspace && allVideosCache && allVideosCache.length > 0); // embeds only matter once there are videos
+      // Embed step: done once the user clicked "Ver cómo hacerlo" (localStorage flag) OR has no videos yet
+      const hasLearnedEmbed = !authWorkspace || !!localStorage.getItem('sv_ob_embed_' + authWorkspace.id) || !hasVideos;
 
       const ICON_CHECK = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>';
       const steps = [
@@ -7177,30 +7212,30 @@ function copyLink(id, type) {
           icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="13.5" cy="6.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="17.5" cy="10.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="8.5" cy="7.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="6.5" cy="12.5" r="1.5" fill="currentColor" stroke="none"/><path d="M12 2C6.49 2 2 6.49 2 12s4.49 10 10 10a2.5 2.5 0 0 0 2.5-2.5c0-.61-.23-1.2-.64-1.67a.528.528 0 0 1 .42-.84H16c3.31 0 6-2.69 6-6C22 6.04 17.51 2 12 2z"/></svg>',
           label: 'Dale color a tu player',
           sub: hasPlayerColor ? 'Color del player configurado' : 'Elige el color de acento de tu player embebido',
-          action: hasPlayerColor ? null : { text: 'Ir a Configuración', fn: "goSection(event,'settings');closeOnboarding()" },
+          action: hasPlayerColor ? null : { text: 'Cambiar color', fn: 'goToColorPicker()' },
         },
         {
           done: hasVideos,
           icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="5" width="15" height="14" rx="2"/><polygon points="23 7 16 12 23 17" fill="currentColor" stroke="none"/></svg>',
           label: 'Sube tu primer video',
           sub: hasVideos ? `${allVideosCache.length} video${allVideosCache.length !== 1 ? 's' : ''} subido${allVideosCache.length !== 1 ? 's' : ''}` : 'Arrastra un archivo o usa el botón de subida',
-          action: hasVideos ? null : { text: 'Subir video', fn: "goSection(event,'upload');closeOnboarding()" },
+          action: hasVideos ? null : { text: 'Subir video', fn: "goSection(null,'upload');minimizeOnboarding()" },
         },
         {
-          done: hasSharedEmbed,
+          done: hasLearnedEmbed,
           icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
           label: 'Incrusta un video en tu sitio',
-          sub: hasSharedEmbed
-            ? 'Copia el código embed desde el ícono &lt;/&gt; en cualquier video'
-            : 'Primero sube un video para obtener el código de embed',
-          action: (!hasSharedEmbed && hasVideos) ? { text: 'Ver embed', fn: "goSection(event,'settings');closeOnboarding()" } : null,
+          sub: hasLearnedEmbed
+            ? 'Embed listo — usa el ícono &lt;/&gt; en cualquier video'
+            : 'Aprende a copiar el código embed de tus videos',
+          action: (!hasLearnedEmbed && hasVideos) ? { text: 'Ver cómo hacerlo', fn: 'learnEmbed()' } : null,
         },
         {
           done: twoFaOn,
           icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>',
           label: 'Activa la autenticación 2FA',
           sub: twoFaOn ? '2FA activo — cuenta protegida' : 'Protege tu cuenta con un código extra al iniciar sesión',
-          action: twoFaOn ? null : { text: 'Ir a Seguridad', fn: "goSection(event,'security');closeOnboarding()" },
+          action: twoFaOn ? null : { text: 'Ir a Seguridad', fn: "goSection(null,'security');minimizeOnboarding()" },
         },
       ];
 
@@ -7223,20 +7258,29 @@ function copyLink(id, type) {
 
       updateOnboardingIndicator(steps);
 
-      // If all done, auto-close and mark as completed
+      // If all done, permanently mark as completed and hide everything
       if (doneCnt === steps.length) {
-        const key = onboardingKey();
-        if (key) localStorage.setItem(key, '1');
+        closeOnboarding(false);
       }
     }
 
-    function closeOnboarding() {
+    // temporary=true  → solo oculta esta sesión (sessionStorage); badge sigue visible
+    //                    se vuelve a mostrar en la próxima carga de página
+    // temporary=false → cierre permanente (localStorage); nunca más se muestra
+    function closeOnboarding(temporary = false) {
       const key = onboardingKey();
-      if (key) localStorage.setItem(key, '1');
+      if (key) {
+        if (temporary) {
+          sessionStorage.setItem(key + '_skip', '1');
+        } else {
+          localStorage.setItem(key, '1');
+          // Permanent: also hide the badge indicator
+          const indicator = document.getElementById('onboarding-indicator');
+          if (indicator) indicator.remove();
+        }
+      }
       const el = document.getElementById('onboarding-overlay');
       if (el) { el.style.opacity = '0'; setTimeout(() => { el.style.display = 'none'; el.style.opacity = '1'; }, 280); }
-      const indicator = document.getElementById('onboarding-indicator');
-      if (indicator) indicator.style.display = 'none';
     }
 
     function updateOnboardingIndicator(steps) {
