@@ -7126,7 +7126,7 @@ function copyLink(id, type) {
       // Only auto-open if at least one non-trivial step is pending (not just 2FA)
       const emailVerified = !!(authUser?.email_verified);
       const hasVideos = allVideosCache && allVideosCache.length > 0;
-      const hasBranding = !!(authWorkspace?.settings?.embedColor || authWorkspace?.settings?.embedLogo);
+      const hasPlayerColor = !!(authWorkspace?.settings?.embedColor);
       if (!emailVerified || !hasVideos) {
         document.getElementById('onboarding-overlay').style.display = 'flex';
       }
@@ -7136,7 +7136,7 @@ function copyLink(id, type) {
       const emailVerified = !!(authUser?.email_verified);
       const twoFaOn       = !!(authUser?.twoFactorEnabled);
       const hasVideos     = !!(allVideosCache && allVideosCache.length > 0);
-      const hasBranding   = !!(authWorkspace?.settings?.embedColor || authWorkspace?.settings?.embedLogo);
+      const hasPlayerColor = !!(authWorkspace?.settings?.embedColor);
       const hasSharedEmbed= !!(authWorkspace && allVideosCache && allVideosCache.length > 0); // embeds only matter once there are videos
 
       const ICON_CHECK = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>';
@@ -7155,11 +7155,11 @@ function copyLink(id, type) {
           action: emailVerified ? null : { text: 'Reenviar email', fn: 'onboardingResendVerification(this)' },
         },
         {
-          done: hasBranding,
-          icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="4.93" y1="4.93" x2="9.17" y2="9.17"/><line x1="14.83" y1="14.83" x2="19.07" y2="19.07"/><line x1="14.83" y1="9.17" x2="19.07" y2="4.93"/><line x1="4.93" y1="19.07" x2="9.17" y2="14.83"/></svg>',
-          label: 'Personaliza tu player',
-          sub: hasBranding ? 'Color y logo configurados' : 'Agrega tu color de marca y logo al player embebido',
-          action: hasBranding ? null : { text: 'Ir a Configuración', fn: "goSection(event,'settings');closeOnboarding()" },
+          done: hasPlayerColor,
+          icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="13.5" cy="6.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="17.5" cy="10.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="8.5" cy="7.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="6.5" cy="12.5" r="1.5" fill="currentColor" stroke="none"/><path d="M12 2C6.49 2 2 6.49 2 12s4.49 10 10 10a2.5 2.5 0 0 0 2.5-2.5c0-.61-.23-1.2-.64-1.67a.528.528 0 0 1 .42-.84H16c3.31 0 6-2.69 6-6C22 6.04 17.51 2 12 2z"/></svg>',
+          label: 'Dale color a tu player',
+          sub: hasPlayerColor ? 'Color del player configurado' : 'Elige el color de acento de tu player embebido',
+          action: hasPlayerColor ? null : { text: 'Ir a Configuración', fn: "goSection(event,'settings');closeOnboarding()" },
         },
         {
           done: hasVideos,
