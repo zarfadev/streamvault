@@ -243,25 +243,28 @@ function checkPip() {
   }
 }
 
-// ─── Skip feedback overlay (Simple Netflix style) ────────────
+// ─── Skip feedback overlay (YouTube double-tap style) ────────
 let _skipFbTimer = null;
 function showSkipFeedback(secs) {
-  const id = secs < 0 ? 'skip-feedback-left' : 'skip-feedback-right';
-  const el = document.getElementById(id);
+  const id  = secs < 0 ? 'skip-feedback-left' : 'skip-feedback-right';
+  const el  = document.getElementById(id);
   if (!el) return;
-  
-  // Usar los iconos SVG simples del sprite
-  const iconId = secs > 0 ? '#sv-skip-fwd-48' : '#sv-skip-back-48';
-  el.innerHTML = `<div class="skip-feedback-circle">
-    <svg viewBox="0 0 48 48" width="72" height="72" fill="white" stroke="white">
-      <use href="${iconId}"/>
-    </svg>
-  </div>`;
-  
+
+  // Chevron arrows — point right for forward, left for backward
+  const isForward = secs > 0;
+  const arrow = isForward
+    ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="skip-feedback-arrow"><polyline points="9 18 15 12 9 6"/></svg>`
+    : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="skip-feedback-arrow"><polyline points="15 18 9 12 15 6"/></svg>`;
+  const label = `${Math.abs(secs)} segundos`;
+
+  el.innerHTML = `
+    <div class="skip-feedback-arrows">${arrow}${arrow}${arrow}</div>
+    <span class="skip-feedback-label">${label}</span>`;
+
   el.classList.remove('hide');
   el.classList.add('show');
   clearTimeout(_skipFbTimer);
-  _skipFbTimer = setTimeout(() => { el.classList.remove('show'); el.classList.add('hide'); }, 800);
+  _skipFbTimer = setTimeout(() => { el.classList.remove('show'); el.classList.add('hide'); }, 700);
 }
 
 // ─── Chromecast ──────────────────────────────────────────────
@@ -616,16 +619,25 @@ progressTrack.addEventListener('touchcancel', () => { touchScrub = false; hidePr
 wrap.addEventListener('mousemove', wakeChrome);
 wrap.addEventListener('touchstart', wakeChrome, { passive: true });
 wrap.addEventListener('touchmove',  wakeChrome, { passive: true });
-let lastTap = 0;
+let lastTap = 0, _dtPaused = false;
 wrap.addEventListener('touchstart', e => {
-  if (e.target.closest('button, input, .settings-wrap, .cc-wrap')) return;
+  if (e.target.closest('button, input, .settings-wrap, .cc-wrap, .player-progress-dock')) return;
   const now = Date.now(), diff = now - lastTap;
   if (diff < 300 && diff > 0) {
-    const cx = e.touches[0].clientX - wrap.getBoundingClientRect().left;
-    skip(cx < wrap.offsetWidth / 2 ? -10 : 10, {showFeedback:true});
-    e.preventDefault();
+    // ── Double-tap: seek without changing play/pause state ──────
+    e.preventDefault(); // Prevent second tap's click (play/pause toggle)
+    const cx  = e.touches[0].clientX - wrap.getBoundingClientRect().left;
+    const dir = cx < wrap.offsetWidth / 2 ? -10 : 10;
+    skip(dir, { showFeedback: true });
+    // Restore play state changed by first tap's click
+    if (_dtPaused) video.pause().catch?.(() => {});
+    else           video.play().catch(() => {});
+    lastTap = 0; // Reset — prevent triple-tap triggering again
+  } else {
+    // ── First tap: record current play state before click fires ─
+    _dtPaused = video.paused;
+    lastTap   = now;
   }
-  lastTap = now;
 }, { passive: false });
 let _chromePlayClickTimer = null;
 wrap.addEventListener('click', e => {

@@ -447,6 +447,10 @@ html.embed-root, html.embed-root body {
 @keyframes cast-pulse { 0%,100% { opacity:1; } 50% { opacity:.6; } }
 
 .controls-row .skip-btn { display: none !important; }
+/* On touch devices, hide center skip buttons — double-tap handles seeking */
+@media (pointer: coarse) {
+  .center-skip-btn { display: none !important; }
+}
 .toolbar-spacer { flex: 1 1 auto; }
 
 /* ─── Volume ────────────────────────────────────────────────── */
@@ -635,16 +639,36 @@ html.embed-root, html.embed-root body {
 }
 .quality-opt .check, .cc-opt .check, .speed-opt .check { display: none; }
 
-/* ─── CC button ─────────────────────────────────────────────── */
-.cc-btn {
-  color: rgba(255,255,255,0.75);
-  outline: none;
+/* ─── CC button — pill style matching quality-indicator-btn ──── */
+.cc-indicator-btn {
+  width: 40px; height: 40px; padding: 0;
+  border: none !important; background: none !important;
+  border-radius: 50% !important; outline: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; flex-shrink: 0;
+  transition: background 0.15s var(--pv-ease);
 }
-.cc-btn:hover { color: #fff; }
-.cc-btn:active { transform: scale(0.88); }
-.cc-btn.active { color: var(--pv-accent); }
-.cc-btn.active .ctrl-svg { filter: drop-shadow(0 0 5px rgba(var(--pv-accent-rgb),0.65)); }
-.cc-btn:focus-visible { box-shadow: 0 0 0 2px #000, 0 0 0 4px rgba(var(--pv-accent-rgb),0.6); }
+.cc-indicator-btn:hover  { background: rgba(255,255,255,0.12) !important; }
+.cc-indicator-btn:active { transform: scale(0.88); }
+.cc-indicator-btn:focus-visible { box-shadow: 0 0 0 2px #000, 0 0 0 4px rgba(var(--pv-accent-rgb),0.6); }
+/* Pill label — visually identical to quality-indicator-btn span */
+.cc-indicator-btn span {
+  display: inline-block; padding: 3px 6px; border-radius: 3px;
+  border: 1.5px solid rgba(255,255,255,0.32);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 10px; font-weight: 700; letter-spacing: 0;
+  line-height: 1; text-align: center; white-space: nowrap;
+  pointer-events: none;
+  color: rgba(255,255,255,0.42);
+  transition: color 0.15s, border-color 0.15s;
+}
+/* Active: accent color border + text */
+.cc-indicator-btn.active span {
+  color: var(--pv-accent);
+  border-color: var(--pv-accent);
+}
+/* Backwards compat — keep old .cc-btn selector for any inline styles */
+.cc-btn { color: rgba(255,255,255,0.75); outline: none; }
 
 /* CC wrap shows always; faded when no tracks available */
 .cc-wrap { display: none; }
@@ -1136,51 +1160,69 @@ html.embed-root, html.embed-root body {
   opacity: 0;
   transition: opacity 0.2s ease-out;
 }
-/* Solo el derecho (avance) es visible */
-.skip-feedback.skip-left  { display: none !important; }
-.skip-feedback.skip-right { right: 12%; }
+/* ─── YouTube-style double-tap overlay ───────────────────────── */
+/* Full-height half-screen overlay that pulses on double-tap */
+.skip-feedback {
+  position: absolute; top: 0; bottom: 0;
+  width: 45%;
+  pointer-events: none; z-index: 50;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 6px;
+  opacity: 0;
+  overflow: hidden;
+  transform: none; /* override default translateY */
+  border-radius: 0;
+}
+.skip-feedback.skip-left  { left: 0;  border-radius: 0 100% 100% 0 / 0 50% 50% 0; }
+.skip-feedback.skip-right { right: 0; border-radius: 100% 0 0 100% / 50% 0 0 50%; }
 
 .skip-feedback.show {
   opacity: 1;
-  animation: skip-feedback-prime 0.4s ease-out;
+  animation: skip-yt-flash 0.7s ease-out forwards;
 }
-.skip-feedback.hide {
+.skip-feedback.hide { opacity: 0; transition: opacity 0.25s ease-in; }
+
+@keyframes skip-yt-flash {
+  0%   { background: rgba(255,255,255,0.18); opacity: 1; }
+  60%  { background: rgba(255,255,255,0.06); opacity: 1; }
+  100% { background: rgba(255,255,255,0);    opacity: 0; }
+}
+
+/* Arrow chevrons — animated stagger */
+.skip-feedback-arrows {
+  display: flex; gap: 0;
+  align-items: center; justify-content: center;
+}
+.skip-feedback-arrow {
+  width: 22px; height: 22px;
+  color: rgba(255,255,255,0.9);
   opacity: 0;
-  transition: opacity 0.3s ease-in;
+  animation: skip-arrow-cascade 0.5s ease-out forwards;
+  flex-shrink: 0;
+}
+.skip-feedback-arrow:nth-child(1) { animation-delay: 0s;    }
+.skip-feedback-arrow:nth-child(2) { animation-delay: 0.06s; }
+.skip-feedback-arrow:nth-child(3) { animation-delay: 0.12s; }
+@keyframes skip-arrow-cascade {
+  0%   { opacity: 0; transform: scale(0.7); }
+  50%  { opacity: 1; transform: scale(1.1); }
+  100% { opacity: 0.6; transform: scale(1); }
 }
 
-/* Círculo estilo Prime Video */
-.skip-feedback-circle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 88px;
-  height: 88px;
-  background: rgba(0, 0, 0, 0.60);
-  border: 2px solid rgba(255, 255, 255, 0.7);
-  border-radius: 50%;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.55);
-  animation: skip-circle-prime 0.35s ease-out forwards;
-}
-
-@keyframes skip-feedback-prime {
-  0%   { transform: translateY(-50%) scale(0.85); opacity: 0; }
-  100% { transform: translateY(-50%) scale(1);    opacity: 1; }
-}
-@keyframes skip-circle-prime {
-  0%   { transform: scale(0.9);  opacity: 0.7; }
-  100% { transform: scale(1);    opacity: 1;   }
-}
-
-.skip-feedback-circle svg {
-  display: block;
-  filter: drop-shadow(0 1px 4px rgba(0, 0, 0, 0.3));
+/* Seconds label */
+.skip-feedback-label {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 13px; font-weight: 700;
+  color: rgba(255,255,255,0.92);
+  letter-spacing: 0.3px;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+  animation: skip-arrow-cascade 0.5s ease-out 0.06s forwards;
 }
 
 @media (max-width: 768px) {
-  .skip-feedback.skip-right { right: 8%; }
-  .skip-feedback-circle { width: 76px; height: 76px; border-width: 2px; }
-  .skip-feedback-circle svg { width: 52px !important; height: 52px !important; }
+  .skip-feedback-arrow { width: 20px; height: 20px; }
+  .skip-feedback-label { font-size: 12px; }
 }
 
 /* ─── Fast Seek HUD (Prime Video style) ────────────────────── */
