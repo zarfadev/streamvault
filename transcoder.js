@@ -1117,8 +1117,10 @@ async function rebuildMasterPlaylist(videoId, qualitiesOverride = null) {
     lines.push(`${q}/index.m3u8`);
   }
 
-  const outputDir = path.join(__dirname, 'videos', videoId);
-  fs.writeFileSync(path.join(outputDir, 'master.m3u8'), lines.join('\n'));
+  const outputDir  = path.join(__dirname, 'videos', videoId);
+  const masterPath = path.join(outputDir, 'master.m3u8');
+  fs.mkdirSync(outputDir, { recursive: true });
+  fs.writeFileSync(masterPath, lines.join('\n'));
   logger.info({ videoId, qualities, audioTracks: audioTracks.length, subtitleTracks: subtitleTracks.length }, '[transcoder] master.m3u8 rebuilt');
 }
 
