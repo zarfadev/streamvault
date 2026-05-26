@@ -2352,6 +2352,7 @@
     .sec-shimmer{background:linear-gradient(90deg,var(--surface2) 25%,var(--surface3) 50%,var(--surface2) 75%);background-size:400px 100%;animation:shimmer 1.4s infinite;border-radius:8px;height:20px;margin-bottom:8px}
     .btn-danger{background:rgba(248,113,113,0.12);color:var(--red);border:1px solid rgba(248,113,113,0.25)}
     .btn-danger:hover:not(:disabled){background:rgba(248,113,113,0.22);border-color:rgba(248,113,113,0.4)}
+    @keyframes spin{to{transform:rotate(360deg)}}
   </style>
 </head>
 
@@ -3548,46 +3549,96 @@
             </span>
             <span style="font-size:10px;font-weight:700;padding:2px 9px;border-radius:99px;background:rgba(251,191,36,0.12);color:var(--amber);text-transform:uppercase;letter-spacing:.5px;">Enterprise</span>
           </div>
-          <p style="font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.55;">
-            Sirve el player embebido desde tu propio dominio (ej: <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;font-size:12px;">videos.miempresa.com</code> en lugar de <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;font-size:12px;"><span data-brand-host>streamvault.link</span>/embed/...</code>).
+          <p style="font-size:13px;color:var(--muted);margin-bottom:18px;line-height:1.55;">
+            Sirve el player embebido desde tu propio dominio (ej: <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;font-size:12px;">videos.miempresa.com</code>) en lugar del dominio de la plataforma.
+            El código de embed se actualiza automáticamente al verificar.
           </p>
 
-          <!-- Estado actual del dominio -->
-          <div id="custom-domain-status" style="margin-bottom:14px;display:none;">
-            <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:8px;font-size:13px;" id="custom-domain-status-box">
+          <!-- ── PASO 1: Ingresar dominio (sin dominio guardado) ───────────────── -->
+          <div id="cd-step-input">
+            <div class="form-group" style="margin-bottom:14px;">
+              <label for="cfg-custom-domain" style="font-size:13px;font-weight:600;display:block;margin-bottom:6px;">Tu dominio personalizado</label>
+              <div style="display:flex;gap:8px;">
+                <input type="text" id="cfg-custom-domain" class="modal-input" placeholder="videos.miempresa.com" style="flex:1;" oninput="onCustomDomainInput()">
+                <button class="btn btn-primary" style="flex-shrink:0;font-size:13px;" onclick="saveCustomDomain()" id="save-domain-btn">Guardar</button>
+              </div>
+              <div style="font-size:11px;color:var(--muted);margin-top:5px;">Solo el hostname sin https:// ni rutas. Ej: <code>player.miempresa.com</code></div>
             </div>
           </div>
 
-          <!-- Input del dominio -->
-          <div class="form-group" style="margin-bottom:14px;">
-            <label for="cfg-custom-domain">Tu dominio personalizado</label>
-            <div style="display:flex;gap:8px;">
-              <input type="text" id="cfg-custom-domain" class="modal-input" placeholder="videos.miempresa.com" style="flex:1;" oninput="onCustomDomainInput()">
-              <button class="btn btn-ghost" style="flex-shrink:0;font-size:13px;" onclick="verifyCustomDomain()" id="verify-domain-btn">Verificar</button>
+          <!-- ── PASO 2: DNS pendiente (dominio guardado, no verificado) ────────── -->
+          <div id="cd-step-dns" style="display:none;">
+            <!-- Dominio actual + badge estado -->
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;background:rgba(251,191,36,0.07);border:1px solid rgba(251,191,36,0.25);border-radius:10px;margin-bottom:14px;">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <span style="font-size:13px;font-weight:600;font-family:var(--mono);" id="cd-domain-pending-label">—</span>
+                <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;background:rgba(251,191,36,0.15);color:var(--amber);border:1px solid rgba(251,191,36,0.3);">DNS pendiente</span>
+              </div>
+              <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px;" onclick="resetCustomDomainToInput()">Cambiar</button>
             </div>
-            <div style="font-size:11px;color:var(--muted);margin-top:4px;">Solo el hostname, sin https:// ni rutas. Ej: <code>player.miempresa.com</code></div>
+
+            <!-- Instrucciones DNS con copy -->
+            <div style="background:rgba(124,108,250,0.06);border:1px solid rgba(124,108,250,0.2);border-radius:10px;padding:16px;margin-bottom:14px;">
+              <div style="font-size:12px;font-weight:700;color:var(--accent2);margin-bottom:10px;display:flex;align-items:center;gap:6px;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                Paso 1 — Configura este CNAME en tu proveedor DNS
+              </div>
+              <p style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6;">
+                En Cloudflare, Route53, GoDaddy, o tu registrador, agrega el siguiente registro:
+              </p>
+              <div style="display:grid;grid-template-columns:60px 1fr auto;gap:8px 10px;align-items:center;font-size:12px;">
+                <span style="color:var(--muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;">Tipo</span>
+                <span style="font-family:var(--mono);color:var(--accent2);font-weight:700;">CNAME</span>
+                <span></span>
+
+                <span style="color:var(--muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;">Nombre</span>
+                <span style="font-family:var(--mono);color:var(--text);background:var(--surface2);padding:4px 8px;border-radius:6px;display:inline-block;" id="dns-name-field">tu-subdominio</span>
+                <button onclick="copyDnsField('dns-name-field')" title="Copiar" style="background:none;border:1px solid var(--border2);border-radius:6px;padding:4px 8px;color:var(--muted);cursor:pointer;font-size:11px;white-space:nowrap;transition:all .15s;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--muted)'">Copiar</button>
+
+                <span style="color:var(--muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;">Valor</span>
+                <span style="font-family:var(--mono);color:var(--green);background:var(--surface2);padding:4px 8px;border-radius:6px;display:inline-block;" id="dns-value-field">—</span>
+                <button onclick="copyDnsField('dns-value-field')" title="Copiar" style="background:none;border:1px solid var(--border2);border-radius:6px;padding:4px 8px;color:var(--muted);cursor:pointer;font-size:11px;white-space:nowrap;transition:all .15s;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--muted)'">Copiar</button>
+
+                <span style="color:var(--muted);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;">TTL</span>
+                <span style="font-family:var(--mono);color:var(--text);">Auto o 300</span>
+                <span></span>
+              </div>
+              <!-- SSL tip -->
+              <div style="margin-top:12px;padding:8px 10px;background:rgba(34,211,165,0.07);border:1px solid rgba(34,211,165,0.2);border-radius:7px;font-size:11px;color:var(--muted);line-height:1.5;display:flex;gap:8px;align-items:flex-start;">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" style="margin-top:1px;flex-shrink:0;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                <span><strong style="color:var(--green);">SSL:</strong> En Cloudflare activa el proxy naranja para HTTPS automático. Con otros proveedores necesitas un certificado propio (Let's Encrypt o similar).</span>
+              </div>
+            </div>
+
+            <!-- Verificar + estado del poll -->
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <button class="btn btn-primary" style="font-size:13px;" onclick="verifyCustomDomain()" id="verify-domain-btn">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:5px;vertical-align:middle;"><polyline points="20 6 9 17 4 12"/></svg>
+                Verificar DNS
+              </button>
+              <div id="cd-poll-status" style="font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;"></div>
+            </div>
+            <div id="custom-domain-status" style="margin-top:10px;display:none;">
+              <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:8px;font-size:13px;" id="custom-domain-status-box"></div>
+            </div>
           </div>
 
-          <!-- Instrucciones DNS -->
-          <div style="background:rgba(124,108,250,0.06);border:1px solid rgba(124,108,250,0.2);border-radius:10px;padding:14px;margin-bottom:14px;">
-            <div style="font-size:12px;font-weight:700;color:var(--accent2);margin-bottom:8px;display:flex;align-items:center;gap:6px;">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-              Configuración DNS requerida
+          <!-- ── PASO 3: Verificado ─────────────────────────────────────────────── -->
+          <div id="cd-step-verified" style="display:none;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;background:rgba(34,211,165,0.08);border:1px solid rgba(34,211,165,0.3);border-radius:10px;margin-bottom:14px;">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                <div>
+                  <span style="font-size:13px;font-weight:700;font-family:var(--mono);" id="cd-domain-verified-label">—</span>
+                  <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;background:rgba(34,211,165,0.15);color:var(--green);border:1px solid rgba(34,211,165,0.3);margin-left:8px;">Activo</span>
+                </div>
+              </div>
+              <button class="btn btn-ghost" style="font-size:12px;padding:4px 10px;color:var(--red);border-color:rgba(239,68,68,0.3);" onclick="removeCustomDomain()" id="remove-domain-btn">Eliminar</button>
             </div>
-            <p style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.6;">
-              En el panel DNS de tu proveedor (Cloudflare, Route53, etc.), agrega un registro <strong>CNAME</strong>:
+            <p style="font-size:12px;color:var(--muted);line-height:1.6;margin:0;">
+              El código de embed ya apunta a tu dominio. Cualquier iframe generado en la sección <strong>Embed</strong> usará <code style="font-family:var(--mono);background:var(--surface2);padding:1px 5px;border-radius:4px;" id="cd-domain-embed-preview">—</code>.
             </p>
-            <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:12px;font-family:var(--mono);">
-              <span style="color:var(--muted);">Tipo:</span><span style="color:var(--accent2);">CNAME</span>
-              <span style="color:var(--muted);">Nombre:</span><span style="color:var(--text);" id="dns-name-field">tu-subdominio</span>
-              <span style="color:var(--muted);">Valor:</span><span style="color:var(--green);" id="dns-value-field">streamvault.link</span>
-              <span style="color:var(--muted);">TTL:</span><span style="color:var(--text);">Auto o 300</span>
-            </div>
-          </div>
-
-          <div style="display:flex;gap:8px;">
-            <button class="btn btn-primary" style="font-size:13px;" onclick="saveCustomDomain()" id="save-domain-btn">Guardar dominio</button>
-            <button class="btn btn-ghost" style="font-size:13px;" onclick="removeCustomDomain()" id="remove-domain-btn" style="display:none;">Eliminar dominio</button>
           </div>
         </div>
 

@@ -113,7 +113,10 @@ function getPlanToken(planKey) {
 // ══════════════════════════════════════════════════════════════════════════
 
 async function dlocalRequest(method, path, body = null) {
-  const cfg = getDLocalConfig();
+  // Use async config (reads from DB credentials first, then env fallback).
+  // getDLocalConfig() is only safe after a prior getDLocalConfigAsync() call has
+  // warmed the cache; on first webhook after restart it would miss DB-only credentials.
+  const cfg = await getDLocalConfigAsync();
   if (!cfg) throw new Error('dLocal Go no configurado');
 
   const headers = {
@@ -258,7 +261,7 @@ async function createBillingPortalSession(workspaceId, returnUrl) {
  * en el webhook de suscripción activa.
  */
 async function cancelSubscription(subscriptionId) {
-  const cfg = getDLocalConfig();
+  const cfg = await getDLocalConfigAsync();
   if (!cfg) throw new Error('dLocal Go no configurado');
 
   // El subscriptionId puede ser "planId:subId" o solo un payment_id de referencia

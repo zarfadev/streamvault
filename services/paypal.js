@@ -499,7 +499,7 @@ async function processWebhookEvent(event) {
           cache.invalidate(`sv:ws:${workspace.id}`).catch(() => {});
 
           // Registrar factura de renovación
-          invoiceService.createInvoice({
+          const inv = await invoiceService.createInvoice({
             workspaceId: workspace.id,
             provider: 'paypal',
             planKey: workspace.plan,
@@ -510,7 +510,21 @@ async function processWebhookEvent(event) {
             invoiceUrl: null,
             periodStart: Math.floor(Date.now() / 1000),
             periodEnd,
-          }).catch(e => logger.error({ err: e.message }, 'createInvoice error (PayPal renewal)'));
+          }).catch(e => { logger.error({ err: e.message }, 'createInvoice error (PayPal renewal)'); return null; });
+
+          // Enviar email de confirmación de pago de renovación
+          const owner = await db.prepare(
+            `SELECT u.email, u.name FROM workspaces w JOIN users u ON u.id=w.owner_id WHERE w.id=?`
+          ).get(workspace.id).catch(() => null);
+          if (owner) {
+            emailService.sendPaymentConfirmation(owner.email, owner.name, {
+              planName: config.plans[workspace.plan]?.name || workspace.plan,
+              amount: parseFloat(resource.amount?.total || 0).toFixed(2),
+              currency: (resource.amount?.currency || 'USD').toUpperCase(),
+              invoiceNumber: inv?.invoiceNumber || resource.id || '',
+              periodEnd,
+            }).catch(e => logger.error({ err: e.message }, 'sendPaymentConfirmation error (PayPal renewal)'));
+          }
 
           logger.info({ workspaceId: workspace.id }, 'PayPal payment completed — subscription renewed');
         }
@@ -579,6 +593,13 @@ async function activateSubscription(workspaceId, planKey, subscriptionId) {
     return;
   }
 
+  const now = Math.floor(Date.now() / 1000);
+  // Establish an initial current_period_end (now + 30 days).
+  // PAYMENT.SALE.COMPLETED will overwrite this with the actual payment date once
+  // the first charge is captured. This ensures the expiry worker can track the
+  // subscription from day 1 even if the SALE.COMPLETED webhook arrives late.
+  const initialPeriodEnd = now + 30 * 86400;
+
   await db.prepare(`
     UPDATE workspaces
     SET plan                   = ?,
@@ -588,6 +609,7 @@ async function activateSubscription(workspaceId, planKey, subscriptionId) {
         max_videos             = ?,
         max_storage_bytes      = ?,
         max_bandwidth_bytes    = ?,
+        payment_metadata       = ?,
         updated_at             = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT
     WHERE id = ?
   `).run(
@@ -596,6 +618,7 @@ async function activateSubscription(workspaceId, planKey, subscriptionId) {
     plan.maxVideos,
     plan.maxStorageGB * 1e9,
     plan.maxBandwidthGB * 1e9,
+    JSON.stringify({ activated_at: now, current_period_end: initialPeriodEnd, subscription_id: subscriptionId }),
     workspaceId
   );
   // Clear pending referral credit now that payment is confirmed
@@ -611,6 +634,8 @@ async function downgradeWorkspace(workspaceId) {
     UPDATE workspaces
     SET plan                   = 'starter',
         payment_subscription_id = NULL,
+        payment_customer_id    = NULL,
+        payment_metadata       = '{}',
         suspended              = 0,
         max_videos             = ?,
         max_storage_bytes      = ?,

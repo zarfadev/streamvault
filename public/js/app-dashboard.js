@@ -722,66 +722,166 @@ function doLogout() {
     function onCustomDomainInput() {
       const input = document.getElementById('cfg-custom-domain');
       if (!input) return;
-      
+
       // Limpiar y normalizar
       let val = input.value.trim().toLowerCase();
       val = val.replace(/^(https?:\/\/)?(www\.)?/, ''); // Quitar protocolo y www
       val = val.split('/')[0]; // Quitar path
       input.value = val;
-      
-      // Actualizar preview DNS
+
+      // Actualizar preview DNS (nombre = sólo el subdominio sin el dominio base)
       const dnsNameField = document.getElementById('dns-name-field');
       if (dnsNameField) {
-        dnsNameField.textContent = val || 'tu-subdominio';
+        // Mostrar sólo la parte del subdominio (antes del primer punto) como ejemplo
+        const parts = val ? val.split('.') : [];
+        dnsNameField.textContent = parts.length > 2
+          ? parts.slice(0, parts.length - 2).join('.')  // e.g. "videos" de "videos.empresa.com"
+          : (val || 'tu-subdominio');
+      }
+      // Actualizar valor CNAME con el hostname real de la plataforma
+      const dnsValueField = document.getElementById('dns-value-field');
+      if (dnsValueField) {
+        dnsValueField.textContent = new URL(BASE).hostname;
       }
     }
 
-    async function verifyCustomDomain() {
+    function copyDnsField(fieldId) {
+      const el = document.getElementById(fieldId);
+      if (!el) return;
+      navigator.clipboard.writeText(el.textContent.trim()).then(() => toast('Copiado al portapapeles'));
+    }
+
+    // ── Custom Domain polling ────────────────────────────────────────────────
+    let _cdPollTimer = null;
+    let _cdPollCount = 0;
+    const CD_POLL_INTERVAL = 30_000; // cada 30s
+    const CD_POLL_MAX = 60;           // máximo 30 min de polling automático
+
+    function startDomainPolling(domain) {
+      stopDomainPolling();
+      _cdPollCount = 0;
+      const pollStatus = document.getElementById('cd-poll-status');
+      if (pollStatus) {
+        pollStatus.innerHTML = `
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="2" style="animation:spin 2s linear infinite;"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+          Verificando DNS automáticamente cada 30s…
+        `;
+      }
+      _cdPollTimer = setInterval(async () => {
+        _cdPollCount++;
+        if (_cdPollCount > CD_POLL_MAX || !authWorkspace) { stopDomainPolling(); return; }
+        try {
+          const r = await apiFetch(`${BASE}/api/workspaces/${authWorkspace.id}/verify-domain`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ domain }),
+          });
+          if (r.ok) {
+            stopDomainPolling();
+            authWorkspace.custom_domain_verified = true;
+            _showCdStep('verified', domain);
+            toast('Dominio verificado automáticamente', 'success');
+          }
+        } catch {}
+      }, CD_POLL_INTERVAL);
+    }
+
+    function stopDomainPolling() {
+      if (_cdPollTimer) { clearInterval(_cdPollTimer); _cdPollTimer = null; }
+      const pollStatus = document.getElementById('cd-poll-status');
+      if (pollStatus) pollStatus.innerHTML = '';
+    }
+
+    // Transition between the 3 custom-domain UI states
+    function _showCdStep(step, domain) {
+      const stepInput    = document.getElementById('cd-step-input');
+      const stepDns      = document.getElementById('cd-step-dns');
+      const stepVerified = document.getElementById('cd-step-verified');
+      if (!stepInput) return;
+
+      stepInput.style.display    = step === 'input'    ? '' : 'none';
+      stepDns.style.display      = step === 'dns'      ? '' : 'none';
+      stepVerified.style.display = step === 'verified' ? '' : 'none';
+
+      if (step === 'dns' && domain) {
+        const el = document.getElementById('cd-domain-pending-label');
+        if (el) el.textContent = domain;
+        // Update DNS fields with real values
+        onCustomDomainInput(); // ensures dns-name-field is set from the input
+        const dnsNameField  = document.getElementById('dns-name-field');
+        const dnsValueField = document.getElementById('dns-value-field');
+        if (dnsNameField) {
+          const parts = domain.split('.');
+          dnsNameField.textContent = parts.length > 2 ? parts.slice(0, parts.length - 2).join('.') : domain;
+        }
+        if (dnsValueField) dnsValueField.textContent = new URL(BASE).hostname;
+      }
+
+      if (step === 'verified' && domain) {
+        const lbl = document.getElementById('cd-domain-verified-label');
+        if (lbl) lbl.textContent = domain;
+        const prev = document.getElementById('cd-domain-embed-preview');
+        if (prev) prev.textContent = `https://${domain}/embed/…`;
+        stopDomainPolling();
+        // Hide old error status box if present
+        const sw = document.getElementById('custom-domain-status');
+        if (sw) sw.style.display = 'none';
+      }
+
+      if (step === 'input') {
+        stopDomainPolling();
+        const sw = document.getElementById('custom-domain-status');
+        if (sw) sw.style.display = 'none';
+      }
+    }
+
+    function resetCustomDomainToInput() {
+      // Just transition UI back to input — does NOT clear saved domain from DB
+      // (user must click Guardar again to change it)
       const input = document.getElementById('cfg-custom-domain');
-      const domain = input?.value.trim().toLowerCase();
-      
+      if (input && authWorkspace?.custom_embed_domain) {
+        input.value = authWorkspace.custom_embed_domain;
+      }
+      stopDomainPolling();
+      _showCdStep('input', null);
+    }
+
+    async function verifyCustomDomain() {
+      const domain = authWorkspace?.custom_embed_domain
+        || document.getElementById('cfg-custom-domain')?.value.trim().toLowerCase();
+
       if (!domain) return toast('Ingresa un dominio primero', 'error');
       if (!authToken || !authWorkspace) return toast('Inicia sesión primero', 'error');
-      
+
       const btn = document.getElementById('verify-domain-btn');
-      const originalText = btn.textContent;
-      btn.textContent = 'Verificando...';
+      const origHTML = btn.innerHTML;
+      btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1.2s linear infinite;margin-right:5px;vertical-align:middle;"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Verificando…';
       btn.disabled = true;
-      
+
       try {
         const r = await apiFetch(`${BASE}/api/workspaces/${authWorkspace.id}/verify-domain`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ domain })
         });
-
         const data = await r.json();
 
         if (!r.ok) {
-          toast(data.error || 'Error al verificar dominio', 'error');
-          showDomainStatus(false, data.error || 'Verifica la configuración DNS');
+          // Show specific error: cname not set, DNS not propagated, etc.
+          const errMsg = data.error || 'DNS aún no propagado';
+          showDomainStatus(false, errMsg);
+          toast('No se pudo verificar: ' + errMsg, 'error');
+          // Keep polling so it retries automatically
+          if (!_cdPollTimer) startDomainPolling(domain);
         } else {
-          // Build a status message that includes the CNAME verification result
-          let msg = 'Dominio verificado y activo';
-          if (data.cname_ok) {
-            // Perfect: CNAME points directly to our host
-            msg += ` — CNAME → ${data.cname_expected}`;
-          } else if (data.cname_chain && data.cname_chain.length > 0) {
-            // CNAME found but points elsewhere — might be misconfigured
-            msg += ` — ⚠️ CNAME apunta a ${data.cname_chain[0]} (esperado: ${data.cname_expected || 'streamvault.link'})`;
-          }
-          // No CNAME visible: likely Cloudflare "orange cloud" proxy or plain A record.
-          // The domain IS verified (IP resolved + HTTP check passed). Don't alarm user.
-          if (data.resolved_ip) msg += ` · IP ${data.resolved_ip}`;
-          toast('Dominio verificado correctamente', 'success');
-          showDomainStatus(true, msg);
+          stopDomainPolling();
           authWorkspace.custom_domain_verified = true;
+          _showCdStep('verified', domain);
+          toast('Dominio verificado y activo', 'success');
         }
       } catch (err) {
-        console.error('Error verifying domain:', err);
-        toast('Error de conexión', 'error');
+        toast('Error de conexión al verificar', 'error');
       } finally {
-        btn.textContent = originalText;
+        btn.innerHTML = origHTML;
         btn.disabled = false;
       }
     }
@@ -789,33 +889,14 @@ function doLogout() {
     function showDomainStatus(success, message) {
       const statusBox = document.getElementById('custom-domain-status-box');
       const statusWrap = document.getElementById('custom-domain-status');
-      
       if (!statusBox || !statusWrap) return;
-      
       statusWrap.style.display = 'block';
-      
       if (success) {
-        statusBox.style.background = 'rgba(34,197,94,0.1)';
-        statusBox.style.border = '1px solid rgba(34,197,94,0.3)';
-        statusBox.style.color = 'var(--green)';
-        statusBox.innerHTML = `
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;">
-            <polyline points="20 6 9 17 4 12"/>
-          </svg>
-          <span>${esc(message)}</span>
-        `;
+        statusBox.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:8px;font-size:13px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);color:var(--green);';
+        statusBox.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;"><polyline points="20 6 9 17 4 12"/></svg><span>${esc(message)}</span>`;
       } else {
-        statusBox.style.background = 'rgba(239,68,68,0.1)';
-        statusBox.style.border = '1px solid rgba(239,68,68,0.3)';
-        statusBox.style.color = 'var(--red)';
-        statusBox.innerHTML = `
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;">
-            <circle cx="12" cy="12" r="10"/>
-            <line x1="12" y1="8" x2="12" y2="12"/>
-            <line x1="12" y1="16" x2="12.01" y2="16"/>
-          </svg>
-          <span>${esc(message)}</span>
-        `;
+        statusBox.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:8px;font-size:13px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);color:var(--red);';
+        statusBox.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><span>${esc(message)}</span>`;
       }
     }
 
@@ -825,41 +906,35 @@ function doLogout() {
 
       if (!domain) return toast('Ingresa un dominio primero', 'error');
       if (!authToken || !authWorkspace) return toast('Inicia sesión primero', 'error');
+      if (!/^[a-z0-9][a-z0-9.-]+[a-z0-9]$/.test(domain)) return toast('Formato de dominio inválido', 'error');
 
-      if (!/^[a-z0-9][a-z0-9.-]+[a-z0-9]$/.test(domain)) {
-        return toast('Formato de dominio inválido', 'error');
-      }
-
+      const btn = document.getElementById('save-domain-btn');
+      btn.disabled = true; btn.textContent = 'Guardando…';
       try {
         const r = await apiFetch(`${BASE}/api/workspaces/${authWorkspace.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ custom_embed_domain: domain })
         });
-
         if (!r.ok) {
           const err = await r.json();
           return toast(err.error || 'Error al guardar dominio', 'error');
         }
-
         authWorkspace.custom_embed_domain = domain;
         authWorkspace.custom_domain_verified = false;
-        toast('Dominio guardado. Configura el CNAME en tu DNS y luego haz clic en "Verificar"', 'success');
-
-        const removeBtn = document.getElementById('remove-domain-btn');
-        if (removeBtn) removeBtn.style.display = 'inline-block';
-        const statusWrap = document.getElementById('custom-domain-status');
-        if (statusWrap) statusWrap.style.display = 'none';
-      } catch (err) {
-        console.error('Error saving domain:', err);
+        _showCdStep('dns', domain);
+        startDomainPolling(domain);
+        toast('Dominio guardado — configura el CNAME y haz clic en Verificar DNS', 'success');
+      } catch {
         toast('Error de conexión', 'error');
+      } finally {
+        btn.disabled = false; btn.textContent = 'Guardar';
       }
     }
 
     async function removeCustomDomain() {
       if (!authToken || !authWorkspace) return toast('Inicia sesión primero', 'error');
-
-      if (!await confirmModal('Eliminar dominio', '¿Eliminar el dominio personalizado?', 'Eliminar', 'Cancelar', true)) return;
+      if (!await confirmModal('Eliminar dominio', '¿Eliminar el dominio personalizado? El embed volverá a usar el dominio de la plataforma.', 'Eliminar', 'Cancelar', true)) return;
 
       try {
         const r = await apiFetch(`${BASE}/api/workspaces/${authWorkspace.id}`, {
@@ -867,14 +942,11 @@ function doLogout() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ custom_embed_domain: null })
         });
-
         if (!r.ok) return toast('Error al eliminar dominio', 'error');
 
+        stopDomainPolling();
         document.getElementById('cfg-custom-domain').value = '';
-        document.getElementById('custom-domain-status').style.display = 'none';
-        document.getElementById('remove-domain-btn').style.display = 'none';
-        onCustomDomainInput();
-
+        _showCdStep('input', null);
         authWorkspace.custom_embed_domain = null;
         authWorkspace.custom_domain_verified = false;
         toast('Dominio personalizado eliminado', 'success');
@@ -957,28 +1029,23 @@ function doLogout() {
     // custom_embed_domain y custom_domain_verified de sus columnas dedicadas.
     function loadCustomDomainConfiguration(ws) {
       const domainInput = document.getElementById('cfg-custom-domain');
-      const removeBtn = document.getElementById('remove-domain-btn');
-      const statusWrap = document.getElementById('custom-domain-status');
-
       const currentDomain = ws?.custom_embed_domain || null;
       const isVerified = !!ws?.custom_domain_verified;
 
+      stopDomainPolling(); // reset any previous polling
+
       if (currentDomain) {
-        if (domainInput) {
-          domainInput.value = currentDomain;
-          onCustomDomainInput();
-        }
-        if (removeBtn) removeBtn.style.display = 'inline-block';
+        if (domainInput) domainInput.value = currentDomain;
         if (isVerified) {
-          showDomainStatus(true, 'Dominio verificado y activo');
+          _showCdStep('verified', currentDomain);
         } else {
-          if (statusWrap) statusWrap.style.display = 'none';
+          _showCdStep('dns', currentDomain);
+          startDomainPolling(currentDomain); // start auto-checking on page load
         }
       } else {
         if (domainInput) domainInput.value = '';
-        if (removeBtn) removeBtn.style.display = 'none';
-        if (statusWrap) statusWrap.style.display = 'none';
-        onCustomDomainInput();
+        _showCdStep('input', null);
+        onCustomDomainInput(); // reset dns-value-field with real hostname
       }
     }
 
@@ -7042,44 +7109,107 @@ function copyLink(id, type) {
       }
     }
 
-    function onboardingKey() { return authUser ? `sv_onboarding_${authUser.id}` : null; }
+    // Key is scoped per workspace so each new workspace gets its own tour.
+    // Using workspace ID avoids re-showing for users who already completed it.
+    function onboardingKey() {
+      if (!authUser || !authWorkspace) return null;
+      return `sv_ob_${authUser.id}_${authWorkspace.id}`;
+    }
 
     function initOnboarding() {
       const key = onboardingKey();
-      if (!key || localStorage.getItem(key)) return;
-      // Don't show if user has already uploaded videos (not a new user)
-      if (authUser && authUser.created_at && (Date.now() / 1000 - authUser.created_at) > 86400 * 3) return;
+      if (!key) return;
+      // Show onboarding until all steps are done OR user explicitly dismisses it.
+      // No time-based cutoff — a returning user with pending steps should still see it.
+      if (localStorage.getItem(key)) return;
       renderOnboarding();
-      document.getElementById('onboarding-overlay').style.display = 'flex';
+      // Only auto-open if at least one non-trivial step is pending (not just 2FA)
+      const emailVerified = !!(authUser?.email_verified);
+      const hasVideos = allVideosCache && allVideosCache.length > 0;
+      const hasBranding = !!(authWorkspace?.settings?.embedColor || authWorkspace?.settings?.embedLogo);
+      if (!emailVerified || !hasVideos) {
+        document.getElementById('onboarding-overlay').style.display = 'flex';
+      }
     }
 
     function renderOnboarding() {
-      const emailVerified = !!(authUser && authUser.email_verified);
-      const twoFaOn = !!(authUser && authUser.twoFactorEnabled);
-      const hasVideos = allVideosCache && allVideosCache.length > 0;
-      
+      const emailVerified = !!(authUser?.email_verified);
+      const twoFaOn       = !!(authUser?.twoFactorEnabled);
+      const hasVideos     = !!(allVideosCache && allVideosCache.length > 0);
+      const hasBranding   = !!(authWorkspace?.settings?.embedColor || authWorkspace?.settings?.embedLogo);
+      const hasSharedEmbed= !!(authWorkspace && allVideosCache && allVideosCache.length > 0); // embeds only matter once there are videos
+
+      const ICON_CHECK = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>';
       const steps = [
-        { done: true,          icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>', label: 'Cuenta creada', sub: `¡Bienvenido a ${window._svSiteName || 'StreamVault'}!` },
-        { done: emailVerified, icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22 6 12 13 2 6"/></svg>', label: 'Verifica tu email', sub: emailVerified ? 'Email verificado' : 'Revisa tu bandeja de entrada', action: emailVerified ? null : { text: 'Reenviar email', fn: 'onboardingResendVerification(this)' } },
-        { done: twoFaOn,       icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>', label: 'Activa la autenticación 2FA', sub: twoFaOn ? '2FA activo' : 'Protege tu cuenta', action: twoFaOn ? null : { text: 'Ir a Seguridad', fn: "goSection(event,'security');closeOnboarding()" } },
-        { done: hasVideos,     icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>', label: 'Sube tu primer video', sub: hasVideos ? 'Primer video subido' : 'Empieza a compartir contenido', action: hasVideos ? null : { text: 'Subir video', fn: "goSection(event,'upload');closeOnboarding()" } },
+        {
+          done: true,
+          icon: ICON_CHECK,
+          label: 'Cuenta creada',
+          sub: `¡Bienvenido a ${window._svSiteName || 'StreamVault'}!`,
+        },
+        {
+          done: emailVerified,
+          icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22 6 12 13 2 6"/></svg>',
+          label: 'Verifica tu email',
+          sub: emailVerified ? 'Email verificado' : 'Revisa tu bandeja de entrada y haz clic en el enlace',
+          action: emailVerified ? null : { text: 'Reenviar email', fn: 'onboardingResendVerification(this)' },
+        },
+        {
+          done: hasBranding,
+          icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="4.93" y1="4.93" x2="9.17" y2="9.17"/><line x1="14.83" y1="14.83" x2="19.07" y2="19.07"/><line x1="14.83" y1="9.17" x2="19.07" y2="4.93"/><line x1="4.93" y1="19.07" x2="9.17" y2="14.83"/></svg>',
+          label: 'Personaliza tu player',
+          sub: hasBranding ? 'Color y logo configurados' : 'Agrega tu color de marca y logo al player embebido',
+          action: hasBranding ? null : { text: 'Ir a Configuración', fn: "goSection(event,'settings');closeOnboarding()" },
+        },
+        {
+          done: hasVideos,
+          icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="5" width="15" height="14" rx="2"/><polygon points="23 7 16 12 23 17" fill="currentColor" stroke="none"/></svg>',
+          label: 'Sube tu primer video',
+          sub: hasVideos ? `${allVideosCache.length} video${allVideosCache.length !== 1 ? 's' : ''} subido${allVideosCache.length !== 1 ? 's' : ''}` : 'Arrastra un archivo o usa el botón de subida',
+          action: hasVideos ? null : { text: 'Subir video', fn: "goSection(event,'upload');closeOnboarding()" },
+        },
+        {
+          done: hasSharedEmbed,
+          icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>',
+          label: 'Incrusta un video en tu sitio',
+          sub: hasSharedEmbed
+            ? 'Copia el código embed desde el ícono &lt;/&gt; en cualquier video'
+            : 'Primero sube un video para obtener el código de embed',
+          action: (!hasSharedEmbed && hasVideos) ? { text: 'Ver embed', fn: "goSection(event,'settings');closeOnboarding()" } : null,
+        },
+        {
+          done: twoFaOn,
+          icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>',
+          label: 'Activa la autenticación 2FA',
+          sub: twoFaOn ? '2FA activo — cuenta protegida' : 'Protege tu cuenta con un código extra al iniciar sesión',
+          action: twoFaOn ? null : { text: 'Ir a Seguridad', fn: "goSection(event,'security');closeOnboarding()" },
+        },
       ];
-      
-      const pct = Math.round(steps.filter(s => s.done).length / steps.length * 100);
+
+      const doneCnt = steps.filter(s => s.done).length;
+      const pct = Math.round(doneCnt / steps.length * 100);
       document.getElementById('onboarding-progress-bar').style.width = pct + '%';
       document.getElementById('onboarding-progress-label').textContent = pct + '% completado';
+
       document.getElementById('onboarding-steps').innerHTML = steps.map((s, i) => `
         <div style="display:flex;align-items:flex-start;gap:14px;padding:18px 20px;${i < steps.length - 1 ? 'border-bottom:1px solid var(--border);' : ''}">
-          <div style="width:44px;height:44px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all .2s;${s.done ? 'background:rgba(34,211,165,0.15);color:var(--green);border:2px solid rgba(34,211,165,0.5);box-shadow:0 0 0 4px rgba(34,211,165,0.08);' : 'background:var(--surface3);color:var(--muted);border:2px solid var(--border2);'}">${s.done ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>' : s.icon}</div>
+          <div style="width:44px;height:44px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all .2s;${s.done ? 'background:rgba(34,211,165,0.15);color:var(--green);border:2px solid rgba(34,211,165,0.5);box-shadow:0 0 0 4px rgba(34,211,165,0.08);' : 'background:var(--surface3);color:var(--muted);border:2px solid var(--border2);'}">
+            ${s.done ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>' : s.icon}
+          </div>
           <div style="flex:1;min-width:0;">
             <div style="font-size:14px;font-weight:${s.done ? '700' : '600'};line-height:1.4;color:${s.done ? 'var(--muted)' : 'var(--text)'};${s.done ? 'text-decoration:line-through;' : ''}">${s.label}</div>
             <div style="font-size:13px;color:${s.done ? 'var(--green)' : 'var(--muted)'};margin-top:5px;line-height:1.5;font-weight:${s.done ? '600' : '400'};">${s.sub}</div>
-            ${!s.done && s.action ? (s.action.href ? `<a href="${s.action.href}" style="display:inline-block;margin-top:12px;font-size:13px;color:var(--accent2);text-decoration:none;font-weight:600;">${s.action.text} →</a>` : `<button type="button" onclick="${s.action.fn}" style="margin-top:12px;padding:8px 18px;border-radius:8px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-size:13px;cursor:pointer;font-weight:600;font-family:var(--sans);transition:all .18s;box-shadow:0 2px 8px rgba(124,108,250,0.25);" onmouseover="this.style.background='var(--accent2)';this.style.transform='translateY(-1px)';this.style.boxShadow='0 4px 12px rgba(124,108,250,0.35)'" onmouseout="this.style.background='var(--accent)';this.style.transform='';this.style.boxShadow='0 2px 8px rgba(124,108,250,0.25)'">${s.action.text}</button>`) : ''}
+            ${!s.done && s.action ? `<button type="button" onclick="${s.action.fn}" style="margin-top:12px;padding:8px 18px;border-radius:8px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-size:13px;cursor:pointer;font-weight:600;font-family:var(--sans);transition:all .18s;box-shadow:0 2px 8px rgba(124,108,250,0.25);" onmouseover="this.style.background='var(--accent2)';this.style.transform='translateY(-1px)'" onmouseout="this.style.background='var(--accent)';this.style.transform=''">${s.action.text}</button>` : ''}
           </div>
         </div>`).join('');
-      
-      // Actualizar indicador en el dashboard si hay tareas pendientes
+
       updateOnboardingIndicator(steps);
+
+      // If all done, auto-close and mark as completed
+      if (doneCnt === steps.length) {
+        const key = onboardingKey();
+        if (key) localStorage.setItem(key, '1');
+      }
     }
 
     function closeOnboarding() {
@@ -7087,40 +7217,33 @@ function copyLink(id, type) {
       if (key) localStorage.setItem(key, '1');
       const el = document.getElementById('onboarding-overlay');
       if (el) { el.style.opacity = '0'; setTimeout(() => { el.style.display = 'none'; el.style.opacity = '1'; }, 280); }
-      // Ocultar indicador del dashboard
       const indicator = document.getElementById('onboarding-indicator');
       if (indicator) indicator.style.display = 'none';
     }
-    
+
     function updateOnboardingIndicator(steps) {
       const pendingCount = steps.filter(s => !s.done).length;
       let indicator = document.getElementById('onboarding-indicator');
-      
+
       if (pendingCount > 0 && !localStorage.getItem(onboardingKey())) {
         if (!indicator) {
-          // Crear el indicador si no existe
           const statsWrap = document.getElementById('videos-stats-wrap');
           if (statsWrap) {
             indicator = document.createElement('div');
             indicator.id = 'onboarding-indicator';
             indicator.style.cssText = 'display:flex;align-items:center;gap:10px;padding:12px 16px;background:rgba(124,108,250,0.1);border:1px solid rgba(124,108,250,0.3);border-radius:10px;margin-bottom:16px;cursor:pointer;transition:all .2s;';
             indicator.innerHTML = `
-              <div style="width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 2s ease-in-out infinite;"></div>
+              <div style="width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 2s ease-in-out infinite;flex-shrink:0;"></div>
               <div style="flex:1;">
-                <div style="font-size:13px;font-weight:600;color:var(--text);">Completa tu configuración</div>
-                <div style="font-size:11px;color:var(--muted);margin-top:2px;">${pendingCount} ${pendingCount === 1 ? 'tarea pendiente' : 'tareas pendientes'}</div>
+                <div style="font-size:13px;font-weight:600;color:var(--text);">Primeros pasos</div>
+                <div style="font-size:11px;color:var(--muted);margin-top:2px;" id="onboarding-indicator-count">${pendingCount} ${pendingCount === 1 ? 'tarea pendiente' : 'tareas pendientes'}</div>
               </div>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
             `;
             indicator.onmouseover = () => indicator.style.background = 'rgba(124,108,250,0.15)';
             indicator.onmouseout = () => indicator.style.background = 'rgba(124,108,250,0.1)';
-            indicator.onclick = () => {
-              renderOnboarding();
-              document.getElementById('onboarding-overlay').style.display = 'flex';
-            };
+            indicator.onclick = () => { renderOnboarding(); document.getElementById('onboarding-overlay').style.display = 'flex'; };
             statsWrap.insertAdjacentElement('beforebegin', indicator);
-            
-            // Agregar animación de pulso si no existe
             if (!document.getElementById('onboarding-pulse-style')) {
               const style = document.createElement('style');
               style.id = 'onboarding-pulse-style';
@@ -7130,8 +7253,8 @@ function copyLink(id, type) {
           }
         } else {
           indicator.style.display = 'flex';
-          const countText = indicator.querySelector('div > div:last-child');
-          if (countText) countText.textContent = `${pendingCount} ${pendingCount === 1 ? 'tarea pendiente' : 'tareas pendientes'}`;
+          const ct = document.getElementById('onboarding-indicator-count');
+          if (ct) ct.textContent = `${pendingCount} ${pendingCount === 1 ? 'tarea pendiente' : 'tareas pendientes'}`;
         }
       } else if (indicator) {
         indicator.style.display = 'none';

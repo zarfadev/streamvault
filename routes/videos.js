@@ -343,6 +343,27 @@ router.get('/:id', async (req, res) => {
     let downloadsEnabled = true;
     let embedEnabled = true;
     let channelName = null;
+
+    // ── Normalizar estructura ads: dashboard guarda {type, vast:{...}, banner:{...}, popup:{...}}
+    // El player espera formato flat: {enabled, type, vastUrl, vastPosition, vastMidrollAt, bannerHtml, ...}
+    const _normalizeAdsFlat = (r) => ({
+      enabled: true,
+      type: r.type || 'vast',
+      // VAST — soportar formato nested (nuevo) y flat (legacy)
+      vastUrl:       r.vastUrl       || r.vast?.url      || null,
+      vastPosition:  r.vastPosition  || r.vast?.position || 'preroll',
+      vastMidrollAt: r.vastMidrollAt || r.vast?.midrollTime || 60,
+      // Banner
+      bannerHtml:     r.bannerHtml     || r.banner?.html     || null,
+      bannerPosition: r.bannerPosition || r.banner?.position || 'bottom',
+      bannerDelay:    r.bannerDelay    != null ? r.bannerDelay    : (r.banner?.delay    ?? 0),
+      bannerDuration: r.bannerDuration != null ? r.bannerDuration : (r.banner?.duration ?? 0),
+      // Popup
+      popupUrl:       r.popupUrl       || r.popup?.url       || null,
+      popupDelay:     r.popupDelay     != null ? r.popupDelay     : (r.popup?.delay     ?? 10),
+      popupFrequency: r.popupFrequency != null ? r.popupFrequency : (r.popup?.frequency ?? 1),
+    });
+
     if (video.workspace_id) {
       const ws = await db.prepare(
         `SELECT w.settings, w.plan, w.name, w.custom_embed_domain, w.custom_domain_verified, u.channel_name FROM workspaces w LEFT JOIN users u ON u.id = w.owner_id WHERE w.id = ?`
@@ -372,38 +393,27 @@ router.get('/:id', async (req, res) => {
         const adsConfigRaw = (s.ads && typeof s.ads === 'object') ? s.ads : safeJsonParse(s.ads, null);
         const globalFeatures = await dynCfg.getDynSection('features', { adsEnabled: true });
         const globalAdsEnabled = globalFeatures.adsEnabled !== false;
+        // Para Pro/Enterprise: adsEnabled=true en defaults → pueden poner sus propios ads
         const planAdsVal = planFeatures.adsEnabled ?? PLAN_FEATURE_DEFAULTS[ws.plan]?.adsEnabled ?? true;
         const adsEnabled = globalAdsEnabled && (planAdsVal === true || planAdsVal === 'enabled' || planAdsVal === 'full');
         const adblockDetect = planFeatures.adblockDetection === true || planFeatures.adblockDetection === 'enabled';
 
-        // Normalizar estructura ads: el dashboard guarda {type, vast:{url,position,midrollTime}, banner:{...}, popup:{...}}
-        // El player espera formato flat: {enabled, type, vastUrl, vastPosition, vastMidrollAt, bannerHtml, ...}
-        const normalizeAdsFlat = (r) => ({
-          enabled: true,
-          type: r.type || 'vast',
-          // VAST — soportar formato nested (nuevo) y flat (legacy)
-          vastUrl:       r.vastUrl       || r.vast?.url      || null,
-          vastPosition:  r.vastPosition  || r.vast?.position || 'preroll',
-          vastMidrollAt: r.vastMidrollAt || r.vast?.midrollTime || 60,
-          // Banner
-          bannerHtml:     r.bannerHtml     || r.banner?.html     || null,
-          bannerPosition: r.bannerPosition || r.banner?.position || 'bottom',
-          bannerDelay:    r.bannerDelay    != null ? r.bannerDelay    : (r.banner?.delay    ?? 0),
-          bannerDuration: r.bannerDuration != null ? r.bannerDuration : (r.banner?.duration ?? 0),
-          // Popup
-          popupUrl:       r.popupUrl       || r.popup?.url       || null,
-          popupDelay:     r.popupDelay     != null ? r.popupDelay     : (r.popup?.delay     ?? 10),
-          popupFrequency: r.popupFrequency != null ? r.popupFrequency : (r.popup?.frequency ?? 1),
-        });
-
         let adsFlat = null;
+        // Workspace tiene ads propios configurados (solo Pro/Enterprise pueden guardarlos)
         if (adsEnabled && adsConfigRaw) {
-          adsFlat = normalizeAdsFlat(adsConfigRaw);
+          const flat = _normalizeAdsFlat(adsConfigRaw);
+          // Verificar que el ad config tenga contenido real según el tipo
+          const hasContent =
+            (flat.type === 'vast' && flat.vastUrl) ||
+            (flat.type === 'banner' && flat.bannerHtml) ||
+            (flat.type === 'popup' && flat.popupUrl) ||
+            flat.type === 'all';
+          if (hasContent) adsFlat = flat;
         }
 
         // ── Platform Ads (monetización de planes gratuitos) ─────────────────────
         // Si el workspace no tiene ads propios configurados, verificar si el super
-        // admin ha activado Platform Ads para este plan (ej. Starter).
+        // admin ha activado Platform Ads para este plan.
         // Los platform ads se inyectan aunque adsEnabled=false para el plan,
         // ya que son controlados 100% por la plataforma, no por el workspace owner.
         if (!adsFlat && globalAdsEnabled) {
@@ -412,7 +422,13 @@ router.get('/:id', async (req, res) => {
           });
           const targetPlans = Array.isArray(platformAdsCfg.applyToPlans) ? platformAdsCfg.applyToPlans : ['starter'];
           if (platformAdsCfg.enabled && platformAdsCfg.ad && targetPlans.includes(ws.plan)) {
-            adsFlat = { ...normalizeAdsFlat(platformAdsCfg.ad), isPlatformAd: true };
+            const pFlat = _normalizeAdsFlat(platformAdsCfg.ad);
+            const pHasContent =
+              (pFlat.type === 'vast' && pFlat.vastUrl) ||
+              (pFlat.type === 'banner' && pFlat.bannerHtml) ||
+              (pFlat.type === 'popup' && pFlat.popupUrl) ||
+              pFlat.type === 'all';
+            if (pHasContent) adsFlat = { ...pFlat, isPlatformAd: true };
           }
         }
 
@@ -445,6 +461,37 @@ router.get('/:id', async (req, res) => {
         downloadsEnabled = s.downloadsEnabled !== false;
         embedEnabled = s.embedEnabled !== false;
         channelName = ws.channel_name || ws.name || null;
+      }
+    }
+
+    // ── Platform Ads para videos sin workspace ─────────────────────────────────
+    // Videos que no pertenecen a ningún workspace (workspace_id IS NULL) no tienen
+    // ads configurados por el owner. Aún así, el super admin puede monetizarlos
+    // inyectando Platform Ads (si están habilitados para el plan "starter").
+    if (!video.workspace_id && !embedConfig.ads) {
+      try {
+        const dynCfg = require('../services/dynamicConfig');
+        const globalFeatures = await dynCfg.getDynSection('features', { adsEnabled: true });
+        if (globalFeatures.adsEnabled !== false) {
+          const platformAdsCfg = await dynCfg.getDynSection('platformAds', {
+            enabled: false, applyToPlans: ['starter'], ad: null,
+          });
+          const targetPlans = Array.isArray(platformAdsCfg.applyToPlans) ? platformAdsCfg.applyToPlans : ['starter'];
+          // Videos sin workspace se tratan como plan "starter" para platform ads
+          if (platformAdsCfg.enabled && platformAdsCfg.ad && targetPlans.includes('starter')) {
+            const flat = _normalizeAdsFlat(platformAdsCfg.ad);
+            const hasContent =
+              (flat.type === 'vast' && flat.vastUrl) ||
+              (flat.type === 'banner' && flat.bannerHtml) ||
+              (flat.type === 'popup' && flat.popupUrl) ||
+              flat.type === 'all';
+            if (hasContent) {
+              embedConfig.ads = { ...flat, isPlatformAd: true };
+            }
+          }
+        }
+      } catch (e) {
+        // No bloquear la respuesta si falla la lectura de platform ads
       }
     }
 
