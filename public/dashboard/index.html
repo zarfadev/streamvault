@@ -1924,8 +1924,8 @@
     .pl-card-footer { padding: 10px 16px 14px; border-top: 1px solid var(--border); display: flex; gap: 7px; flex-wrap: wrap; }
     .pl-search-bar {
       display: flex;
-      align-items: stretch;
-      gap: 12px;
+      align-items: center;
+      gap: 10px;
       margin-bottom: 20px;
       flex-wrap: wrap;
     }
@@ -2837,15 +2837,13 @@
           <option value="title">Título (A–Z)</option>
           <option value="videos">Más videos</option>
         </select>
-        <span style="font-size:12px;color:var(--muted);white-space:nowrap;" id="pl-count-hint"></span>
-        <div style="display:flex;gap:4px;flex-shrink:0;margin-left:auto;">
-          <button id="pl-view-grid-btn" class="view-toggle-btn active" title="Cuadrícula" onclick="setPlViewMode('grid')" aria-label="Vista cuadrícula">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-          </button>
-          <button id="pl-view-list-btn" class="view-toggle-btn" title="Lista" onclick="setPlViewMode('list')" aria-label="Vista lista">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-          </button>
-        </div>
+        <span style="font-size:12px;color:var(--muted);white-space:nowrap;flex:1;" id="pl-count-hint"></span>
+        <button id="pl-view-grid-btn" class="view-toggle-btn" title="Cuadrícula" onclick="setPlViewMode('grid')" aria-label="Vista cuadrícula">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        </button>
+        <button id="pl-view-list-btn" class="view-toggle-btn" title="Lista" onclick="setPlViewMode('list')" aria-label="Vista lista">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        </button>
       </div>
       <div id="playlists-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;"></div>
     </div>

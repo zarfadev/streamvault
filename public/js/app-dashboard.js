@@ -5343,7 +5343,7 @@ function copyLink(id, type) {
             </div>
             <button class="btn btn-ghost" onclick="this.closest('[data-sv-overlay]').remove()" style="padding:4px 10px;font-size:18px;line-height:1;border-radius:8px;flex-shrink:0;" aria-label="Cerrar">×</button>
           </div>
-          <div style="padding:14px 24px 12px;border-bottom:1px solid var(--border);background:var(--surface2);">
+          <div style="padding:14px 24px 12px;border-bottom:1px solid var(--border);background:var(--surface2);position:relative;z-index:10;">
             <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:8px;">Agregar video</div>
             <div style="display:flex;gap:8px;align-items:center;">
               <div style="position:relative;flex:1;" id="pl-picker-wrap">
@@ -5369,7 +5369,7 @@ function copyLink(id, type) {
       const inp = overlay.querySelector('#pl-picker-input');
       const drop = overlay.querySelector('#pl-picker-dropdown');
       const hiddenSel = overlay.querySelector('#pl-add-video-sel');
-      const readyVideos = allVideosCache.filter(v => v.status === 'ready');
+      const readyVideos = allVideosCache.filter(v => v.status === 'ready' && v.workspace_id === authWorkspace?.id);
 
       function renderPickerItems(q) {
         const filtered = q
