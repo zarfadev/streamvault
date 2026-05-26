@@ -7156,22 +7156,31 @@ function copyLink(id, type) {
       if (el) { el.style.opacity = '0'; setTimeout(() => { el.style.display = 'none'; el.style.opacity = '1'; }, 280); }
     }
 
-    // Navega a Configuración y hace scroll + highlight directo al color picker
+    // Navega a Configuración → tab General → scroll + highlight al color picker
     function goToColorPicker() {
       goSection(null, 'settings');
       minimizeOnboarding();
+      // 1) Espera a que la sección cargue, luego activa el tab General
+      setTimeout(() => switchSettingsTab('general'), 220);
+      // 2) Después del tab switch, scroll al card del color
       setTimeout(() => {
-        const colorRow = document.getElementById('cfg-color-hex')?.closest('div[style]') ||
-                         document.getElementById('cfg-color-picker')?.parentElement;
+        const card = document.getElementById('cfg-color-picker')?.closest('.settings-card');
         const colorInput = document.getElementById('cfg-color-hex');
-        if (colorRow) {
-          colorRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          colorRow.style.transition = 'box-shadow .3s';
-          colorRow.style.boxShadow = '0 0 0 3px rgba(124,108,250,.5)';
-          setTimeout(() => { colorRow.style.boxShadow = ''; colorRow.style.transition = ''; }, 2200);
+        if (card) {
+          card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          card.style.transition = 'box-shadow .35s';
+          card.style.boxShadow = '0 0 0 3px rgba(124,108,250,.55)';
+          setTimeout(() => { card.style.boxShadow = ''; card.style.transition = ''; }, 2400);
         }
         if (colorInput) colorInput.focus();
-      }, 380);
+      }, 420);
+    }
+
+    // Usuario dice que el color por defecto ya le gusta — marca el paso como hecho
+    function skipColorStep() {
+      if (!authWorkspace) return;
+      localStorage.setItem('sv_ob_color_ok_' + authWorkspace.id, '1');
+      renderOnboarding(); // refresca los pasos con el nuevo estado
     }
 
     // Marca el paso embed como visto y navega a videos
@@ -7188,9 +7197,11 @@ function copyLink(id, type) {
       const emailVerified  = !!(authUser?.email_verified);
       const twoFaOn        = !!(authUser?.twoFactorEnabled);
       const hasVideos      = !!(allVideosCache && allVideosCache.length > 0);
-      const hasPlayerColor = !!(authWorkspace?.settings?.embedColor);
-      // Embed step: done once the user clicked "Ver cómo hacerlo" (localStorage flag) OR has no videos yet
-      const hasLearnedEmbed = !authWorkspace || !!localStorage.getItem('sv_ob_embed_' + authWorkspace.id) || !hasVideos;
+      // Color: done si guardaron un color O si el usuario dijo "ya me gusta así"
+      const hasPlayerColor = !!(authWorkspace?.settings?.embedColor) ||
+                             !!(authWorkspace && localStorage.getItem('sv_ob_color_ok_' + authWorkspace.id));
+      // Embed: solo done si el usuario hizo clic en "Ver cómo hacerlo" (flag explícito)
+      const hasLearnedEmbed = !!(authWorkspace && localStorage.getItem('sv_ob_embed_' + authWorkspace.id));
 
       const ICON_CHECK = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>';
       const steps = [
@@ -7212,7 +7223,7 @@ function copyLink(id, type) {
           icon: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="13.5" cy="6.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="17.5" cy="10.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="8.5" cy="7.5" r="1.5" fill="currentColor" stroke="none"/><circle cx="6.5" cy="12.5" r="1.5" fill="currentColor" stroke="none"/><path d="M12 2C6.49 2 2 6.49 2 12s4.49 10 10 10a2.5 2.5 0 0 0 2.5-2.5c0-.61-.23-1.2-.64-1.67a.528.528 0 0 1 .42-.84H16c3.31 0 6-2.69 6-6C22 6.04 17.51 2 12 2z"/></svg>',
           label: 'Dale color a tu player',
           sub: hasPlayerColor ? 'Color del player configurado' : 'Elige el color de acento de tu player embebido',
-          action: hasPlayerColor ? null : { text: 'Cambiar color', fn: 'goToColorPicker()' },
+          action: hasPlayerColor ? null : { text: 'Cambiar color', fn: 'goToColorPicker()', skip: { text: 'Ya me gusta así', fn: 'skipColorStep()' } },
         },
         {
           done: hasVideos,
@@ -7227,7 +7238,9 @@ function copyLink(id, type) {
           label: 'Incrusta un video en tu sitio',
           sub: hasLearnedEmbed
             ? 'Embed listo — usa el ícono &lt;/&gt; en cualquier video'
-            : 'Aprende a copiar el código embed de tus videos',
+            : hasVideos
+              ? 'Aprende a poner tu video en cualquier sitio web'
+              : 'Disponible cuando subas tu primer video',
           action: (!hasLearnedEmbed && hasVideos) ? { text: 'Ver cómo hacerlo', fn: 'learnEmbed()' } : null,
         },
         {
@@ -7252,7 +7265,10 @@ function copyLink(id, type) {
           <div style="flex:1;min-width:0;">
             <div style="font-size:14px;font-weight:${s.done ? '700' : '600'};line-height:1.4;color:${s.done ? 'var(--muted)' : 'var(--text)'};${s.done ? 'text-decoration:line-through;' : ''}">${s.label}</div>
             <div style="font-size:13px;color:${s.done ? 'var(--green)' : 'var(--muted)'};margin-top:5px;line-height:1.5;font-weight:${s.done ? '600' : '400'};">${s.sub}</div>
-            ${!s.done && s.action ? `<button type="button" onclick="${s.action.fn}" style="margin-top:12px;padding:8px 18px;border-radius:8px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-size:13px;cursor:pointer;font-weight:600;font-family:var(--sans);transition:all .18s;box-shadow:0 2px 8px rgba(124,108,250,0.25);" onmouseover="this.style.background='var(--accent2)';this.style.transform='translateY(-1px)'" onmouseout="this.style.background='var(--accent)';this.style.transform=''">${s.action.text}</button>` : ''}
+            ${!s.done && s.action ? `<div style="display:flex;align-items:center;gap:10px;margin-top:12px;flex-wrap:wrap;">
+              <button type="button" onclick="${s.action.fn}" style="padding:8px 18px;border-radius:8px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-size:13px;cursor:pointer;font-weight:600;font-family:var(--sans);transition:all .18s;box-shadow:0 2px 8px rgba(124,108,250,0.25);" onmouseover="this.style.background='var(--accent2)';this.style.transform='translateY(-1px)'" onmouseout="this.style.background='var(--accent)';this.style.transform=''">${s.action.text}</button>
+              ${s.action.skip ? `<button type="button" onclick="${s.action.skip.fn}" style="padding:6px 10px;border-radius:7px;border:1px solid var(--border2);background:transparent;color:var(--muted);font-size:12px;cursor:pointer;font-family:var(--sans);transition:color .15s;" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">${s.action.skip.text}</button>` : ''}
+            </div>` : ''}
           </div>
         </div>`).join('');
 
