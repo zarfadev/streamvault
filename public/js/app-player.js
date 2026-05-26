@@ -864,7 +864,7 @@ function renderSettingsMenu() {
       <span class="settings-row-value">${qualLabel}</span>${_chev_r}
     </div>`;
   }
-  if (hls && audioTracks.length > 0) {
+  if (audioTracks.length > 0) {
     const idx   = currentAudioTrack === -1 ? 0 : currentAudioTrack;
     const albl  = audioTracks[idx]?.name || audioTracks[idx]?.lang?.toUpperCase() || 'Auto';
     html += `<div class="settings-row" onclick="showSettingsSection('audio')">
@@ -898,14 +898,22 @@ function setQuality(level) {
   wakeChrome();
 }
 function setAudioTrack(index) {
-  if (!hls) return;
-  hls.audioTrack = index; currentAudioTrack = index;
-  // Persist the chosen audio track language so it survives page reloads
-  const lang = hls.audioTracks?.[index]?.lang || hls.audioTracks?.[index]?.name || null;
-  if (lang) localStorage.setItem(`sv_audio_${videoId}`, lang);
-  else localStorage.removeItem(`sv_audio_${videoId}`);
-  if (_castSession) {
-    _castEditTracks(lang, null);
+  currentAudioTrack = index;
+  if (hls) {
+    // HLS.js path (Chrome, Firefox, Edge)
+    hls.audioTrack = index;
+    const lang = hls.audioTracks?.[index]?.lang || hls.audioTracks?.[index]?.name || null;
+    if (lang) localStorage.setItem(`sv_audio_${videoId}`, lang);
+    else localStorage.removeItem(`sv_audio_${videoId}`);
+    if (_castSession) _castEditTracks(lang, null);
+  } else if (video.audioTracks && video.audioTracks.length > index) {
+    // Native HLS path (Safari / iOS) — toggle via HTMLMediaElement.audioTracks
+    const lang = audioTracks[index]?.lang || audioTracks[index]?.name || null;
+    for (let i = 0; i < video.audioTracks.length; i++) {
+      video.audioTracks[i].enabled = (i === index);
+    }
+    if (lang) localStorage.setItem(`sv_audio_${videoId}`, lang);
+    else localStorage.removeItem(`sv_audio_${videoId}`);
   }
   document.getElementById('settings-menu').classList.remove('open');
   renderSettingsMenu();
@@ -1443,16 +1451,57 @@ function initHls(m3u8Url) {
     });
 
   } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    // ── Native HLS (Safari / iOS) ──────────────────────────────
+    // HLS.js is NOT used here — the browser plays HLS natively.
+    // We still load subtitles via our custom overlay (VTT loop),
+    // and expose audio tracks from the native HTMLMediaElement API.
     video.src = m3u8Url;
     if (!spriteMeta) thumbV.src = m3u8Url;
+
     video.addEventListener('loadedmetadata', () => {
       const t0 = parseFloat(new URLSearchParams(location.search).get('t') || '0');
       if (t0 > 0) video.currentTime = t0;
-      // Show settings gear for native HLS (Safari)
+
+      // ── Show settings gear ──────────────────────────────────
       const sbtn = document.getElementById('settings-btn');
       if (sbtn) sbtn.style.display = '';
+
+      // ── Native audio tracks (iOS exposes video.audioTracks) ─
+      // Map them into our audioTracks / currentAudioTrack state
+      // so renderSettingsMenu() can show the Audio section.
+      if (video.audioTracks && video.audioTracks.length > 1) {
+        audioTracks = [];
+        for (let i = 0; i < video.audioTracks.length; i++) {
+          const t = video.audioTracks[i];
+          audioTracks.push({ name: t.label || t.language || ('Pista ' + (i + 1)), lang: t.language || '' });
+          if (t.enabled) currentAudioTrack = i;
+        }
+        if (currentAudioTrack < 0) currentAudioTrack = 0;
+
+        // Restore saved audio preference
+        const savedLang = localStorage.getItem('sv_audio_' + videoId);
+        if (savedLang) {
+          for (let i = 0; i < video.audioTracks.length; i++) {
+            if (video.audioTracks[i].language === savedLang || video.audioTracks[i].label === savedLang) {
+              video.audioTracks[i].enabled = true;
+              currentAudioTrack = i;
+            } else {
+              video.audioTracks[i].enabled = false;
+            }
+          }
+        }
+      }
+
+      _manifestReady = true;
+      updateSettingsBadge();
+      renderSettingsMenu();
       video.play().catch(() => {});
     });
+
+    // ── Subtitles via our custom VTT overlay ────────────────────
+    // loadSubtitles() fetches track list from API and starts VTT loop,
+    // identical to the HLS.js path — works on iOS Safari.
+    loadSubtitles();
   } else {
     showError('Tu navegador no soporta reproducción HLS');
   }

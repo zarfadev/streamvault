@@ -5,7 +5,7 @@
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Reproductor</title>
-<link rel="stylesheet" href="/css/player-ott.css?v=2026.05.26c">
+<link rel="stylesheet" href="/css/player-ott.css?v=2026.05.26d">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
 <!-- HLS.js versión actualizada para reproducción HLS -->
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.3/dist/hls.min.js"
@@ -86,7 +86,6 @@ body.player-standalone .video-info { display: none !important; }
       <!-- Main video element -->
       <video id="video" preload="metadata" playsinline x-webkit-airplay="allow"
         controlsList="nodownload"
-        disablePictureInPicture
         oncontextmenu="return false;">
         <track id="subtitle-track" kind="subtitles" srclang="und">
       </video>
@@ -385,7 +384,7 @@ body.player-standalone .video-info { display: none !important; }
 <div id="sv-toast" class="sv-toast" role="status" aria-live="polite"></div>
 
 <script src="/js/player-security.js" defer></script>
-<script src="/js/app-player.js?v=2026.05.26c" defer></script>
+<script src="/js/app-player.js?v=2026.05.26d" defer></script>
 
 <style>
 /* ── Chapter markers ─────────────────────────────────────── */

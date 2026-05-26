@@ -423,7 +423,7 @@ html.embed-root, html.embed-root body {
 
 /* ─── Toolbar row ───────────────────────────────────────────── */
 .controls-row {
-  display: flex; align-items: center; gap: clamp(2px, 0.6vw, 8px);
+  display: flex; align-items: center; gap: clamp(4px, 0.8vw, 10px);
   padding: 4px 0 2px;
 }
 
@@ -756,19 +756,23 @@ html.embed-root, html.embed-root body {
 .sv-subtitle-display {
   position: absolute;
   bottom: 92px;                 /* above the dock */
-  left: 50%; transform: translateX(-50%);
-  max-width: 82%;
-  text-align: center;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 86%;
+  width: max-content;
+  max-width: min(86%, 900px);
   pointer-events: none;
   z-index: 11;
   font-family: var(--pv-sans);
   font-weight: 600;
-  line-height: 1.5;
+  line-height: 1.55;
   font-size: clamp(14px, 2.4vw, 22px); /* responsive — scales with player width */
   color: #fff;                  /* overridden by applySubStyle */
-  white-space: pre-wrap;
-  word-break: break-word;
-  overflow-wrap: break-word;
+  /* Flex column: each sv-sub-line on its own row, centered */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
   transition: bottom 0.2s var(--pv-ease), font-size 0.15s ease;
 }
 /* When controls visible, bump up */
@@ -779,13 +783,17 @@ html.embed-root, html.embed-root body {
 
 /* Each subtitle line gets its own pill — background set dynamically by applySubStyle() */
 .sv-sub-line {
-  display: inline-block;
+  display: block;
+  width: max-content;
+  max-width: 100%;
   background: rgba(0,0,0,0.78);
   padding: clamp(2px, 0.4vw, 4px) clamp(8px, 1.2vw, 14px) clamp(3px, 0.5vw, 5px);
   border-radius: 4px;
-  margin: 2px 4px;
+  text-align: center;
   text-shadow: none;
-  max-width: 100%;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: break-word;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
 }
@@ -1615,18 +1623,19 @@ video::cue {
     padding: 0 14px calc(14px + env(safe-area-inset-bottom, 0px));
   }
 
-  /* Toolbar: gap más compacto */
-  .controls-row { gap: 2px; padding: 2px 0 2px; }
+  /* Toolbar: gap compacto pero visible */
+  .controls-row { gap: clamp(3px, 0.6vw, 6px); padding: 2px 0 2px; }
 
   /* Subtítulos: ajustar para móvil */
   .sv-subtitle-display {
-    max-width: 90%;
+    max-width: min(90%, 700px);
     bottom: 72px;
     font-size: clamp(13px, 3.2vw, 17px);
+    gap: 2px;
   }
   .player-wrap.show-controls .sv-subtitle-display,
   .player-wrap.paused .sv-subtitle-display { bottom: 88px; }
-  .sv-sub-line { padding: 2px 8px 3px; margin: 1px 2px; border-radius: 3px; }
+  .sv-sub-line { padding: 2px 8px 3px; border-radius: 3px; }
 
   /* Info debajo del player */
   .player-page .video-info { flex-direction: column; padding: 16px 16px 32px; }
@@ -1658,13 +1667,14 @@ video::cue {
 /* ── Pantallas ≤ 480 px (móvil pequeño) ─────────────────────── */
 @media (max-width: 480px) {
   .player-progress-dock { padding: 0 12px calc(12px + env(safe-area-inset-bottom, 0px)); }
-  .controls-row { gap: 0; }
+  /* Mantener gap mínimo para separar visualmente CC, HD, gear, cast, fullscreen */
+  .controls-row { gap: 2px; }
 
   /* Botones en toolbar aún más compactos */
-  .ctrl-btn { width: 40px; height: 40px; }
+  .ctrl-btn { width: 38px; height: 38px; }
 
-  /* Ocultar AirPlay y PiP si no caben — fullscreen siempre visible */
-  #pip-btn, #airplay-btn { display: none !important; }
+  /* Ocultar AirPlay, PiP y Cast si no caben — fullscreen siempre visible */
+  #pip-btn, #airplay-btn, #cast-btn { display: none !important; }
 
   /* Subtítulos más pequeños en pantalla chica */
   .sv-subtitle-display {
@@ -1689,6 +1699,47 @@ video::cue {
 @media (min-width: 641px) and (max-width: 1024px) {
   /* Botones medianos */
   .ctrl-btn { width: 42px; height: 42px; }
+}
+
+/* ── Móvil portrait: el player debe llenar toda la pantalla ──────
+   En portrait el aspect-ratio 16/9 produce un rectángulo pequeño
+   con mucho espacio negro. En páginas /watch y /player, cuando
+   el ancho es ≤ 600px y orientación portrait, ocupamos el 100dvh.
+   ──────────────────────────────────────────────────────────────── */
+@media (orientation: portrait) and (max-width: 600px) {
+  /* En la página /watch (player-page): player llena toda la altura */
+  .player-page .player-wrap {
+    aspect-ratio: unset !important;
+    height: 100dvh !important;
+    height: 100vh !important;
+    max-height: 100dvh !important;
+  }
+  .player-page .player-container {
+    padding: 0 !important;
+    max-width: 100% !important;
+  }
+  /* Ocultar info debajo en portrait mobile — no hay espacio */
+  .player-page .video-info { display: none !important; }
+
+  /* Embed root también */
+  .embed-root .player-wrap {
+    height: 100dvh !important;
+    height: 100vh !important;
+  }
+
+  /* Dock: safe-area para notch/home-bar de iPhone */
+  .player-progress-dock {
+    padding: 0 16px calc(20px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  /* Subtítulos: posición correcta en portrait */
+  .sv-subtitle-display {
+    bottom: 80px !important;
+  }
+  .player-wrap.show-controls .sv-subtitle-display,
+  .player-wrap.paused .sv-subtitle-display {
+    bottom: 96px !important;
+  }
 }
 
 /* ── Landscape en teléfonos / tablets pequeños ───────────────────
