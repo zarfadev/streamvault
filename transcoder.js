@@ -1096,10 +1096,14 @@ async function rebuildMasterPlaylist(videoId, qualitiesOverride = null) {
   if (subtitleTracks.length) {
     for (const t of subtitleTracks) {
       const isDefault = !!t.default_track ? 'YES' : 'NO';
-      const relPath   = path.relative(path.join(__dirname, 'videos', videoId), t.src_path);
+      // Use an absolute proxy URL so that when this m3u8 is served from CloudFront
+      // the subtitle URI still resolves to our server (which has CORS headers).
+      // Relative paths resolve to CloudFront, which blocks CORS preflight for VTT.
+      const filename  = path.basename(t.src_path);
+      const subUri    = `${config.appUrl}/api/videos/${videoId}/tracks/serve/${filename}`;
       const lang      = t.language || 'und';
       lines.push(
-        `#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",LANGUAGE="${lang}",NAME="${t.label || lang}",DEFAULT=${isDefault},AUTOSELECT=${isDefault},FORCED=NO,URI="${relPath}"`
+        `#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",LANGUAGE="${lang}",NAME="${t.label || lang}",DEFAULT=${isDefault},AUTOSELECT=${isDefault},FORCED=NO,URI="${subUri}"`
       );
     }
   }

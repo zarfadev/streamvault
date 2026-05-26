@@ -403,6 +403,19 @@ async function uploadSourceFile(localPath, workspaceId, videoId) {
 }
 
 /**
+ * Return a readable stream for an S3 object.
+ * Caller is responsible for piping/consuming and error handling.
+ */
+async function getObjectStream(s3Key) {
+  const { GetObjectCommand } = require('@aws-sdk/client-s3');
+  const response = await getClient().send(new GetObjectCommand({
+    Bucket: cfg.s3Bucket,
+    Key:    s3Key,
+  }));
+  return response.Body; // Node.js Readable stream (AWS SDK v3)
+}
+
+/**
  * Download an S3 object to a local file path (streaming, no RAM spike).
  */
 async function downloadSourceFile(s3Key, destPath) {
@@ -468,6 +481,7 @@ module.exports = {
   uploadMasterPlaylist,
   uploadSourceFile,
   downloadSourceFile,
+  getObjectStream,
   deleteObject,
   deleteObjectsWithPrefix,
   invalidateCDN,

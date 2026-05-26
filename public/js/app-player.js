@@ -1108,64 +1108,28 @@ function setCcByKey(key) {
 
   if (!entry) { renderSettingsMenu(); wakeChrome(); return; }
 
-  // AI transcription tracks: fetch with auth headers, parse VTT manually
-  const isAiTrack = entry.label && entry.label.includes('(IA)');
+  // Always fetch VTT via our server proxy and use the custom overlay renderer.
+  // This avoids <track> element CORS restrictions entirely — the browser blocks
+  // cross-origin <track> loading even when HLS.js is configured with subtitleDisplay:false,
+  // because HLS.js still adds <track> elements for subtitle streams in the m3u8.
+  // The tracks API now returns same-origin proxy URLs (/api/videos/:id/tracks/serve/:file)
+  // so fetch() works without CORS headers on the CDN side.
   const token = _svToken();
-
-  if (isAiTrack || token) {
-    // Always fetch with auth for tracks that may be protected
-    const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
-    fetch(entry.src, { headers })
-      .then(r => {
-        if (!r.ok) throw new Error('VTT fetch failed: ' + r.status);
-        return r.text();
-      })
-      .then(vttText => {
-        _vttCues = _parseVtt(vttText);
-        _startVttLoop();
-        document.getElementById('cc-btn')?.classList.add('active');
-      })
-      .catch(err => {
-        console.warn('[subtitles] Failed to load VTT:', err);
-        toast('No se pudieron cargar los subtítulos');
-      });
-    renderSettingsMenu();
-    wakeChrome();
-    return;
-  }
-
-  // Uploaded tracks (public URLs) — use native <track> element
-  let trackEl = null;
-  const absUrl = new URL(entry.src, location.href).href;
-  for (const el of video.querySelectorAll('track')) {
-    const elAbsUrl = el.src ? new URL(el.src, location.href).href : '';
-    if (elAbsUrl === absUrl || (el.srclang === entry.language && el.label === entry.label)) {
-      trackEl = el;
-      break;
-    }
-  }
-  if (!trackEl) {
-    trackEl = document.getElementById('subtitle-track');
-    if (trackEl) { trackEl.src = entry.src; trackEl.srclang = ccLang || 'und'; }
-  }
-
-  function activate() {
-    const found = trackEl?.track;
-    if (!found) return;
-    disableAllNativeTracks();
-    found.mode = 'hidden';
-    _activeTextTrack = found;
-    found.addEventListener('cuechange', _onCueChange);
-    _onCueChange();
-  }
-
-  if (trackEl && trackEl.readyState >= 2) {
-    activate();
-  } else {
-    const t = trackEl?.track;
-    if (t && t.mode === 'disabled') t.mode = 'hidden';
-    if (trackEl) trackEl.addEventListener('load', activate, { once: true });
-  }
+  const headers = token ? { 'Authorization': 'Bearer ' + token } : {};
+  fetch(entry.src, { headers })
+    .then(r => {
+      if (!r.ok) throw new Error('VTT fetch failed: ' + r.status);
+      return r.text();
+    })
+    .then(vttText => {
+      _vttCues = _parseVtt(vttText);
+      _startVttLoop();
+      document.getElementById('cc-btn')?.classList.add('active');
+    })
+    .catch(err => {
+      console.warn('[subtitles] Failed to load VTT:', err);
+      toast('No se pudieron cargar los subtítulos');
+    });
 
   renderSettingsMenu();
   wakeChrome();

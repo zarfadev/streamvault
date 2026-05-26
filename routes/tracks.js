@@ -71,12 +71,10 @@ router.get('/', async (req, res) => {
       if (t.src_path) {
         if (t.kind === 'subtitle' && t.format === 'vtt') {
           const filename = t.src_path.split('/').pop();
-          if (useS3Urls) {
-            // CDN URL: {cdnBase}/{s3Prefix}/tracks/{filename}
-            publicUrl = `${cdnBase}/${s3Prefix}/tracks/${filename}`;
-          } else {
-            publicUrl = `/videos/${t.video_id}/tracks/${filename}`;
-          }
+          // Always proxy VTT through our server — CloudFront doesn't serve
+          // CORS headers for .vtt files, so <track> elements and fetch() both
+          // fail when the page origin (streamvault.link) differs from the CDN.
+          publicUrl = `/api/videos/${t.video_id}/tracks/serve/${filename}`;
         } else if (t.kind === 'audio' && t.format === 'hls') {
           // Audio HLS track — served relative to video dir
           const filename = t.src_path.split('/').pop();
@@ -99,6 +97,45 @@ router.get('/', async (req, res) => {
     logger.error({ err }, 'List tracks error');
     res.status(500).json({ error: 'Failed to fetch tracks' });
   }
+});
+
+// ── VTT proxy ────────────────────────────────────────────────────────────────
+// Serves subtitle .vtt files through our server so browsers never hit
+// CloudFront directly for these files (CloudFront lacks CORS headers for VTT).
+// Public — viewers need subtitles without a login token.
+router.get('/serve/:filename', async (req, res) => {
+  const { videoId, filename } = req.params;
+  if (!UUID_REGEX.test(videoId)) return res.status(400).end();
+  // Only allow safe VTT filenames — alphanumeric + dash/underscore + .vtt
+  if (!/^[a-zA-Z0-9_\-]+\.vtt$/i.test(filename)) return res.status(400).end();
+
+  res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  // Allow cross-origin requests (embed pages on other domains also need subtitles)
+  res.setHeader('Access-Control-Allow-Origin', '*');
+
+  // Try local disk first (covers dev and servers without DELETE_LOCAL_AFTER_S3)
+  const localPath = path.join(__dirname, '..', 'videos', videoId, 'tracks', filename);
+  if (fs.existsSync(localPath)) {
+    return res.sendFile(path.resolve(localPath));
+  }
+
+  // Fallback to S3
+  if (s3.isS3Enabled()) {
+    try {
+      const videoRow = await db.prepare('SELECT s3_object_prefix FROM videos WHERE id = ?').get(videoId);
+      if (!videoRow?.s3_object_prefix) return res.status(404).end();
+      const s3Key = `${videoRow.s3_object_prefix}/tracks/${filename}`;
+      const stream = await s3.getObjectStream(s3Key);
+      stream.on('error', () => res.status(500).end());
+      return stream.pipe(res);
+    } catch (err) {
+      logger.error({ err: err.message, videoId, filename }, 'VTT proxy S3 error');
+      return res.status(404).end();
+    }
+  }
+
+  res.status(404).end();
 });
 
 // All write routes require authentication
@@ -364,7 +401,7 @@ function transcodeAudioTrack(inputPath, outputDir, language) {
 }
 
 async function rebuildMasterPlaylist(videoId) {
-  const video = await db.prepare(`SELECT qualities FROM videos WHERE id = ?`).get(videoId);
+  const video = await db.prepare(`SELECT qualities, workspace_id FROM videos WHERE id = ?`).get(videoId);
   if (!video) return;
 
   const qualities       = JSON.parse(video.qualities || '[]');
@@ -399,10 +436,14 @@ async function rebuildMasterPlaylist(videoId) {
   if (subtitleTracks.length) {
     for (const t of subtitleTracks) {
       const isDefault = !!t.default_track ? 'YES' : 'NO';
-      const relPath   = path.relative(path.join(__dirname, '..', 'videos', videoId), t.src_path);
+      // Use an absolute proxy URL so that when this m3u8 is served from CloudFront
+      // the subtitle URI still resolves to our server (which has CORS headers).
+      // Relative paths would resolve to CloudFront, which blocks CORS preflight for VTT.
+      const filename  = path.basename(t.src_path);
+      const subUri    = `${cfg.appUrl}/api/videos/${videoId}/tracks/serve/${filename}`;
       const lang      = t.language || 'und';
       lines.push(
-        `#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",LANGUAGE="${lang}",NAME="${t.label || lang}",DEFAULT=${isDefault},AUTOSELECT=${isDefault},FORCED=NO,URI="${relPath}"`
+        `#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",LANGUAGE="${lang}",NAME="${t.label || lang}",DEFAULT=${isDefault},AUTOSELECT=${isDefault},FORCED=NO,URI="${subUri}"`
       );
     }
   }
@@ -414,8 +455,17 @@ async function rebuildMasterPlaylist(videoId) {
     lines.push(`${q}/index.m3u8`);
   }
 
-  const outputDir = path.join(__dirname, '..', 'videos', videoId);
-  fs.writeFileSync(path.join(outputDir, 'master.m3u8'), lines.join('\n'));
+  const outputDir  = path.join(__dirname, '..', 'videos', videoId);
+  const masterPath = path.join(outputDir, 'master.m3u8');
+  fs.mkdirSync(outputDir, { recursive: true });
+  fs.writeFileSync(masterPath, lines.join('\n'));
+
+  // If S3 is enabled, upload the updated master.m3u8 so CDN serves the new URIs
+  if (s3.isS3Enabled() && video.workspace_id) {
+    await s3.uploadMasterPlaylist(masterPath, video.workspace_id, videoId).catch(err =>
+      logger.warn({ err: err.message, videoId }, 'rebuildMasterPlaylist: S3 upload failed')
+    );
+  }
 }
 
 module.exports = router;

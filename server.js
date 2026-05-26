@@ -63,7 +63,9 @@ app.use((req, res, next) => {
         const wsId = await lookupCustomDomain(originHost);
         if (wsId) return callback(null, true);
       } catch {}
-      callback(new Error(`CORS: origin '${origin}' not allowed`));
+      // Silently deny — don't throw, just omit CORS headers so the browser blocks the response.
+      // Using new Error() here would cause Express to log it as a 500 error on every blocked request.
+      return callback(null, false);
     },
     credentials: true,
     exposedHeaders: ['Content-Type', 'Cache-Control', 'Connection'],
