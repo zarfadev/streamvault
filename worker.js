@@ -345,6 +345,85 @@ async function main() {
   }
   setInterval(reconcileStorage, 6 * 60 * 60 * 1000); // every 6 hours
 
+  // ── Subscription expiry enforcement — runs every hour ────────────────────
+  // Downgrades workspaces whose current_period_end has passed and no renewal
+  // payment arrived. Covers cases where the cancellation/failure webhook was
+  // lost or never delivered by the payment provider.
+  async function enforceSubscriptionExpiry() {
+    if (_shuttingDown) return;
+    try {
+      const now = Math.floor(Date.now() / 1000);
+      // Grace period: 3 days after period_end before we downgrade hard.
+      // This avoids false positives from clock drift or delayed webhooks.
+      const graceCutoff = now - 3 * 86400;
+
+      // Find workspaces with an active paid plan whose period ended > 3 days ago
+      // and still have a subscription ID set (not already downgraded by webhook).
+      const result = await db.pool.query(
+        `SELECT id, plan, payment_provider, payment_subscription_id, payment_metadata
+         FROM workspaces
+         WHERE plan != 'starter'
+           AND payment_subscription_id IS NOT NULL
+           AND payment_metadata IS NOT NULL
+           AND payment_metadata != '{}'
+           AND (payment_metadata::jsonb->>'current_period_end') IS NOT NULL
+           AND CAST(payment_metadata::jsonb->>'current_period_end' AS BIGINT) < $1`,
+        [graceCutoff]
+      );
+
+      if (result.rows.length === 0) return;
+
+      logger.warn({ count: result.rows.length }, `Subscription expiry: ${result.rows.length} workspace(s) past period_end grace — downgrading`);
+
+      const emailService = require('./services/email');
+      const cfgPlans = require('./config').plans;
+
+      for (const ws of result.rows) {
+        try {
+          const starter = cfgPlans.starter;
+          await db.pool.query(
+            `UPDATE workspaces
+             SET plan                    = 'starter',
+                 payment_subscription_id = NULL,
+                 payment_customer_id     = NULL,
+                 suspended               = 0,
+                 max_videos              = $1,
+                 max_storage_bytes       = $2,
+                 max_bandwidth_bytes     = $3,
+                 payment_metadata        = '{}',
+                 updated_at              = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT
+             WHERE id = $4`,
+            [starter.maxVideos, starter.maxStorageGB * 1e9, starter.maxBandwidthGB * 1e9, ws.id]
+          );
+
+          const cache = require('./services/cache');
+          cache.invalidate(`sv:ws:${ws.id}`).catch(() => {});
+
+          logger.info({ workspaceId: ws.id, fromPlan: ws.plan, provider: ws.payment_provider }, 'Workspace downgraded by expiry worker');
+
+          // Notify owner by email
+          const ownerRes = await db.pool.query(
+            `SELECT u.email, u.name FROM workspaces w JOIN users u ON u.id = w.owner_id WHERE w.id = $1`,
+            [ws.id]
+          );
+          const owner = ownerRes.rows[0];
+          if (owner) {
+            emailService.sendSubscriptionCancelled(owner.email, owner.name, {
+              planName: cfgPlans[ws.plan]?.name || ws.plan,
+              reason: 'expiry',
+            }).catch(e => logger.error({ err: e.message }, 'sendSubscriptionCancelled error (expiry worker)'));
+          }
+        } catch (innerErr) {
+          logger.error({ err: innerErr.message, workspaceId: ws.id }, 'Subscription expiry: failed to downgrade workspace');
+        }
+      }
+    } catch (e) {
+      logger.error({ err: e.message }, 'Subscription expiry enforcement failed');
+    }
+  }
+  enforceSubscriptionExpiry();
+  setInterval(enforceSubscriptionExpiry, 60 * 60 * 1000); // every hour
+
   // ── Stuck video watchdog — runs every 30 min ──────────────────────────────
   // If a video stays in 'transcoding' or 'downloading' for > 2 hours the
   // worker likely crashed mid-job without updating the DB. Mark as error so

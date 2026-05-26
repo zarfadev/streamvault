@@ -354,6 +354,18 @@ async function processWebhookEvent(event) {
 
   logger.info({ paymentId }, 'Procesando webhook dLocal Go');
 
+  // Idempotencia: si ya procesamos este payment_id como factura, ignorar
+  try {
+    const existing = await db.query(
+      `SELECT id FROM payment_invoices WHERE provider_invoice_id = $1 AND status = 'paid' LIMIT 1`,
+      [paymentId]
+    );
+    if (existing.rows.length > 0) {
+      logger.info({ paymentId }, 'dLocal Go webhook: payment_id ya procesado — ignorando duplicado');
+      return;
+    }
+  } catch {}
+
   // Consultar detalles del pago
   let payment;
   try {
@@ -366,8 +378,10 @@ async function processWebhookEvent(event) {
   const status = payment.status;
   // external_id = workspaceId que pasamos al crear el checkout
   const workspaceId = payment.external_id || payment.order_id;
+  // subscription_id del pago (diferente al payment_id) — necesario para cancelar via API
+  const dlocalSubscriptionId = payment.subscription_id || payment.subscriber_id || null;
 
-  logger.info({ paymentId, status, workspaceId }, 'Detalles de pago dLocal Go obtenidos');
+  logger.info({ paymentId, dlocalSubscriptionId, status, workspaceId }, 'Detalles de pago dLocal Go obtenidos');
 
   if (!workspaceId) {
     logger.warn({ paymentId, payment }, 'dLocal Go webhook: no hay workspaceId en el pago (external_id vacío)');
@@ -406,7 +420,18 @@ async function processWebhookEvent(event) {
       }
 
       const fromPlan = workspace.plan;
-      await activateSubscription(workspaceId, planKey, paymentId);
+
+      // Calcular period_end: 30 días desde ahora (renovación mensual)
+      const periodEnd = Math.floor(Date.now() / 1000) + 30 * 86400;
+
+      // Construir subscription_id en formato "planId:dlocalSubId" si tenemos el subId real,
+      // o usar solo el paymentId como fallback (sin posibilidad de cancelar via API)
+      const planToken = await getPlanTokenAsync(planKey).catch(() => null);
+      const storedSubId = (planToken && dlocalSubscriptionId)
+        ? `${planToken}:${dlocalSubscriptionId}`
+        : paymentId;
+
+      await activateSubscription(workspaceId, planKey, storedSubId, periodEnd);
 
       // ── REFERRAL CREDIT: award 1 free month to referrer on first purchase ──
       if (fromPlan === 'starter') {
@@ -423,7 +448,9 @@ async function processWebhookEvent(event) {
         }
       }
 
-      // Registrar factura
+      const periodStart = Math.floor(Date.now() / 1000);
+
+      // Registrar factura con period_end correcto
       await invoiceService.createInvoice({
         workspaceId,
         provider: 'dlocalgo',
@@ -433,11 +460,11 @@ async function processWebhookEvent(event) {
         status: 'paid',
         providerInvoiceId: paymentId,
         invoiceUrl: null,
-        periodStart: Math.floor(Date.now() / 1000),
-        periodEnd: null,
+        periodStart,
+        periodEnd,
       }).catch(e => logger.error({ err: e.message }, 'Error al crear factura dLocal Go'));
 
-      // Email de confirmación
+      // Email de confirmación (activación o renovación)
       const ownerResult = await db.query(
         `SELECT u.email, u.name FROM workspaces w JOIN users u ON u.id = w.owner_id WHERE w.id = $1`,
         [workspaceId]
@@ -445,13 +472,19 @@ async function processWebhookEvent(event) {
       const owner = ownerResult.rows[0];
       if (owner) {
         const planCfg = config.plans[planKey];
-        emailService.sendPaymentConfirmation(owner.email, owner.name, {
-          planName: planCfg?.name || planKey,
-          amount: payment.amount?.toFixed(2),
-          currency: (payment.currency || 'USD').toUpperCase(),
-          invoiceNumber: paymentId,
-          periodEnd: null,
-        }).catch(e => logger.error({ err: e.message }, 'sendPaymentConfirmation error (dLocal Go)'));
+        const isNew = fromPlan === 'starter';
+        if (isNew) {
+          emailService.sendSubscriptionActivated(owner.email, owner.name, planCfg?.name || planKey)
+            .catch(e => logger.error({ err: e.message }, 'sendSubscriptionActivated error (dLocal Go)'));
+        } else {
+          emailService.sendPaymentConfirmation(owner.email, owner.name, {
+            planName: planCfg?.name || planKey,
+            amount: payment.amount?.toFixed(2),
+            currency: (payment.currency || 'USD').toUpperCase(),
+            invoiceNumber: paymentId,
+            periodEnd,
+          }).catch(e => logger.error({ err: e.message }, 'sendPaymentConfirmation error (dLocal Go)'));
+        }
       }
       break;
     }
@@ -508,12 +541,15 @@ function getPlanKeyFromAmount(amount) {
   return null;
 }
 
-async function activateSubscription(workspaceId, planKey, subscriptionId) {
+async function activateSubscription(workspaceId, planKey, subscriptionId, periodEnd = null) {
   const plan = config.plans[planKey];
   if (!plan) {
     logger.error({ planKey }, 'Plan desconocido en dLocal Go activateSubscription');
     return;
   }
+
+  const now = Math.floor(Date.now() / 1000);
+  const effectivePeriodEnd = periodEnd || (now + 30 * 86400); // 30 días por defecto
 
   await db.query(
     `UPDATE workspaces
@@ -534,7 +570,11 @@ async function activateSubscription(workspaceId, planKey, subscriptionId) {
       plan.maxVideos,
       plan.maxStorageGB * 1e9,
       plan.maxBandwidthGB * 1e9,
-      JSON.stringify({ activated_at: Math.floor(Date.now() / 1000), payment_id: subscriptionId }),
+      JSON.stringify({
+        activated_at: now,
+        current_period_end: effectivePeriodEnd,
+        subscription_id: subscriptionId,
+      }),
       workspaceId,
     ]
   );

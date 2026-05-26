@@ -19,6 +19,8 @@ const cache = require('./cache');
 const logger = require('./logger').child({ module: 'paypal' });
 const gwCreds = require('./gatewayCredentials');
 const { awardReferralCredit, clearReferralCredit } = require('./referralCredit');
+const emailService = require('./email');
+const invoiceService = require('./invoices');
 
 // ══════════════════════════════════════════════════════════════════════════
 // PayPal Client Configuration (reads from DB first, then .env fallback)
@@ -410,14 +412,21 @@ async function processWebhookEvent(event) {
         // Obtener info del workspace antes de activar
         const ws = await db.prepare(`SELECT plan, owner_id FROM workspaces WHERE id = ?`).get(customId);
         const fromPlan = ws?.plan || 'starter';
-        
+
         await activateSubscription(customId, planKey, subscriptionId);
-        
+
         // ── REFERRAL CREDIT: award 1 free month to referrer on first purchase ──
         if (ws?.owner_id && fromPlan === 'starter') {
           awardReferralCredit(ws.owner_id).catch(err =>
             logger.error({ err: err.message }, 'awardReferralCredit (PayPal) failed')
           );
+        }
+
+        // ── Email de activación ──
+        const owner = await db.prepare(`SELECT u.email, u.name FROM workspaces w JOIN users u ON u.id=w.owner_id WHERE w.id=?`).get(customId);
+        if (owner) {
+          emailService.sendSubscriptionActivated(owner.email, owner.name, config.plans[planKey]?.name || planKey)
+            .catch(e => logger.error({ err: e.message }, 'sendSubscriptionActivated error (PayPal)'));
         }
       }
       break;
@@ -433,6 +442,12 @@ async function processWebhookEvent(event) {
       if (workspace) {
         logger.info({ workspaceId: workspace.id }, 'Subscription cancelled — downgrading');
         await downgradeWorkspace(workspace.id);
+        // Email de cancelación
+        const owner = await db.prepare(`SELECT u.email, u.name FROM workspaces w JOIN users u ON u.id=w.owner_id WHERE w.id=?`).get(workspace.id);
+        if (owner) {
+          emailService.sendSubscriptionCancelled(owner.email, owner.name, {})
+            .catch(e => logger.error({ err: e.message }, 'sendSubscriptionCancelled error (PayPal)'));
+        }
       }
       break;
     }
@@ -441,12 +456,20 @@ async function processWebhookEvent(event) {
     case 'BILLING.SUBSCRIPTION.SUSPENDED': {
       const subscriptionId = resource.id;
       const workspace = await db.prepare(
-        `SELECT id FROM workspaces WHERE payment_subscription_id = ?`
+        `SELECT id, plan FROM workspaces WHERE payment_subscription_id = ?`
       ).get(subscriptionId);
 
       if (workspace) {
         logger.warn({ workspaceId: workspace.id }, 'Subscription suspended — payment failed');
         await suspendWorkspace(workspace.id, 'payment_failed');
+        // Email de pago fallido
+        const owner = await db.prepare(`SELECT u.email, u.name FROM workspaces w JOIN users u ON u.id=w.owner_id WHERE w.id=?`).get(workspace.id);
+        if (owner) {
+          emailService.sendPaymentFailed(owner.email, owner.name, {
+            planName: config.plans[workspace.plan]?.name || workspace.plan,
+            provider: 'PayPal',
+          }).catch(e => logger.error({ err: e.message }, 'sendPaymentFailed error (PayPal)'));
+        }
       }
       break;
     }
@@ -456,20 +479,40 @@ async function processWebhookEvent(event) {
       const subscriptionId = resource.billing_agreement_id;
       if (subscriptionId) {
         const workspace = await db.prepare(
-          `SELECT id FROM workspaces WHERE payment_subscription_id = ?`
+          `SELECT id, plan, payment_metadata FROM workspaces WHERE payment_subscription_id = ?`
         ).get(subscriptionId);
 
         if (workspace) {
-          // Levantar suspensión si estaba suspendido
+          // Actualizar period_end y levantar suspensión
+          const periodEnd = Math.floor(Date.now() / 1000) + 30 * 86400;
+          let meta = {};
+          try { meta = JSON.parse(workspace.payment_metadata || '{}'); } catch {}
+          meta.current_period_end = periodEnd;
+
           await db.prepare(`
             UPDATE workspaces
             SET suspended = 0,
+                payment_metadata = ?,
                 updated_at = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT
             WHERE id = ?
-          `).run(workspace.id);
+          `).run(JSON.stringify(meta), workspace.id);
           cache.invalidate(`sv:ws:${workspace.id}`).catch(() => {});
 
-          logger.info({ workspaceId: workspace.id }, 'Payment completed — subscription renewed');
+          // Registrar factura de renovación
+          invoiceService.createInvoice({
+            workspaceId: workspace.id,
+            provider: 'paypal',
+            planKey: workspace.plan,
+            amount: parseFloat(resource.amount?.total || 0),
+            currency: (resource.amount?.currency || 'USD').toUpperCase(),
+            status: 'paid',
+            providerInvoiceId: resource.id,
+            invoiceUrl: null,
+            periodStart: Math.floor(Date.now() / 1000),
+            periodEnd,
+          }).catch(e => logger.error({ err: e.message }, 'createInvoice error (PayPal renewal)'));
+
+          logger.info({ workspaceId: workspace.id }, 'PayPal payment completed — subscription renewed');
         }
       }
       break;
