@@ -295,19 +295,22 @@ async function cancelSubscription(subscriptionId) {
  * Docs: https://developer.paypal.com/docs/api/webhooks/v1/#verify-webhook-signature
  */
 async function verifyWebhookSignature(headers, body) {
-  const webhookId = process.env.PAYPAL_WEBHOOK_ID;
+  // Leer webhook ID desde DB (gwCreds) primero, luego env var como fallback.
+  // CRÍTICO: si el ID solo está en DB (no en env), env-only → rechaza todos los webhooks.
+  const creds = await gwCreds.getCredentials('paypal').catch(() => ({}));
+  const webhookId = creds.PAYPAL_WEBHOOK_ID || process.env.PAYPAL_WEBHOOK_ID;
 
   if (!webhookId) {
     // En producción es obligatorio. En dev se puede omitir con PAYPAL_SKIP_WEBHOOK_VERIFY=true
     if (process.env.NODE_ENV === 'production') {
-      logger.error('PAYPAL_WEBHOOK_ID not configured — rejecting webhook (fail-closed)');
+      logger.error('PAYPAL_WEBHOOK_ID not configured in DB or env — rejecting webhook (fail-closed)');
       return false;
     }
     if (process.env.PAYPAL_SKIP_WEBHOOK_VERIFY === 'true') {
       logger.warn('⚠️  PayPal webhook verification SKIPPED (dev mode only)');
       return true;
     }
-    logger.warn('PAYPAL_WEBHOOK_ID not set — rejecting webhook. Set PAYPAL_SKIP_WEBHOOK_VERIFY=true in dev to skip.');
+    logger.warn('PAYPAL_WEBHOOK_ID not set — rejecting webhook. Configure it in Admin → Gateways → PayPal.');
     return false;
   }
 
@@ -338,7 +341,8 @@ async function verifyWebhookSignature(headers, body) {
   }
 
   try {
-    const client = getPayPalClient();
+    // Usar cliente async (DB credentials) en lugar del sync (solo env vars)
+    const client = await getPayPalClientAsync();
     if (!client) {
       logger.error('PayPal client not initialized — cannot verify webhook signature');
       return false;
