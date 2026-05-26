@@ -18,6 +18,8 @@ const fs      = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const ffmpeg  = require('fluent-ffmpeg');
 const db      = require('../db');
+const cfg     = require('../config');
+const s3      = require('../services/s3Storage');
 const { authenticate } = require('../middleware/auth');
 const { hasFeature } = require('../middleware/checkFeature');
 
@@ -49,21 +51,42 @@ router.get('/', async (req, res) => {
   try {
     // Fetch full rows (including src_path) to derive public URLs, then strip
     // the raw filesystem path before sending to clients.
-    const fullTracks = await db.prepare(
-      `SELECT * FROM video_tracks WHERE video_id = ? ORDER BY kind, created_at ASC`
-    ).all(req.params.videoId);
+    // Also fetch the video's S3 object prefix so we can serve CDN URLs when
+    // S3 is enabled (DELETE_LOCAL_AFTER_S3=1 removes local copies).
+    const [fullTracks, videoRow] = await Promise.all([
+      db.prepare(
+        `SELECT * FROM video_tracks WHERE video_id = ? ORDER BY kind, created_at ASC`
+      ).all(req.params.videoId),
+      db.prepare(
+        `SELECT s3_object_prefix FROM videos WHERE id = ?`
+      ).get(req.params.videoId),
+    ]);
+
+    const s3Prefix  = videoRow?.s3_object_prefix || null;
+    const cdnBase   = cfg.cdnBaseUrl || (cfg.s3Bucket ? `https://${cfg.s3Bucket}.s3.${cfg.awsRegion}.amazonaws.com` : null);
+    const useS3Urls = s3.isS3Enabled() && s3Prefix && cdnBase;
 
     const result = fullTracks.map(t => {
       let publicUrl = null;
       if (t.src_path) {
         if (t.kind === 'subtitle' && t.format === 'vtt') {
           const filename = t.src_path.split('/').pop();
-          publicUrl = `/videos/${t.video_id}/tracks/${filename}`;
+          if (useS3Urls) {
+            // CDN URL: {cdnBase}/{s3Prefix}/tracks/{filename}
+            publicUrl = `${cdnBase}/${s3Prefix}/tracks/${filename}`;
+          } else {
+            publicUrl = `/videos/${t.video_id}/tracks/${filename}`;
+          }
         } else if (t.kind === 'audio' && t.format === 'hls') {
-          // Audio HLS track — relative to video dir
+          // Audio HLS track — served relative to video dir
           const filename = t.src_path.split('/').pop();
           const subdir   = t.src_path.split('/').slice(-2, -1)[0] || '';
-          publicUrl = `/videos/${t.video_id}/tracks/${subdir ? subdir + '/' : ''}${filename}`;
+          const relPath  = `tracks/${subdir ? subdir + '/' : ''}${filename}`;
+          if (useS3Urls) {
+            publicUrl = `${cdnBase}/${s3Prefix}/${relPath}`;
+          } else {
+            publicUrl = `/videos/${t.video_id}/${relPath}`;
+          }
         }
       }
       // Never expose the raw filesystem path to clients

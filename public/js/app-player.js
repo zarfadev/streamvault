@@ -1341,6 +1341,11 @@ function initHls(m3u8Url) {
       backBufferLength: 90, startLevel: -1, abrEwmaDefaultEstimate: 1e6,
       abrEwmaFastVoD: 3, abrEwmaSlowVoD: 9, abrBandWidthFactor: 0.8, abrBandWidthUpFactor: 0.7,
       highBufferWatchdogPeriod: 2, nudgeMaxRetry: 5,
+      // Subtitles are managed entirely by the player (loadSubtitles / setCcByKey).
+      // Disabling HLS.js subtitle display prevents it from injecting <track> elements
+      // with relative URIs from the m3u8 that the browser resolves against the page
+      // URL instead of the manifest URL, causing 404s.
+      subtitleDisplay: false,
       xhrSetup: hlsXhrSetup,
     });
     hls.loadSource(m3u8Url);
