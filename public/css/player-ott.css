@@ -423,7 +423,7 @@ html.embed-root, html.embed-root body {
 
 /* ─── Toolbar row ───────────────────────────────────────────── */
 .controls-row {
-  display: flex; align-items: center; gap: 6px;
+  display: flex; align-items: center; gap: clamp(2px, 0.6vw, 8px);
   padding: 4px 0 2px;
 }
 
@@ -764,11 +764,12 @@ html.embed-root, html.embed-root body {
   font-family: var(--pv-sans);
   font-weight: 600;
   line-height: 1.5;
-  font-size: 18px;              /* overridden by applySubStyle */
+  font-size: clamp(14px, 2.4vw, 22px); /* responsive — scales with player width */
   color: #fff;                  /* overridden by applySubStyle */
   white-space: pre-wrap;
   word-break: break-word;
-  transition: bottom 0.2s var(--pv-ease);
+  overflow-wrap: break-word;
+  transition: bottom 0.2s var(--pv-ease), font-size 0.15s ease;
 }
 /* When controls visible, bump up */
 .player-wrap.show-controls .sv-subtitle-display,
@@ -780,10 +781,13 @@ html.embed-root, html.embed-root body {
 .sv-sub-line {
   display: inline-block;
   background: rgba(0,0,0,0.78);
-  padding: 3px 12px 4px;
+  padding: clamp(2px, 0.4vw, 4px) clamp(8px, 1.2vw, 14px) clamp(3px, 0.5vw, 5px);
   border-radius: 4px;
   margin: 2px 4px;
   text-shadow: none;
+  max-width: 100%;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
 }
 
 /* ─── Loading spinner ───────────────────────────────────────── */
@@ -1614,6 +1618,16 @@ video::cue {
   /* Toolbar: gap más compacto */
   .controls-row { gap: 2px; padding: 2px 0 2px; }
 
+  /* Subtítulos: ajustar para móvil */
+  .sv-subtitle-display {
+    max-width: 90%;
+    bottom: 72px;
+    font-size: clamp(13px, 3.2vw, 17px);
+  }
+  .player-wrap.show-controls .sv-subtitle-display,
+  .player-wrap.paused .sv-subtitle-display { bottom: 88px; }
+  .sv-sub-line { padding: 2px 8px 3px; margin: 1px 2px; border-radius: 3px; }
+
   /* Info debajo del player */
   .player-page .video-info { flex-direction: column; padding: 16px 16px 32px; }
   .player-page .share-btns { width: 100%; }
@@ -1651,6 +1665,16 @@ video::cue {
 
   /* Ocultar AirPlay y PiP si no caben — fullscreen siempre visible */
   #pip-btn, #airplay-btn { display: none !important; }
+
+  /* Subtítulos más pequeños en pantalla chica */
+  .sv-subtitle-display {
+    max-width: 94%;
+    bottom: 64px;
+    font-size: clamp(12px, 3.5vw, 15px);
+  }
+  .player-wrap.show-controls .sv-subtitle-display,
+  .player-wrap.paused .sv-subtitle-display { bottom: 80px; }
+  .sv-sub-line { padding: 2px 6px 2px; margin: 1px 2px; }
 }
 
 /* ── Pantallas ≤ 360 px (móvil muy pequeño) ─────────────────── */
@@ -1699,6 +1723,15 @@ video::cue {
     bottom: 72px !important;
     max-height: min(55vh, calc(100dvh - 90px)) !important;
   }
+
+  /* Subtítulos en landscape: usar vh para escalar con la altura */
+  .sv-subtitle-display {
+    bottom: 56px;
+    font-size: clamp(13px, 2.8vh, 18px);
+    max-width: 75%;
+  }
+  .player-wrap.show-controls .sv-subtitle-display,
+  .player-wrap.paused .sv-subtitle-display { bottom: 68px; }
 }
 
 /* ── Landscape en tablets medianas (501 px – 768 px alto) ────────
