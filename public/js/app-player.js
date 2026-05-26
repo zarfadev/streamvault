@@ -888,8 +888,11 @@ function setQuality(level) {
 function setAudioTrack(index) {
   if (!hls) return;
   hls.audioTrack = index; currentAudioTrack = index;
+  // Persist the chosen audio track language so it survives page reloads
+  const lang = hls.audioTracks?.[index]?.lang || hls.audioTracks?.[index]?.name || null;
+  if (lang) localStorage.setItem(`sv_audio_${videoId}`, lang);
+  else localStorage.removeItem(`sv_audio_${videoId}`);
   if (_castSession) {
-    const lang = hls.audioTracks?.[index]?.lang || hls.audioTracks?.[index]?.name || null;
     _castEditTracks(lang, null);
   }
   document.getElementById('settings-menu').classList.remove('open');
@@ -1419,6 +1422,19 @@ function initHls(m3u8Url) {
       levels = hls.levels;
       audioTracks = hls.audioTracks;
       currentAudioTrack = hls.audioTrack;
+
+      // Restore saved audio track preference (matched by language, not index)
+      if (audioTracks.length > 1) {
+        const savedLang = localStorage.getItem(`sv_audio_${videoId}`);
+        if (savedLang) {
+          const savedIdx = audioTracks.findIndex(t => (t.lang || t.name) === savedLang);
+          if (savedIdx >= 0 && savedIdx !== currentAudioTrack) {
+            hls.audioTrack = savedIdx;
+            currentAudioTrack = savedIdx;
+          }
+        }
+      }
+
       _manifestReady = true; // HLS ready — now safe to show quality button and settings gear
       // Show settings gear only after HLS manifest is ready (has actual menu content)
       const sbtn = document.getElementById('settings-btn');

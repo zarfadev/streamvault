@@ -911,11 +911,33 @@ async function processVideo(videoId, inputPath, title, options = {}) {
     await onProgress(90);
 
     // ── Wait for sprite sheet + extract embedded tracks ──────────────────────────
+    // Multi-audio and embedded subtitle extraction is a Pro/Enterprise feature.
+    // Guest uploads (no workspace) and Starter plan workspaces only get the
+    // primary audio stream from the normal HLS transcode pipeline.
+    const MULTI_TRACK_PLANS = new Set(['pro', 'enterprise']);
+    let canExtractTracks = false;
+    if (workspaceId) {
+      try {
+        const wsRow = await db.prepare(`SELECT plan FROM workspaces WHERE id = ?`).get(workspaceId);
+        const wsPlan = (wsRow?.plan || 'starter').toLowerCase();
+        canExtractTracks = MULTI_TRACK_PLANS.has(wsPlan);
+        if (!canExtractTracks) {
+          logger.info({ videoId, plan: wsPlan }, '[transcoder] Skipping embedded track extraction — plan does not include multi-audio/subtitles');
+        }
+      } catch (err) {
+        logger.warn({ videoId, err: err.message }, '[transcoder] Plan lookup failed for track extraction — skipping');
+      }
+    } else {
+      logger.info({ videoId }, '[transcoder] Skipping embedded track extraction — guest upload (no workspace)');
+    }
+
     await Promise.all([
       spritePromise,
-      extractEmbeddedTracks(videoId, effectiveInputPath).catch(err =>
-        logger.warn({ videoId, err: err.message }, '[transcoder] extractEmbeddedTracks failed — continuing')
-      ),
+      canExtractTracks
+        ? extractEmbeddedTracks(videoId, effectiveInputPath).catch(err =>
+            logger.warn({ videoId, err: err.message }, '[transcoder] extractEmbeddedTracks failed — continuing')
+          )
+        : Promise.resolve(),
     ]);
 
     // Final rebuild with all qualities + audio tracks

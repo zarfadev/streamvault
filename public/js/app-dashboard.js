@@ -405,6 +405,16 @@ function doLogout() {
       try {
         const r = await apiFetch(`${BASE}/auth/me`);
         if (!r.ok) {
+          // IP block: show error, do NOT log the user out (token is still valid)
+          if (r.status === 403) {
+            let errData = null;
+            try { errData = await r.clone().json(); } catch {}
+            if (errData?.code === 'IP_BLOCKED') {
+              const mins = errData.retryAfter || 30;
+              toast(`Tu IP está bloqueada temporalmente. Intenta en ${mins} min.`, 'error');
+              return;
+            }
+          }
           authToken = ''; authUser = null; authWorkspace = null;
           ['sv_access_token', 'sv_token'].forEach(k => localStorage.removeItem(k));
           window.location.href = '/login';

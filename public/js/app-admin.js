@@ -42,7 +42,22 @@ function escAttr(str) { return String(str||'').replace(/&/g,'&amp;').replace(/</
       }
     }
 
-    if (!r.ok) return rl();
+    if (!r.ok) {
+      // Distinguish IP block (403 + code: IP_BLOCKED) from auth errors.
+      // If we called rl() without clearing the token the login page would
+      // immediately redirect back here and create an infinite loop.
+      if (r.status === 403) {
+        let errData = null;
+        try { errData = await r.clone().json(); } catch {}
+        if (errData?.code === 'IP_BLOCKED') {
+          const mins = errData.retryAfter || 30;
+          document.body.style.cssText = 'display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui;background:#0f0f0f;color:#fff;text-align:center;';
+          document.body.innerHTML = `<div style="padding:2rem;max-width:420px"><p style="font-size:1.1rem;margin-bottom:.75rem">⛔ Tu IP ha sido bloqueada temporalmente.</p><p style="color:#888;font-size:.95rem">Intenta de nuevo en ${mins} minuto${mins !== 1 ? 's' : ''}. Si crees que es un error, contacta al soporte.</p></div>`;
+          return;
+        }
+      }
+      return rl();
+    }
     const d = await r.json();
     if (d.user?.platform_role !== 'super_admin') {
       alert('Acceso denegado: Se requiere rol de Super Admin');
@@ -59,7 +74,12 @@ function escAttr(str) { return String(str||'').replace(/&/g,'&amp;').replace(/</
     restoreSection();
   } catch { rl(); }
 })();
-function rl() { window.location.href = '/login?redirect=/admin'; }
+// rl() clears the access token before redirecting so the login page does NOT
+// redirect back here and create an infinite loop.
+function rl() {
+  ['sv_access_token','sv_token'].forEach(k => { localStorage.removeItem(k); sessionStorage.removeItem(k); });
+  window.location.href = '/login?redirect=/admin';
+}
 function doLogout() {
   const rt = localStorage.getItem('sv_refresh_token') || sessionStorage.getItem('sv_refresh_token') || localStorage.getItem('sv_refresh');
   if (rt) fetch(`${BASE}/auth/logout`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({refreshToken:rt}) }).catch(()=>{});

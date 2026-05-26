@@ -13,6 +13,54 @@
 
 const cfg    = require('../config');
 const logger = require('../services/logger').child({ module: 'advancedRateLimit' });
+const jwt    = require('jsonwebtoken');
+const crypto = require('crypto');
+
+// ── Super-admin bypass cache ───────────────────────────────────────────────────
+// Avoids a DB hit on every request while still being accurate within ~60 s.
+const _saCache   = new Map(); // userId → { isSa: bool, exp: timestamp }
+const _SA_TTL_MS = 60_000;
+
+/**
+ * Returns true if the request comes from a super admin or the ADMIN_API_KEY.
+ * These users are permanently exempt from IP rate-limiting and blacklisting.
+ */
+async function isSuperAdminRequest(req) {
+  const auth = req.headers['authorization'] || '';
+  if (!auth.startsWith('Bearer ')) return false;
+  const token = auth.slice(7);
+
+  // 1. ADMIN_API_KEY shortcut (no DB, timing-safe)
+  if (cfg.adminApiKey) {
+    try {
+      if (
+        token.length === cfg.adminApiKey.length &&
+        crypto.timingSafeEqual(Buffer.from(token), Buffer.from(cfg.adminApiKey))
+      ) return true;
+    } catch {}
+  }
+
+  // 2. JWT — decode to get userId, then cache/DB lookup for platform_role
+  if (!cfg.jwtSecret || !token || token.startsWith('sv_live_')) return false;
+  try {
+    const decoded = jwt.verify(token, cfg.jwtSecret);
+    const userId  = decoded.userId;
+    if (!userId) return false;
+
+    // Cache hit?
+    const hit = _saCache.get(userId);
+    if (hit && hit.exp > Date.now()) return hit.isSa;
+
+    // DB lookup (lazy require to avoid circular dep at startup)
+    const db  = require('../db');
+    const row = await db.prepare(`SELECT platform_role FROM users WHERE id = ?`).get(userId);
+    const isSa = row?.platform_role === 'super_admin';
+    _saCache.set(userId, { isSa, exp: Date.now() + _SA_TTL_MS });
+    return isSa;
+  } catch {
+    return false;
+  }
+}
 
 // ── Redis client (lazy — shared blacklist across PM2 cluster workers) ─────────
 let _redis = null;
@@ -356,6 +404,11 @@ function advancedRateLimit(options = {}) {
       return next();
     }
 
+    // 1b. Super-admin bypass — exempt from ALL rate limiting / blacklisting
+    if (await isSuperAdminRequest(req)) {
+      return next();
+    }
+
     // 2. Verificar blacklist (async — reads Redis so all workers share the list)
     const blResult = await isBlacklisted(ip);
     if (blResult.blocked) {
@@ -371,6 +424,7 @@ function advancedRateLimit(options = {}) {
 
       return res.status(403).json({
         error: 'Tu IP ha sido bloqueada temporalmente por actividad sospechosa.',
+        code: 'IP_BLOCKED',
         retryAfter: remainingMin,
         retryAfterSeconds: Math.ceil(blResult.remainingMs / 1000),
       });
