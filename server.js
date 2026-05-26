@@ -156,6 +156,9 @@ app.use((req, res, next) => {
       'https://cloudflareinsights.com',
     ].filter(Boolean).join(' '),
     "worker-src blob:",
+    // frame-src: explicit to avoid default-src fallback triggering CSP violations
+    // when video elements or embeds reference CDN/blob URLs in some Chrome versions.
+    "frame-src 'self' blob:" + (cdnOrigins ? ' ' + cdnOrigins : ''),
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

@@ -1074,9 +1074,14 @@ async function rebuildMasterPlaylist(videoId, qualitiesOverride = null) {
   const bitrateMap = { '360p':800000,'480p':1400000,'720p':2800000,'1080p':5000000,'1440p':10000000,'4k':20000000 };
   const resMap     = { '360p':'640x360','480p':'854x480','720p':'1280x720','1080p':'1920x1080','1440p':'2560x1440','4k':'3840x2160' };
 
-  // HLS spec requires version 7 for WebVTT subtitle EXT-X-MEDIA entries.
-  const version = subtitleTracks.length ? 7 : 3;
-  const lines = ['#EXTM3U', `#EXT-X-VERSION:${version}`];
+  // NOTE: We intentionally do NOT include #EXT-X-MEDIA:TYPE=SUBTITLES in the manifest.
+  // The HLS spec requires SUBTITLES URIs to point to segment playlists (m3u8), not plain
+  // VTT files. Our subtitles are single VTT files served via a proxy — pointing them here
+  // would cause iOS native player to try to parse the VTT as an m3u8, silently fail, and
+  // show broken entries in its subtitle picker alongside the working <track> elements.
+  // Subtitles are delivered exclusively via HTML <track> elements (added by loadSubtitles()
+  // in the player), which iOS native player (webkitEnterFullscreen) reads correctly.
+  const lines = ['#EXTM3U', '#EXT-X-VERSION:3'];
 
   if (audioTracks.length) {
     const anyCustomDefault = audioTracks.some(t => t.default_track);
@@ -1093,27 +1098,11 @@ async function rebuildMasterPlaylist(videoId, qualitiesOverride = null) {
     }
   }
 
-  if (subtitleTracks.length) {
-    for (const t of subtitleTracks) {
-      const isDefault = !!t.default_track ? 'YES' : 'NO';
-      // Use an absolute proxy URL so that when this m3u8 is served from CloudFront
-      // the subtitle URI still resolves to our server (which has CORS headers).
-      // Relative paths resolve to CloudFront, which blocks CORS preflight for VTT.
-      const filename  = path.basename(t.src_path);
-      const subUri    = `${config.appUrl}/api/videos/${videoId}/tracks/serve/${filename}`;
-      const lang      = t.language || 'und';
-      lines.push(
-        `#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID="subs",LANGUAGE="${lang}",NAME="${t.label || lang}",DEFAULT=${isDefault},AUTOSELECT=${isDefault},FORCED=NO,URI="${subUri}"`
-      );
-    }
-  }
-
-  const audioAttr = audioTracks.length    ? ',AUDIO="audio"'    : '';
-  const subsAttr  = subtitleTracks.length ? ',SUBTITLES="subs"' : '';
+  const audioAttr = audioTracks.length ? ',AUDIO="audio"' : '';
   // Sort by bandwidth ascending (HLS spec §4.3.4.2 recommends ordering from lowest to highest)
   const sortedQualities = [...qualities].sort((a, b) => (bitrateMap[a] || 0) - (bitrateMap[b] || 0));
   for (const q of sortedQualities) {
-    lines.push(`#EXT-X-STREAM-INF:BANDWIDTH=${bitrateMap[q]},RESOLUTION=${resMap[q]},NAME="${q}"${audioAttr}${subsAttr}`);
+    lines.push(`#EXT-X-STREAM-INF:BANDWIDTH=${bitrateMap[q]},RESOLUTION=${resMap[q]},NAME="${q}"${audioAttr}`);
     lines.push(`${q}/index.m3u8`);
   }
 

@@ -202,12 +202,12 @@ function updateVolIcon() {
 // pseudo-fullscreen: fix the wrapper to cover the viewport and rotate to
 // landscape.  Our custom controls remain fully interactive.
 let _iosPseudoFs = false;
+let _iosNativeFs  = false; // true while video.webkitEnterFullscreen is active
 function _isIOSPseudoFs()  { return _iosPseudoFs; }
 function _enterIOSPseudoFs() {
   _iosPseudoFs = true;
   wrap.classList.add('ios-pseudo-fs');
   document.body.classList.add('ios-pseudo-fs-active');
-  if (screen.orientation?.lock) screen.orientation.lock('landscape').catch(() => {});
   updateFsIcon();
 }
 function _exitIOSPseudoFs() {
@@ -219,7 +219,7 @@ function _exitIOSPseudoFs() {
 }
 
 function isFullscreen() {
-  return document.fullscreenElement === wrap || document.webkitFullscreenElement === wrap || _iosPseudoFs;
+  return document.fullscreenElement === wrap || document.webkitFullscreenElement === wrap || _iosPseudoFs || _iosNativeFs;
 }
 function updateFsIcon() {
   const fsBtn = wrap.querySelector('.fullscreen-btn');
@@ -232,15 +232,19 @@ function updateFsIcon() {
   }
 }
 async function toggleFullscreen() {
-  // iOS pseudo-fullscreen exit
+  // iOS pseudo-fullscreen exit (last-resort fallback only)
   if (_iosPseudoFs) { _exitIOSPseudoFs(); wakeChrome(); return; }
   try {
     if (!isFullscreen()) {
       if (wrap.requestFullscreen) await wrap.requestFullscreen();
       else if (wrap.webkitRequestFullscreen) await wrap.webkitRequestFullscreen();
-      else {
-        // iOS Safari: no standard fullscreen on wrapper. Use CSS pseudo-fullscreen
-        // so our custom controls remain visible instead of launching native player.
+      else if (video.webkitEnterFullscreen) {
+        // iOS Safari: launch the native player via webkitEnterFullscreen.
+        // webkitbeginfullscreen / webkitendfullscreen events handle subtitle/audio sync.
+        video.webkitEnterFullscreen();
+        return;
+      } else {
+        // Last resort: CSS pseudo-fullscreen (no native API at all)
         _enterIOSPseudoFs();
         wakeChrome();
         return;
@@ -273,6 +277,8 @@ updateFsIcon();
 //                        the double-subtitle bug (native track still 'showing'
 //                        while our custom overlay is also rendering cues).
 video.addEventListener('webkitbeginfullscreen', () => {
+  _iosNativeFs = true;
+  updateFsIcon();
   // ── Subtitles for iOS native player ──────────────────────────
   // The iOS player reads native <track> elements (mode='showing').
   // Our custom VTT overlay is HTML — invisible inside the iOS player.
@@ -312,6 +318,8 @@ video.addEventListener('webkitbeginfullscreen', () => {
 });
 
 video.addEventListener('webkitendfullscreen', () => {
+  _iosNativeFs = false;
+  updateFsIcon();
   // Step 1: immediately clear the custom overlay to avoid showing stale cues
   if (_subDisplay) _subDisplay.innerHTML = '';
   // Step 2: disable all native tracks — iOS may leave them in 'showing' after exit
@@ -674,7 +682,7 @@ function positionPreview(pct, t) {
   thumbTime.textContent = fmtTime(t);
   if (!previewVis) { thumbPrev.classList.add('visible'); previewVis = true; }
 }
-function hidePreview() { thumbPrev.classList.remove('visible'); previewVis = false; hoverInd.style.width = '0'; }
+function hidePreview() { thumbPrev.classList.remove('visible'); previewVis = false; hoverInd.style.width = '0'; hoverInd.style.opacity = ''; }
 function drawSprite(t) {
   if (!spriteMeta || !spriteImg?.complete) return false;
   const { interval, columns, thumbW, thumbH } = spriteMeta;
@@ -704,7 +712,12 @@ progressTrack.addEventListener('touchstart', e => { touchScrub = true; wakeChrom
 progressTrack.addEventListener('touchmove',  e => {
   if (!touchScrub) return;
   const rect = progressTrack.getBoundingClientRect();
-  handlePreview(Math.max(0, Math.min(1, (e.touches[0].clientX - rect.left) / rect.width)), (e.touches[0].clientX - rect.left) / rect.width * (video.duration || 0));
+  const pct  = Math.max(0, Math.min(1, (e.touches[0].clientX - rect.left) / rect.width));
+  handlePreview(pct, pct * (video.duration || 0));
+  // Visual feedback: move the fill to the scrub position so the user sees where they'll land.
+  // (Actual seek fires on touchend — this is purely cosmetic.)
+  document.getElementById('progress-fill').style.width = (pct * 100) + '%';
+  hoverInd.style.opacity = '1'; // `:hover` CSS doesn't trigger on touch — show manually
 }, { passive: true });
 progressTrack.addEventListener('touchend', e => {
   if (!touchScrub) return;
@@ -1589,6 +1602,26 @@ function initHls(m3u8Url) {
     // HLS.js is NOT used here — the browser plays HLS natively.
     // We still load subtitles via our custom overlay (VTT loop),
     // and expose audio tracks from the native HTMLMediaElement API.
+
+    // ── Block HLS-manifest subtitle TextTracks ──────────────────
+    // If the manifest has #EXT-X-MEDIA:TYPE=SUBTITLES entries (legacy videos),
+    // iOS Safari adds them to video.textTracks automatically. Those entries point
+    // to raw .vtt files (not valid HLS segment playlists), so iOS native player
+    // can't render them. Worse, they appear as duplicate, broken entries in the
+    // iOS native player's subtitle picker alongside our working <track> elements.
+    // Fix: any TextTrack NOT from one of our DOM <track> elements is immediately
+    // disabled so it never reaches the iOS picker. Our <track> elements (added by
+    // loadSubtitles() below) remain in 'hidden' mode and work correctly.
+    video.textTracks.addEventListener('addtrack', evt => {
+      const isOurs = [...video.querySelectorAll('track')].some(el => el.track === evt.track);
+      if (!isOurs) evt.track.mode = 'disabled';
+    });
+    // Disable any textTracks that may already be present at this point
+    for (let i = 0; i < video.textTracks.length; i++) {
+      const isOurs = [...video.querySelectorAll('track')].some(el => el.track === video.textTracks[i]);
+      if (!isOurs) video.textTracks[i].mode = 'disabled';
+    }
+
     video.src = m3u8Url;
     if (!spriteMeta) thumbV.src = m3u8Url;
 
@@ -1623,10 +1656,8 @@ function initHls(m3u8Url) {
       });
     }
 
-    // ── Subtitles via our custom VTT overlay ────────────────────
-    // loadSubtitles() fetches track list from API and starts VTT loop,
-    // identical to the HLS.js path — works on iOS Safari.
-    loadSubtitles();
+    // NOTE: loadSubtitles() is called in init() after initHls() returns,
+    // so we do NOT call it here — avoids a double-call on iOS Safari.
   } else {
     showError('Tu navegador no soporta reproducción HLS');
   }
@@ -2090,6 +2121,7 @@ document.addEventListener('keydown', e => {
   if (e.key === '?')      { toggleShortcuts(); return; }
   if (e.code === 'Escape') {
     if (_iosPseudoFs) { _exitIOSPseudoFs(); return; }
+    document.getElementById('settings-menu').classList.remove('open');
     closeShortcuts(); closeCreditsPanel(); return;
   }
 
@@ -2142,9 +2174,10 @@ document.addEventListener('keyup', e => {
 
 document.getElementById('shortcuts-hud').addEventListener('click', e => { if (e.target === e.currentTarget) closeShortcuts(); });
 
-// ─── Share ───────────────────────────────────────────────────
+// ─── Share / Download ────────────────────────────────────────
 function copyM3u8()  { navigator.clipboard.writeText(`${BASE}/videos/${videoId}/master.m3u8`).then(() => toast('Enlace .m3u8 copiado')); }
 function copyWatch() { navigator.clipboard.writeText(`${BASE}/watch/${videoId}`).then(() => toast('Enlace copiado')); }
+
 
 // ─── Error / password ────────────────────────────────────────
 function showError(msg) {

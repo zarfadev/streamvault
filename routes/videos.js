@@ -1299,30 +1299,68 @@ router.get('/:id/download-file', optionalAuth, async (req, res) => {
   const safeTitle = (video.title || 'video').replace(/[^a-zA-Z0-9áéíóúñü\s_-]/gi, '').trim().replace(/\s+/g, '_').slice(0, 60);
   const filename = `${safeTitle}${qualityLabel}.mp4`;
 
-  // Strategy 1: Local HLS → remux to MP4 via ffmpeg (fast, no re-encoding)
+  // ── Shared helper: stream FFmpeg stdout directly to response.
+  // Uses fragmented MP4 (frag_keyframe+empty_moov) so the browser receives
+  // valid MP4 atoms from the very first byte — download starts immediately,
+  // no temp file, no waiting for the full remux to complete.
+  const { spawn } = require('child_process');
+  const os = require('os');
+
+  function _streamFfmpegToResponse(inputSpec, extraProtoArgs, cwdOpt) {
+    const ffmpegArgs = [
+      ...extraProtoArgs,
+      '-allowed_extensions', 'ALL',
+      '-i', inputSpec,
+      '-map', '0:v:0',
+      '-map', '0:a:0?',
+      '-c:v', 'copy',
+      '-c:a', 'copy',
+      '-bsf:a', 'aac_adtstoasc',
+      // frag_keyframe+empty_moov: valid MP4 header in first chunk → instant download
+      '-movflags', 'frag_keyframe+empty_moov',
+      '-f', 'mp4',
+      'pipe:1',   // write to stdout → piped to response
+    ];
+
+    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    const opts = { stdio: ['ignore', 'pipe', 'pipe'] };
+    if (cwdOpt) opts.cwd = cwdOpt;
+
+    const ff = spawn('ffmpeg', ffmpegArgs, opts);
+    ff.stdout.pipe(res);
+    ff.stderr.on('data', () => {}); // suppress FFmpeg progress output
+    ff.on('error', err => {
+      logger.warn({ err: err.message, videoId }, 'FFmpeg stream download failed');
+      if (!res.headersSent) res.status(500).json({ error: 'Download failed' });
+      else if (!res.writableEnded) res.end();
+    });
+    ff.on('exit', (code) => {
+      if (code !== 0) logger.warn({ code, videoId }, 'FFmpeg exited with non-zero code');
+      if (!res.writableEnded) res.end();
+    });
+    // If the client disconnects mid-download, kill FFmpeg immediately
+    req.on('close', () => { try { ff.kill('SIGTERM'); } catch {} });
+  }
+
+  // Strategy 1: Local HLS → stream-remux to MP4 (copy, no re-encoding)
   const localM3u8 = path.join(__dirname, '..', 'videos', videoId, m3u8File);
   if (fs.existsSync(localM3u8)) {
-    const { execFile } = require('child_process');
-    const os = require('os');
-    
-    // Handle AES-128 encrypted HLS: rewrite m3u8 to use local key file
     let inputM3u8 = localM3u8;
-    let tempFiles = []; // track temp files for cleanup
-    
+    const tempFiles = [];
+
+    // AES-128 encrypted HLS: rewrite m3u8 to point to local key file
     try {
       const m3u8Content = fs.readFileSync(localM3u8, 'utf8');
-      
       if (m3u8Content.includes('#EXT-X-KEY:METHOD=AES-128')) {
         const videoRow = await db.prepare(`SELECT hls_key FROM videos WHERE id=?`).get(videoId);
         if (videoRow?.hls_key) {
           const keyBytes = Buffer.from(videoRow.hls_key, 'base64');
-          // Write temp files to os.tmpdir(), not the HLS directory which is
-          // served by express.static — avoids exposing the key via HTTP.
           const ts = `${videoId}_${Date.now()}`;
           const tempKeyFile = path.join(os.tmpdir(), `.sv_dlkey_${ts}.bin`);
           fs.writeFileSync(tempKeyFile, keyBytes);
           tempFiles.push(tempKeyFile);
-
           const rewrittenM3u8 = m3u8Content.replace(
             /#EXT-X-KEY:METHOD=AES-128,URI="[^"]+"/g,
             `#EXT-X-KEY:METHOD=AES-128,URI="${tempKeyFile}"`
@@ -1336,66 +1374,32 @@ router.get('/:id/download-file', optionalAuth, async (req, res) => {
     } catch (err) {
       logger.warn({ err: err.message, videoId }, 'Failed to prepare decrypted m3u8 for download');
     }
-    
-    // Generate MP4 to a temp file first (ensures proper moov atom at end for full playback)
-    const tempMp4 = path.join(os.tmpdir(), `sv_dl_${videoId}_${qualityLabel}_${Date.now()}.mp4`);
-    tempFiles.push(tempMp4);
-    
-    const ffmpegArgs = [
-      '-y',
-      '-protocol_whitelist', 'file,crypto,data',
-      '-allowed_extensions', 'ALL',
-      '-i', inputM3u8,
-      '-map', '0:v:0',
-      '-map', '0:a:0?',
-      '-c:v', 'copy',
-      '-c:a', 'copy',
-      '-bsf:a', 'aac_adtstoasc',
-      '-movflags', '+faststart',
-      tempMp4
-    ];
 
-    const cleanup = () => {
-      tempFiles.forEach(f => { try { fs.unlinkSync(f); } catch {} });
-    };
+    // Clean up temp key/m3u8 files once the response ends
+    res.on('finish', () => { tempFiles.forEach(f => { try { fs.unlinkSync(f); } catch {} }); });
+    res.on('close',  () => { tempFiles.forEach(f => { try { fs.unlinkSync(f); } catch {} }); });
 
-    execFile('ffmpeg', ffmpegArgs, { 
-      cwd: path.join(__dirname, '..', 'videos', videoId),
-      maxBuffer: 10 * 1024 * 1024,
-      timeout: 10 * 60 * 1000, // 10 min max
-    }, (err) => {
-      if (err) {
-        logger.warn({ err: err.message, videoId }, 'FFmpeg download remux failed');
-        cleanup();
-        if (!res.headersSent) {
-          return res.status(500).json({ error: 'Download conversion failed. Try again.' });
-        }
-        return;
-      }
-      
-      // Serve the complete MP4 file with proper Content-Length
-      const stat = fs.statSync(tempMp4);
-      res.setHeader('Content-Type', 'video/mp4');
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-      res.setHeader('Content-Length', stat.size);
-      
-      const stream = fs.createReadStream(tempMp4);
-      stream.pipe(res);
-      stream.on('end', cleanup);
-      stream.on('error', () => { cleanup(); if (!res.writableEnded) res.end(); });
-      res.on('close', () => { stream.destroy(); cleanup(); });
-    });
-
+    _streamFfmpegToResponse(
+      inputM3u8,
+      ['-protocol_whitelist', 'file,crypto,data'],
+      path.join(__dirname, '..', 'videos', videoId)
+    );
     return;
   }
 
-  // Strategy 2: CDN URL — redirect (browser will download)
+  // Strategy 2: CDN/S3 — stream-remux HLS segments fetched from CDN.
+  // FFmpeg reads segments over HTTPS and pipes MP4 to the browser in real time.
   if (video.hls_cdn_url) {
     const cdnBase = video.hls_cdn_url.replace(/\/master\.m3u8$/i, '');
-    const cdnUrl = quality 
+    const cdnM3u8 = quality
       ? `${cdnBase}/${quality.replace(/p$/i, '')}p/index.m3u8`
       : video.hls_cdn_url;
-    return res.redirect(302, cdnUrl);
+
+    _streamFfmpegToResponse(
+      cdnM3u8,
+      ['-protocol_whitelist', 'file,http,https,tcp,tls,crypto']
+    );
+    return;
   }
 
   res.status(404).json({ error: 'Video file not found. The video may still be processing or was deleted.' });

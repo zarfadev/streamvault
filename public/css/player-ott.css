@@ -244,7 +244,6 @@ html.embed-root, html.embed-root body {
   display: block;
 }
 .center-main-btn .ctrl-svg { color: #fff; }
-.center-main-btn .ctrl-svg { color: #fff; }
 
 /* Pantallas pequeñas (móvil) — mínimos táctiles cómodos */
 @media (max-width: 480px) {
@@ -758,7 +757,6 @@ html.embed-root, html.embed-root body {
   bottom: 92px;                 /* above the dock */
   left: 50%;
   transform: translateX(-50%);
-  max-width: 86%;
   width: max-content;
   max-width: min(86%, 900px);
   pointer-events: none;
@@ -1594,7 +1592,7 @@ video::cue {
      por el overflow:hidden del player-inner. */
   .quality-menu, .cc-menu, .speed-menu, .settings-menu {
     position: fixed !important;
-    bottom: 90px !important;     /* por encima del dock (~80 px) */
+    bottom: calc(90px + env(safe-area-inset-bottom, 0px)) !important; /* por encima del dock (~80 px) + safe area */
     top: auto !important;
     left: 50% !important;
     right: auto !important;
@@ -1825,8 +1823,8 @@ body.ios-pseudo-fs-active {
   height: 100% !important;
   object-fit: contain !important;
 }
-/* In pseudo-FS landscape, make progress/controls look native */
-.player-wrap.ios-pseudo-fs .player-controls-row {
-  padding-bottom: env(safe-area-inset-bottom, 8px);
+/* In pseudo-FS, ensure the dock accounts for the home-indicator safe-area */
+.player-wrap.ios-pseudo-fs .player-progress-dock {
+  padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px)) !important;
 }
 
