@@ -4556,19 +4556,19 @@ function copyLink(id, type) {
           </div>` : ''}
           <div style="background:var(--surface2);border-radius:8px;padding:10px 14px;border:1px solid var(--border);">
             <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;font-weight:600;margin-bottom:4px;">Videos</div>
-            <div style="font-size:13px;font-weight:600;color:var(--text);">${status.limits?.videos?.used || 0} / ${status.limits?.videos?.max < 0 ? '∞' : status.limits?.videos?.max}</div>
+            <div style="font-size:13px;font-weight:600;color:var(--text);">${status.limits?.videos?.used || 0} / ${(status.limits?.videos?.max == null || status.limits?.videos?.max < 0 || status.limits?.videos?.max >= 999999) ? '∞' : status.limits?.videos?.max}</div>
           </div>
           <div style="background:var(--surface2);border-radius:8px;padding:10px 14px;border:1px solid var(--border);">
             <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;font-weight:600;margin-bottom:4px;">Almacenamiento</div>
-            <div style="font-size:13px;font-weight:600;color:var(--text);">${status.limits?.storage?.maxGB || 0} GB</div>
+            <div style="font-size:13px;font-weight:600;color:var(--text);">${(Number(status.limits?.storage?.maxGB) >= 999999 || Number(status.limits?.storage?.maxGB) < 0) ? '∞' : (status.limits?.storage?.maxGB || 0)} GB</div>
           </div>` : `
           <div style="background:var(--surface2);border-radius:8px;padding:10px 14px;border:1px solid var(--border);">
             <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;font-weight:600;margin-bottom:4px;">Videos</div>
-            <div style="font-size:13px;font-weight:600;color:var(--text);">${status.limits?.videos?.used || 0} / ${status.limits?.videos?.max || 0}</div>
+            <div style="font-size:13px;font-weight:600;color:var(--text);">${status.limits?.videos?.used || 0} / ${(status.limits?.videos?.max == null || status.limits?.videos?.max < 0 || status.limits?.videos?.max >= 999999) ? '∞' : (status.limits?.videos?.max || 0)}</div>
           </div>
           <div style="background:var(--surface2);border-radius:8px;padding:10px 14px;border:1px solid var(--border);">
             <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;font-weight:600;margin-bottom:4px;">Almacenamiento</div>
-            <div style="font-size:13px;font-weight:600;color:var(--text);">${status.limits?.storage?.maxGB || 0} GB</div>
+            <div style="font-size:13px;font-weight:600;color:var(--text);">${(Number(status.limits?.storage?.maxGB) >= 999999 || Number(status.limits?.storage?.maxGB) < 0) ? '∞' : (status.limits?.storage?.maxGB || 0)} GB</div>
           </div>
           `}
         </div>
@@ -4683,24 +4683,40 @@ function copyLink(id, type) {
         </div>`;
     }
 
-    async function manageBillingPortal() {
-      const btn = event?.target?.closest('button');
-      if (btn) { btn.disabled = true; btn.textContent = 'Cargando...'; }
+    // Helper compartido: abre el portal de facturación.
+    // Para proveedores sin portal nativo (dLocal Go) muestra el mensaje informativo
+    // en un toast en lugar de redirigir de vuelta a la misma página.
+    async function _openBillingPortal(btnEl, fallbackBtnText) {
       try {
         const p = await apiFetch(`${BASE}/api/billing/portal?returnUrl=${encodeURIComponent(window.location.href)}`);
         const pd = await p.json();
         if (!p.ok) throw new Error(pd.error || 'Error al acceder al portal');
-        if (pd.portalUrl) window.location.href = pd.portalUrl;
-        else throw new Error('No se recibió URL del portal');
+
+        if (pd.portalUrl) {
+          // Proveedor con portal externo real (Stripe, PayPal) — redirigir
+          window.location.href = pd.portalUrl;
+        } else if (pd.message) {
+          // Proveedor sin portal nativo (dLocal Go) — mostrar info en toast
+          toast(pd.message, 'info', 9000);
+          if (btnEl) { btnEl.disabled = false; btnEl.textContent = fallbackBtnText; }
+        } else {
+          throw new Error('No hay portal de facturación disponible para este proveedor');
+        }
       } catch (e) {
         toast(e.message || 'Error de conexión', 'error');
-        if (btn) { btn.disabled = false; btn.textContent = 'Gestionar facturación'; }
+        if (btnEl) { btnEl.disabled = false; btnEl.textContent = fallbackBtnText; }
       }
+    }
+
+    async function manageBillingPortal() {
+      const btn = event?.target?.closest('button');
+      if (btn) { btn.disabled = true; btn.textContent = 'Cargando...'; }
+      await _openBillingPortal(btn, 'Gestionar facturación');
     }
 
     async function manageBilling() {
       const btn = document.getElementById('manage-billing-btn');
-      const ogText = btn?.textContent || 'Gestionar plan';
+      const ogText = btn?.textContent?.trim() || 'Gestionar plan';
       if (btn) { btn.disabled = true; btn.textContent = 'Cargando...'; }
       try {
         const statusRes = await apiFetch(`${BASE}/api/billing/status`);
@@ -4708,10 +4724,7 @@ function copyLink(id, type) {
         const status = await statusRes.json();
 
         if (status.hasSubscription) {
-          const p = await apiFetch(`${BASE}/api/billing/portal?returnUrl=${encodeURIComponent(window.location.href)}`);
-          const pd = await p.json();
-          if (pd.portalUrl) window.location.href = pd.portalUrl;
-          else throw new Error(pd.error || 'Error al acceder al portal');
+          await _openBillingPortal(btn, ogText);
         } else {
           openUpgradeModal();
           if (btn) { btn.disabled = false; btn.textContent = ogText; }
@@ -6070,7 +6083,12 @@ function copyLink(id, type) {
         const data = await r.json();
         billingStatus = data; // cache for updateUpgradePlanDetails()
         const currentPlan = data.plan || 'starter';
-        const plans = (data.availablePlans || []).filter(p => p.key !== currentPlan && p.key !== 'starter');
+        // Sólo mostrar planes que sean un tier SUPERIOR al actual (no downgrades)
+        const planTier = { starter: 0, pro: 1, enterprise: 2 };
+        const currentTier = planTier[currentPlan] ?? 0;
+        const plans = (data.availablePlans || []).filter(p =>
+          p.key !== 'starter' && (planTier[p.key] ?? 99) > currentTier
+        );
         if (!plans.length) { card.style.display = 'none'; return; }
         card.style.display = 'block';
         const planColors = { pro: 'rgba(124,108,250,0.15)', enterprise: 'rgba(34,211,165,0.12)' };
@@ -6094,13 +6112,20 @@ function copyLink(id, type) {
     async function startCheckout(planKey, providerOverride) {
       if (!authWorkspace) return toast('Workspace requerido', 'error');
       try {
-        // Load the default gateway if not specified
         let provider = providerOverride;
         if (!provider) {
+          // Si hay más de un gateway activo, abrir el modal de upgrade con el plan
+          // pre-seleccionado para que el usuario elija la pasarela de pago.
           try {
             const gwR = await apiFetch(`${BASE}/api/billing/gateways`);
             const gws = await gwR.json();
-            const defaultGw = Array.isArray(gws) ? (gws.find(g => g.is_default) || gws[0]) : null;
+            const activeGws = Array.isArray(gws) ? gws.filter(g => g.enabled) : [];
+            if (activeGws.length > 1) {
+              // Múltiples gateways → abrir modal con plan pre-seleccionado
+              await openUpgradeModal(planKey);
+              return;
+            }
+            const defaultGw = activeGws[0] || null;
             if (defaultGw) provider = defaultGw.gateway;
           } catch {}
         }
@@ -7266,8 +7291,9 @@ function copyLink(id, type) {
       }
     }
 
-    // Cargar gateways al abrir el modal de upgrade
-    window.openUpgradeModal = async function() {
+    // Cargar gateways al abrir el modal de upgrade.
+    // planKey opcional: pre-selecciona un plan en el select del modal.
+    window.openUpgradeModal = async function(planKey) {
       openModal('upgrade-modal-overlay');
       // Fetch billing status first so updateUpgradePlanDetails has live prices
       if (!billingStatus) {
@@ -7275,6 +7301,11 @@ function copyLink(id, type) {
           const r = await apiFetch(`${BASE}/api/billing/status`);
           if (r.ok) billingStatus = await r.json();
         } catch {}
+      }
+      // Pre-seleccionar plan si se especificó (p.ej. desde startCheckout con múltiples gateways)
+      if (planKey) {
+        const planSel = document.getElementById('upgrade-plan-select');
+        if (planSel) planSel.value = planKey;
       }
       loadAvailableGateways();
       updateUpgradePlanDetails();

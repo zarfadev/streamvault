@@ -432,21 +432,29 @@ router.get('/status', authenticate, resolveWorkspace, async (req, res) => {
       suspended: paymentStatus.suspended,
       cancelAtPeriodEnd: metadata.cancel_at_period_end || false,
       currentPeriodEnd: metadata.current_period_end || null,
-      limits: {
-        videos: { used: videoCount?.count || 0, max: ws.max_videos },
-        storage: {
-          usedBytes: ws.storage_used_bytes,
-          maxBytes: ws.max_storage_bytes,
-          usedGB: (ws.storage_used_bytes / 1e9).toFixed(2),
-          maxGB: (ws.max_storage_bytes / 1e9).toFixed(0),
-        },
-        bandwidth: {
-          usedBytes: ws.bandwidth_used_bytes,
-          maxBytes: ws.max_bandwidth_bytes,
-          usedGB: (ws.bandwidth_used_bytes / 1e9).toFixed(2),
-          maxGB: (ws.max_bandwidth_bytes / 1e9).toFixed(0),
-        },
-      },
+      limits: (() => {
+        // If the workspace limits are 0/null (e.g. plan was assigned manually without
+        // setting the workspace rows), fall back to the plan config values so the UI
+        // shows the correct limits instead of "0 videos / 0 GB".
+        const effectiveMaxVideos      = (ws.max_videos       > 0) ? ws.max_videos       : (planConfig.maxVideos       ?? -1);
+        const effectiveMaxStorageB    = (ws.max_storage_bytes > 0) ? ws.max_storage_bytes : (planConfig.maxStorageGB    ?? 0) * 1e9;
+        const effectiveMaxBandwidthB  = (ws.max_bandwidth_bytes > 0) ? ws.max_bandwidth_bytes : (planConfig.maxBandwidthGB ?? 0) * 1e9;
+        return {
+          videos: { used: videoCount?.count || 0, max: effectiveMaxVideos },
+          storage: {
+            usedBytes: ws.storage_used_bytes,
+            maxBytes:  effectiveMaxStorageB,
+            usedGB:    (ws.storage_used_bytes / 1e9).toFixed(2),
+            maxGB:     (effectiveMaxStorageB  / 1e9).toFixed(0),
+          },
+          bandwidth: {
+            usedBytes: ws.bandwidth_used_bytes,
+            maxBytes:  effectiveMaxBandwidthB,
+            usedGB:    (ws.bandwidth_used_bytes   / 1e9).toFixed(2),
+            maxGB:     (effectiveMaxBandwidthB    / 1e9).toFixed(0),
+          },
+        };
+      })(),
       features: {
         embed: planConfig.embed,
         analytics: planConfig.analytics,

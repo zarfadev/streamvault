@@ -238,12 +238,15 @@ async function createBillingPortalSession(workspaceId, returnUrl) {
     ? Math.max(0, Math.ceil((periodEndTs * 1000 - Date.now()) / 86_400_000))
     : null;
 
+  // dLocal Go no tiene portal nativo — devolvemos portalUrl:null para que el
+  // frontend muestre la info como toast en lugar de redirigir a sí mismo.
   return {
-    portalUrl: returnUrl || `${config.appUrl}/dashboard`,
+    portalUrl: null,
+    type: 'info',
     message:
       `Suscripción activa al plan ${planConfig?.name || workspace.plan}` +
       (expiryDate ? `. Próximo cobro: ${expiryDate}` : '') +
-      '. Para cancelar usa el botón "Cancelar suscripción" en el dashboard.',
+      '. Para cancelar, usa el botón "Cancelar suscripción" en el dashboard.',
     expiryDate,
     daysRemaining,
   };
