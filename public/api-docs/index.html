@@ -15,13 +15,14 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); line
 
 /* ─── NAV ─── */
 nav.api-nav {
-  position: sticky; top: 0; z-index: 100;
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
   height: 56px; padding: 0 40px;
   display: flex; align-items: center; justify-content: space-between;
-  background: rgba(10,10,15,.94);
+  background: rgba(10,10,15,.96);
   backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--border);
 }
+.page-layout { padding-top: 56px; }
 .nav-logo { font-family: var(--mono); font-size: 16px; font-weight: 700; color: var(--accent2); letter-spacing: -0.5px; text-decoration: none; flex-shrink: 0; }
 .nav-logo span { color: var(--muted); font-weight: 400; }
 .nav-search { display: flex; align-items: center; gap: 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 0 12px; height: 38px; width: 320px; max-width: calc(100vw - 320px); transition: all 0.2s; }
@@ -250,7 +251,7 @@ td { padding: 10px 14px; border-bottom: 1px solid var(--border); }
 <!-- AUTH MODAL -->
 <div class="auth-modal-overlay" id="auth-modal">
   <div class="auth-modal">
-    <h3>🔐 Autorizar Peticiones</h3>
+    <h3><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg> Autorizar Peticiones</h3>
     <p>Ingresa tu API Key o JWT token para realizar pruebas en vivo directamente desde esta documentación.</p>
     <label>API Key / Token</label>
     <input type="password" id="auth-token-input" placeholder="sv_live_... o eyJhbGciOi...">
@@ -904,9 +905,9 @@ function updateAuthBar(){
   const a=getAuth();
   if(a.token){
     const prefix=a.token.substring(0,12)+'...';
-    bar.innerHTML='<div class="auth-status connected">🔓 Autorizado: '+prefix+(a.ws?' · WS: '+a.ws:'')+'</div>';
+    bar.innerHTML='<div class="auth-status connected"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/><circle cx="12" cy="16" r="1"/></svg> Autorizado: '+prefix+(a.ws?' · WS: '+a.ws:'')+'</div>';
   } else {
-    bar.innerHTML='<div class="auth-status disconnected">🔒 No autorizado — <a href="javascript:openAuthModal()" style="color:inherit;text-decoration:underline;">configura tus credenciales</a> para probar endpoints</div>';
+    bar.innerHTML='<div class="auth-status disconnected"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg> No autorizado — <a href="javascript:openAuthModal()" style="color:inherit;text-decoration:underline;">configura tus credenciales</a> para probar endpoints</div>';
   }
 }
 updateAuthBar();
@@ -974,15 +975,38 @@ function copyCode(btn){
   window.addEventListener('scroll',spy,{passive:true}); spy();
 })();
 
-// ─── Search ───
+// ─── Search (GitBook-style: filters sidebar + content simultaneously) ───
 (function(){
   const input=document.getElementById('api-search');
   if(!input)return;
+  let debounce;
   input.addEventListener('input',function(){
-    const q=this.value.toLowerCase().trim();
-    $$('.ep-card,.doc-section').forEach(el=>{
-      el.classList.toggle('ep-hidden', q && !el.textContent.toLowerCase().includes(q));
-    });
+    clearTimeout(debounce);
+    debounce=setTimeout(()=>{
+      const q=this.value.toLowerCase().trim();
+      // Filter sidebar links
+      $$('.sb-link').forEach(link=>{
+        const text=link.textContent.toLowerCase();
+        link.style.display=(!q||text.includes(q))?'':'none';
+      });
+      // Filter sidebar sections (hide if all children hidden)
+      $$('.sb-section').forEach(sec=>{
+        let next=sec.nextElementSibling;
+        let anyVisible=false;
+        while(next&&!next.classList.contains('sb-section')){
+          if(next.classList.contains('sb-link')&&next.style.display!=='none') anyVisible=true;
+          next=next.nextElementSibling;
+        }
+        sec.style.display=(!q||anyVisible)?'':'none';
+      });
+      // Filter main content sections and endpoint cards
+      $$('.doc-section').forEach(el=>{
+        const match=!q||el.textContent.toLowerCase().includes(q);
+        el.classList.toggle('ep-hidden',!match);
+      });
+      // Also filter dividers (hide when searching)
+      $$('.doc-divider').forEach(d=>{ d.style.display=q?'none':''; });
+    },150);
   });
 })();
 document.addEventListener('keydown',e=>{ if((e.metaKey||e.ctrlKey)&&e.key==='k'){ e.preventDefault(); document.getElementById('api-search')?.focus(); }});
