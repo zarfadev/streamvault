@@ -66,7 +66,11 @@ async function headBucket() {
 
 // Files that must never be uploaded to S3 (HLS encryption keys are served
 // by the API server, not CDN; uploading them would be a security risk).
+// Source video files (_source.*) are excluded too — they are already on S3
+// before transcoding starts, and re-uploading them would waste bandwidth and
+// cause uploadVideoDirectory to hang for multi-GB files.
 const S3_EXCLUDED_FILES = new Set(['hls.key', 'hls.keyinfo']);
+const _isExcluded = (f) => S3_EXCLUDED_FILES.has(path.basename(f)) || path.basename(f).startsWith('_source.');
 
 /**
  * Upload a single local file to S3 and return its CDN URL.
@@ -167,7 +171,7 @@ async function uploadVideoDirectory(localDir, workspaceId, videoId) {
 
   // Build the upload queue (file path → S3 key)
   const queue = walkDir(localDir)
-    .filter(f => !S3_EXCLUDED_FILES.has(path.basename(f)))
+    .filter(f => !_isExcluded(f))
     .map(f => ({ localPath: f, key: `${keyPrefix}/${path.relative(localDir, f)}` }));
 
   // Upload in sliding-window batches of S3_UPLOAD_CONCURRENCY
@@ -204,7 +208,7 @@ async function uploadQualityDir(qualityDir, workspaceId, videoId, quality) {
     .filter(Boolean).join('/');
 
   const queue = walkDir(qualityDir)
-    .filter(f => !S3_EXCLUDED_FILES.has(path.basename(f)))
+    .filter(f => !_isExcluded(f))
     .map(f => ({ localPath: f, key: `${keyPrefix}/${path.relative(qualityDir, f)}` }));
 
   for (let i = 0; i < queue.length; i += S3_UPLOAD_CONCURRENCY) {

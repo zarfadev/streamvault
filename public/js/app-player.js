@@ -192,8 +192,34 @@ function updateVolIcon() {
   const low   = !muted && video.volume < 0.4;
   document.querySelector('#vol-icon use')?.setAttribute('href', muted ? '#sv-volume-mute' : low ? '#sv-volume-low' : '#sv-volume');
 }
+// ─── iOS pseudo-fullscreen ─────────────────────────────────────
+// On iOS Safari, document.requestFullscreen / webkitRequestFullscreen are
+// not supported on the wrapper element — only video.webkitEnterFullscreen
+// works, but that launches the native iOS player which hides all our HTML
+// controls (custom subtitles, audio selector, quality badge, etc.).
+//
+// Instead, when both standard fullscreen APIs are unavailable we use CSS
+// pseudo-fullscreen: fix the wrapper to cover the viewport and rotate to
+// landscape.  Our custom controls remain fully interactive.
+let _iosPseudoFs = false;
+function _isIOSPseudoFs()  { return _iosPseudoFs; }
+function _enterIOSPseudoFs() {
+  _iosPseudoFs = true;
+  wrap.classList.add('ios-pseudo-fs');
+  document.body.classList.add('ios-pseudo-fs-active');
+  if (screen.orientation?.lock) screen.orientation.lock('landscape').catch(() => {});
+  updateFsIcon();
+}
+function _exitIOSPseudoFs() {
+  _iosPseudoFs = false;
+  wrap.classList.remove('ios-pseudo-fs');
+  document.body.classList.remove('ios-pseudo-fs-active');
+  try { screen.orientation?.unlock(); } catch {}
+  updateFsIcon();
+}
+
 function isFullscreen() {
-  return document.fullscreenElement === wrap || document.webkitFullscreenElement === wrap;
+  return document.fullscreenElement === wrap || document.webkitFullscreenElement === wrap || _iosPseudoFs;
 }
 function updateFsIcon() {
   const fsBtn = wrap.querySelector('.fullscreen-btn');
@@ -206,11 +232,19 @@ function updateFsIcon() {
   }
 }
 async function toggleFullscreen() {
+  // iOS pseudo-fullscreen exit
+  if (_iosPseudoFs) { _exitIOSPseudoFs(); wakeChrome(); return; }
   try {
     if (!isFullscreen()) {
       if (wrap.requestFullscreen) await wrap.requestFullscreen();
       else if (wrap.webkitRequestFullscreen) await wrap.webkitRequestFullscreen();
-      else if (video.webkitEnterFullscreen) { video.webkitEnterFullscreen(); return; }
+      else {
+        // iOS Safari: no standard fullscreen on wrapper. Use CSS pseudo-fullscreen
+        // so our custom controls remain visible instead of launching native player.
+        _enterIOSPseudoFs();
+        wakeChrome();
+        return;
+      }
     } else {
       await (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
     }
@@ -1318,6 +1352,10 @@ async function loadSubtitles() {
         el.kind = 'subtitles'; el.srclang = tr.language; el.label = tr.label; el.src = tr.src;
         // el.default = true; ← REMOVED: causes native rendering + duplicate subtitles
         video.appendChild(el);
+        // Set to 'hidden' (not 'disabled') so iOS native player shows the CC button
+        // and lists all available tracks in its subtitle picker, even when none
+        // is currently active. 'disabled' hides tracks from the iOS picker entirely.
+        requestAnimationFrame(() => { el.track.mode = 'hidden'; });
       }
     }
 
@@ -2050,7 +2088,10 @@ function fastSeekStop() {
 document.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
   if (e.key === '?')      { toggleShortcuts(); return; }
-  if (e.code === 'Escape') { closeShortcuts(); closeCreditsPanel(); return; }
+  if (e.code === 'Escape') {
+    if (_iosPseudoFs) { _exitIOSPseudoFs(); return; }
+    closeShortcuts(); closeCreditsPanel(); return;
+  }
 
   // Arrow keys: first press = skip 10s, repeat (hold) = fast seek
   if (e.code === 'ArrowRight' || e.code === 'ArrowLeft') {

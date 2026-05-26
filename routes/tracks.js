@@ -401,7 +401,7 @@ function transcodeAudioTrack(inputPath, outputDir, language) {
 }
 
 async function rebuildMasterPlaylist(videoId) {
-  const video = await db.prepare(`SELECT qualities, workspace_id FROM videos WHERE id = ?`).get(videoId);
+  const video = await db.prepare(`SELECT qualities, workspace_id, hls_cdn_url, s3_object_prefix FROM videos WHERE id = ?`).get(videoId);
   if (!video) return;
 
   const qualities       = JSON.parse(video.qualities || '[]');
@@ -427,10 +427,16 @@ async function rebuildMasterPlaylist(videoId) {
     for (const t of audioTracks) {
       const isDefault = !!t.default_track ? 'YES' : 'NO';
       const relPath   = path.relative(path.join(__dirname, '..', 'videos', videoId), t.src_path);
-      // Use absolute URI so Safari/iOS native player can resolve the audio track.
-      // Relative URIs work for HLS.js but iOS Safari native player (webkitEnterFullscreen)
-      // requires absolute URIs to display the audio track selector in its HUD.
-      const audioUri  = `${cfg.appUrl}/videos/${videoId}/${relPath}`;
+      // Audio track URI: use CDN absolute URL when S3 is enabled so the file is
+      // always accessible even after DELETE_LOCAL_AFTER_S3 removes local copies.
+      // Fallback to server URL when S3 is disabled (local mode).
+      let audioUri;
+      if (s3.isS3Enabled() && video.hls_cdn_url) {
+        const cdnBase = video.hls_cdn_url.replace(/\/master\.m3u8(\?.*)?$/i, '');
+        audioUri = `${cdnBase}/${relPath}`;
+      } else {
+        audioUri = `${cfg.appUrl}/videos/${videoId}/${relPath}`;
+      }
       lines.push(
         `#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",LANGUAGE="${t.language}",NAME="${t.label}",DEFAULT=${isDefault},AUTOSELECT=${isDefault},URI="${audioUri}"`
       );

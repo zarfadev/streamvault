@@ -15,6 +15,15 @@ const config = require('../config');
  * Debe ser el último middleware registrado en server.js
  */
 function errorHandler(err, req, res, next) {
+  // "Request aborted" fires when a client disconnects mid-upload (e.g. during
+  // a server restart or the user cancelling).  It is not a server error — log
+  // at warn level so it doesn't appear as a 500 in production dashboards.
+  if (err.message === 'Request aborted' || err.code === 'ECONNRESET' || err.code === 'ECONNABORTED') {
+    logger.warn({ url: req.url, method: req.method }, 'Client disconnected mid-request (ignored)');
+    if (!res.headersSent) res.status(499).end(); // 499 = client closed request
+    return;
+  }
+
   // Log completo del error (siempre, incluso en producción)
   logger.error({
     err: {

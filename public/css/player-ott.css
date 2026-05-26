@@ -1801,3 +1801,32 @@ video::cue {
   }
 }
 
+/* ── iOS pseudo-fullscreen ────────────────────────────────────────
+   When iOS Safari doesn't support wrapper.requestFullscreen we apply a
+   CSS fullscreen that keeps our custom controls visible.
+   ──────────────────────────────────────────────────────────────── */
+.player-wrap.ios-pseudo-fs {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100dvh !important;
+  z-index: 9999 !important;
+  border-radius: 0 !important;
+  background: #000 !important;
+}
+/* Freeze the body scroll while pseudo-FS is active */
+body.ios-pseudo-fs-active {
+  overflow: hidden !important;
+  touch-action: none;
+}
+/* Inside pseudo-FS, video fills the wrapper and controls are visible */
+.player-wrap.ios-pseudo-fs video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+}
+/* In pseudo-FS landscape, make progress/controls look native */
+.player-wrap.ios-pseudo-fs .player-controls-row {
+  padding-bottom: env(safe-area-inset-bottom, 8px);
+}
+

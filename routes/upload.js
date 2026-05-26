@@ -102,6 +102,20 @@ async function getGuestConfig() {
 }
 
 router.post('/', optionalAuth, (req, res, next) => {
+  // ── Cleanup partial file if client disconnects mid-upload ─────────────────
+  // When multer is writing a large file and the connection drops (e.g. server
+  // restart, browser cancel), it throws "Request aborted" but leaves the
+  // partial file on disk.  We register an 'aborted'/'close' handler here so
+  // those orphaned chunks are cleaned up immediately.
+  req.once('aborted', () => {
+    if (req.file?.path) { try { require('fs').unlinkSync(req.file.path); } catch (_) {} }
+  });
+  req.once('close', () => {
+    if (!res.headersSent && req.file?.path) {
+      try { require('fs').unlinkSync(req.file.path); } catch (_) {}
+    }
+  });
+
   // ── Authenticated users MUST provide a workspace ──────────────────────────
   // This prevents bypassing plan limits by uploading without a workspace context.
   // Unauthenticated uploads (public API without token) are still allowed without
