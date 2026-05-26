@@ -239,16 +239,41 @@ updateFsIcon();
 //                        the double-subtitle bug (native track still 'showing'
 //                        while our custom overlay is also rendering cues).
 video.addEventListener('webkitbeginfullscreen', () => {
-  // Activate matching native track for the iOS player's subtitle HUD
-  if (ccLang) {
+  // ── Subtitles for iOS native player ──────────────────────────
+  // The iOS player reads native <track> elements (mode='showing').
+  // Our custom VTT overlay is HTML — invisible inside the iOS player.
+  // Activate the track matching the user's selected language so
+  // the iOS player can display it in its built-in subtitle HUD.
+  if (ccLang && video.textTracks.length > 0) {
     let applied = false;
     for (let i = 0; i < video.textTracks.length; i++) {
-      const match = video.textTracks[i].language === ccLang;
+      const match = video.textTracks[i].language === ccLang ||
+                    video.textTracks[i].label === ccLang;
       video.textTracks[i].mode = (match && !applied) ? 'showing' : 'hidden';
       if (match) applied = true;
     }
+  } else {
+    // No subtitle selected — ensure all tracks are hidden in iOS player
+    for (let i = 0; i < video.textTracks.length; i++) {
+      video.textTracks[i].mode = 'hidden';
+    }
   }
-  // Make sure our custom overlay is hidden while iOS native player is shown
+
+  // ── Audio for iOS native player ───────────────────────────────
+  // Safari/iOS native player reads video.audioTracks directly.
+  // Restore the user's saved audio preference so the iOS player
+  // starts on the correct track.
+  if (video.audioTracks && video.audioTracks.length > 1) {
+    const savedLang = audioTracks[currentAudioTrack >= 0 ? currentAudioTrack : 0]?.lang || null;
+    if (savedLang) {
+      for (let i = 0; i < video.audioTracks.length; i++) {
+        video.audioTracks[i].enabled = (video.audioTracks[i].language === savedLang ||
+                                        video.audioTracks[i].label === savedLang);
+      }
+    }
+  }
+
+  // Hide our custom HTML overlay — it's not visible inside the iOS native player
   if (_subDisplay) _subDisplay.style.display = 'none';
 });
 
