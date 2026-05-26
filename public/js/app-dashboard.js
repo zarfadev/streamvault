@@ -4520,10 +4520,13 @@ function copyLink(id, type) {
       // Determinar si es un plan de pago (asignado manualmente o via suscripción)
       const isPaidPlan = status.plan !== 'starter' && status.price > 0;
       const isActive = status.hasSubscription || isPaidPlan;
+      const isPending = !!status.isPendingApproval;
 
       let statusBadge = '';
       if (status.suspended) {
         statusBadge = `<span style="background:rgba(248,113,113,0.15);color:var(--red);font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;text-transform:uppercase;letter-spacing:.5px;">Suspendida</span>`;
+      } else if (isPending) {
+        statusBadge = `<span style="background:rgba(251,191,36,0.12);color:var(--amber);font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;text-transform:uppercase;letter-spacing:.5px;">Pago pendiente</span>`;
       } else if (status.cancelAtPeriodEnd) {
         statusBadge = `<span style="background:rgba(251,191,36,0.12);color:var(--amber);font-size:11px;font-weight:700;padding:3px 10px;border-radius:99px;text-transform:uppercase;letter-spacing:.5px;">Cancela al vencer</span>`;
       } else if (isActive) {
@@ -4582,8 +4585,22 @@ function copyLink(id, type) {
           </div>
         </div>` : ''}
 
+        ${isPending ? `
+        <div style="background:rgba(251,191,36,0.07);border:1px solid rgba(251,191,36,0.25);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:flex-start;gap:10px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" stroke-width="2" style="flex-shrink:0;margin-top:1px;"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <div>
+            <div style="font-size:13px;font-weight:600;color:var(--amber);">Pago no completado</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:2px;">Tu último intento de pago con ${esc(providerLabel)} no fue completado. Haz clic en "Intentar de nuevo" para reiniciar el proceso.</div>
+          </div>
+        </div>` : ''}
+
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          ${status.hasSubscription ? `
+          ${isPending ? `
+            <button class="btn btn-primary" style="padding:8px 18px;font-size:13px;" onclick="clearPendingAndUpgrade()">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.9"/></svg>
+              Intentar de nuevo
+            </button>
+          ` : status.hasSubscription ? `
             <button class="btn btn-primary" style="padding:8px 18px;font-size:13px;" onclick="manageBillingPortal()">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
               Gestionar facturación
@@ -4733,6 +4750,14 @@ function copyLink(id, type) {
         toast(e.message || 'Error de conexión', 'error');
         if (btn) { btn.disabled = false; btn.textContent = ogText; }
       }
+    }
+
+    // ─── Clear pending checkout + re-open upgrade modal ──────────
+    async function clearPendingAndUpgrade() {
+      try {
+        await apiFetch(`${BASE}/api/billing/subscription/cancel-pending`, { method: 'POST' });
+      } catch {}
+      openUpgradeModal();
     }
 
     // ─── Cancel Subscription ──────────────────────────────────────
@@ -6142,14 +6167,22 @@ function copyLink(id, type) {
     }
 
     // Handle billing return params
+    // También llama cancel-pending para limpiar subscripciones approval_pending
+    // cuando el usuario cancela o el checkout falla (ej. error de PayPal).
     (() => {
       const p = new URLSearchParams(window.location.search);
-      if (p.get('billing') === 'success') {
-        toast('¡Plan actualizado exitosamente!');
+      const isBillingSuccess = p.get('billing') === 'success' || p.get('upgrade') === 'success';
+      const isBillingCancel  = p.get('billing') === 'cancel'  || p.get('upgrade') === 'cancel';
+
+      if (isBillingSuccess) {
+        toast('¡Plan actualizado exitosamente!', 'success');
         history.replaceState({}, '', '/dashboard');
-      } else if (p.get('billing') === 'cancel') {
-        toast('Pago cancelado.', 'error');
+      } else if (isBillingCancel) {
+        toast('Pago cancelado o no completado.', 'error');
         history.replaceState({}, '', '/dashboard');
+        // Limpiar suscripción en estado approval_pending que pudo quedar en la DB
+        apiFetch(`${BASE}/api/billing/subscription/cancel-pending`, { method: 'POST' })
+          .catch(() => {});
       }
     })();
 

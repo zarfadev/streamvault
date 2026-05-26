@@ -169,12 +169,20 @@ async function getPaymentStatus(workspaceId) {
     throw new Error('Workspace not found');
   }
 
+  let meta = {};
+  try { meta = workspace.payment_metadata ? JSON.parse(workspace.payment_metadata) : {}; } catch {}
+
+  // Una suscripción en estado 'approval_pending' NO cuenta como activa —
+  // el usuario inició el checkout pero no lo completó (rechazado en PayPal, etc.)
+  const isPending = meta.status === 'approval_pending';
+
   return {
     provider: workspace.payment_provider || 'stripe',
-    hasActiveSubscription: !!workspace.payment_subscription_id,
+    hasActiveSubscription: !!workspace.payment_subscription_id && !isPending,
+    isPendingApproval: isPending && !!workspace.payment_subscription_id,
     plan: workspace.plan,
     suspended: !!workspace.suspended,
-    metadata: workspace.payment_metadata ? JSON.parse(workspace.payment_metadata) : {},
+    metadata: meta,
   };
 }
 

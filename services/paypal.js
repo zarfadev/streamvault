@@ -218,24 +218,39 @@ async function createCheckoutSession(workspaceId, planKey, successUrl, cancelUrl
 
 /**
  * No hay "billing portal" nativo en PayPal como en Stripe,
- * pero podemos redirigir al usuario a su página de suscripciones de PayPal
+ * pero podemos redirigir al usuario a su página de suscripciones de PayPal.
+ * IMPORTANTE: lee el modo (live/sandbox) desde DB credentials, NO desde env vars.
  */
 async function createBillingPortalSession(workspaceId, returnUrl) {
   const workspace = await db.prepare(`
-    SELECT payment_subscription_id FROM workspaces WHERE id = ?
+    SELECT payment_subscription_id, payment_metadata FROM workspaces WHERE id = ?
   `).get(workspaceId);
 
   if (!workspace?.payment_subscription_id) {
     throw new Error('No PayPal subscription found for this workspace');
   }
 
-  // PayPal no tiene portal directo, redirigimos a la gestión de suscripciones
-  const portalUrl = process.env.PAYPAL_MODE === 'live'
+  // Si la suscripción está en estado pending, no tiene sentido abrir el portal
+  let meta = {};
+  try { meta = JSON.parse(workspace.payment_metadata || '{}'); } catch {}
+  if (meta.status === 'approval_pending') {
+    return {
+      portalUrl: null,
+      type: 'info',
+      message: 'Tu pago con PayPal está pendiente de aprobación. Si no completaste el pago, puedes intentarlo de nuevo desde "Gestionar plan".',
+    };
+  }
+
+  // Leer modo desde DB (gwCreds) en lugar de env var para evitar ir a sandbox
+  const creds = await gwCreds.getCredentials('paypal').catch(() => ({}));
+  const mode = creds.PAYPAL_MODE || process.env.PAYPAL_MODE || 'sandbox';
+
+  const portalUrl = mode === 'live'
     ? 'https://www.paypal.com/myaccount/autopay/'
     : 'https://www.sandbox.paypal.com/myaccount/autopay/';
 
   return {
-    portalUrl: portalUrl,
+    portalUrl,
     message: 'Serás redirigido a PayPal para gestionar tu suscripción',
   };
 }
@@ -244,7 +259,8 @@ async function createBillingPortalSession(workspaceId, returnUrl) {
  * Cancela una suscripción de PayPal
  */
 async function cancelSubscription(subscriptionId) {
-  const client = getPayPalClient();
+  // Usar cliente async (lee de DB) en lugar del sync (solo env vars)
+  const client = await getPayPalClientAsync();
   if (!client) {
     throw new Error('PayPal not configured');
   }
@@ -382,9 +398,9 @@ async function processWebhookEvent(event) {
         break;
       }
 
-      // Determinar el plan por el plan_id de PayPal
+      // Determinar el plan por el plan_id de PayPal (usa DB credentials, no solo env)
       const planId = resource.plan_id;
-      const planKey = getPlanKeyFromPayPalPlanId(planId);
+      const planKey = await getPlanKeyFromPayPalPlanIdAsync(planId);
 
       if (planKey) {
         // Obtener info del workspace antes de activar
@@ -481,13 +497,31 @@ async function processWebhookEvent(event) {
 // Helper Functions
 // ══════════════════════════════════════════════════════════════════════════
 
+// Cache para los plan IDs de DB (para no llamar gwCreds en cada webhook)
+let _planIdCache = null;
+let _planIdCacheAt = 0;
+const PLAN_ID_CACHE_TTL = 120_000; // 2 min
+
+async function getPlanKeyFromPayPalPlanIdAsync(paypalPlanId) {
+  if (!_planIdCache || Date.now() - _planIdCacheAt > PLAN_ID_CACHE_TTL) {
+    const creds = await gwCreds.getCredentials('paypal').catch(() => ({}));
+    _planIdCache = {
+      [creds.PAYPAL_PLAN_STARTER   || process.env.PAYPAL_PLAN_STARTER   || '']: 'starter',
+      [creds.PAYPAL_PLAN_PRO       || process.env.PAYPAL_PLAN_PRO       || '']: 'pro',
+      [creds.PAYPAL_PLAN_ENTERPRISE|| process.env.PAYPAL_PLAN_ENTERPRISE|| '']: 'enterprise',
+    };
+    _planIdCacheAt = Date.now();
+  }
+  return _planIdCache[paypalPlanId] || null;
+}
+
+// Mantener versión sync como fallback (solo env vars) para compatibilidad
 function getPlanKeyFromPayPalPlanId(paypalPlanId) {
   const planIds = {
-    [process.env.PAYPAL_PLAN_STARTER]: 'starter',
-    [process.env.PAYPAL_PLAN_PRO]: 'pro',
-    [process.env.PAYPAL_PLAN_ENTERPRISE]: 'enterprise',
+    [process.env.PAYPAL_PLAN_STARTER    || '']: 'starter',
+    [process.env.PAYPAL_PLAN_PRO        || '']: 'pro',
+    [process.env.PAYPAL_PLAN_ENTERPRISE || '']: 'enterprise',
   };
-
   return planIds[paypalPlanId] || null;
 }
 

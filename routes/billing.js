@@ -109,6 +109,42 @@ router.get('/invoices/:id/download', authenticate, resolveWorkspace, async (req,
 });
 
 // ══════════════════════════════════════════════════════════════════════════
+// POST /subscription/cancel-pending — Limpia suscripciones en approval_pending
+// Llamado desde el frontend cuando el usuario cancela o el checkout falla.
+// ══════════════════════════════════════════════════════════════════════════
+router.post('/subscription/cancel-pending', authenticate, resolveWorkspace, requireRole('owner'), async (req, res) => {
+  try {
+    const ws = req.workspace;
+    if (!ws.payment_subscription_id) {
+      return res.json({ ok: true, message: 'No había suscripción pendiente' });
+    }
+    let meta = {};
+    try { meta = ws.payment_metadata ? JSON.parse(ws.payment_metadata) : {}; } catch {}
+
+    if (meta.status !== 'approval_pending') {
+      return res.json({ ok: true, message: 'La suscripción ya está activa, no se limpiará' });
+    }
+
+    // Limpiar suscripción pendiente — volver al estado sin provider
+    await db.prepare(`
+      UPDATE workspaces
+      SET payment_provider = NULL,
+          payment_subscription_id = NULL,
+          payment_metadata = '{}',
+          updated_at = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT
+      WHERE id = ?
+    `).run(ws.id);
+    cache.invalidate(`sv:ws:${ws.id}`).catch(() => {});
+
+    logger.info({ workspaceId: ws.id, provider: ws.payment_provider }, 'Pending subscription cleared after failed/cancelled checkout');
+    res.json({ ok: true, message: 'Suscripción pendiente limpiada' });
+  } catch (err) {
+    logger.error({ err }, 'Cancel-pending error');
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════
 // POST /subscription/cancel — Cancelar suscripción activa
 // ══════════════════════════════════════════════════════════════════════════
 router.post('/subscription/cancel', rateLimit(5, 3_600_000), authenticate, resolveWorkspace, requireRole('owner'), async (req, res) => {
@@ -428,6 +464,7 @@ router.get('/status', authenticate, resolveWorkspace, async (req, res) => {
       planName: planConfig.name,
       price: planConfig.price,
       hasSubscription: paymentStatus.hasActiveSubscription,
+      isPendingApproval: paymentStatus.isPendingApproval || false,
       paymentProvider: paymentStatus.provider,
       suspended: paymentStatus.suspended,
       cancelAtPeriodEnd: metadata.cancel_at_period_end || false,
