@@ -102,7 +102,7 @@ async function api(url, opts={}) {
   }
   return r;
 }
-const SECTIONS = ['overview','workspaces','users','videos','billing','plans','gateways','referrals','ads','ad-library','queue','storage','audit','live','config'];
+const SECTIONS = ['overview','workspaces','users','videos','billing','plans','gateways','referrals','ads','ad-library','queue','storage','security','audit','live','config'];
 function go(name, el) {
   SECTIONS.forEach(s => { const e=document.getElementById('s-'+s); if(e) e.style.display=s===name?'block':'none'; });
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
@@ -113,7 +113,7 @@ function go(name, el) {
   if (window.location.hash !== '#' + name) {
     window.location.hash = name;
   }
-  ({overview:loadOverview,workspaces:loadWorkspaces,users:loadUsers,videos:loadAdminVideos,billing:loadBilling,plans:loadPlansConfig,gateways:loadGateways,referrals:loadReferrals,ads:loadAdsOverview,'ad-library':loadAdLibrary,queue:loadQueue,storage:loadStorage,audit:()=>loadAudit(1),live:loadLive,config:loadConfig})[name]?.();
+  ({overview:loadOverview,workspaces:loadWorkspaces,users:loadUsers,videos:loadAdminVideos,billing:loadBilling,plans:loadPlansConfig,gateways:loadGateways,referrals:loadReferrals,ads:loadAdsOverview,'ad-library':loadAdLibrary,queue:loadQueue,storage:loadStorage,security:loadLockouts,audit:()=>loadAudit(1),live:loadLive,config:loadConfig})[name]?.();
 }
 // Función para restaurar la sección desde el hash de la URL
 function restoreSection() {
@@ -435,7 +435,6 @@ async function loadUsers(){
   _usrCache=Array.isArray(data)?data:(data.users||[]);
   document.getElementById('usr-count').textContent=_usrCache.length;
   renderUsers();
-  loadLockouts();
 }
 async function loadLockouts() {
   const body = document.getElementById('lockouts-body');
