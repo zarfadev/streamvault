@@ -1332,24 +1332,66 @@ router.delete('/2fa-lockouts/:userId', superAdminAuth, async (req, res) => {
   try {
     const lockoutService = require('../services/twoFactorLockout');
     const wasLocked = await lockoutService.adminUnlock(req.params.userId);
-    
+
     logAudit(req, '2fa_lockout_cleared', 'user', req.params.userId, { wasLocked }).catch(() => {});
-    
+
     logger.info({
       event: 'admin_2fa_unlock',
       targetUserId: req.params.userId,
       adminId: req.user?.id,
       wasLocked,
     });
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       userId: req.params.userId,
       wasLocked,
       message: wasLocked ? 'Usuario desbloqueado correctamente' : 'El usuario no estaba bloqueado',
     });
   } catch (e) {
     logger.error({ err: e.message }, '2FA admin unlock error');
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// DELETE /api/admin/2fa-lockouts/ip/:ip — desbloquear IP específica (bloqueo 2FA)
+router.delete('/2fa-lockouts/ip/:ip', superAdminAuth, async (req, res) => {
+  try {
+    const lockoutService = require('../services/twoFactorLockout');
+    const wasLocked = await lockoutService.adminUnlockIp(req.params.ip);
+
+    logAudit(req, '2fa_ip_lockout_cleared', 'ip', req.params.ip, { wasLocked }).catch(() => {});
+    logger.info({ event: 'admin_2fa_ip_unlock', ip: req.params.ip, adminId: req.user?.id, wasLocked });
+
+    res.json({
+      success: true,
+      ip: req.params.ip,
+      wasLocked,
+      message: wasLocked ? 'IP desbloqueada correctamente' : 'La IP no estaba bloqueada',
+    });
+  } catch (e) {
+    logger.error({ err: e.message }, '2FA IP admin unlock error');
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/admin/blocked-ips — lista todas las IPs bloqueadas (2FA + rate-limit)
+router.get('/blocked-ips', superAdminAuth, async (req, res) => {
+  try {
+    const lockoutService = require('../services/twoFactorLockout');
+    const advancedRL    = require('../middleware/advancedRateLimit');
+
+    const [lockoutStats, rlStats] = await Promise.all([
+      lockoutService.getStats(),
+      advancedRL.getStats(),
+    ]);
+
+    res.json({
+      twofa: lockoutStats.lockedIps || [],        // IPs bloqueadas por intentos 2FA
+      rateLimit: rlStats.blacklist || [],          // IPs en blacklist por actividad sospechosa
+    });
+  } catch (e) {
+    logger.error({ err: e.message }, 'blocked-ips fetch error');
     res.status(500).json({ error: e.message });
   }
 });

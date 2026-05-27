@@ -441,31 +441,86 @@ async function loadLockouts() {
   const body = document.getElementById('lockouts-body');
   if (!body) return;
   try {
-    const r = await api('/api/admin/2fa-lockouts');
-    const d = await r.json();
-    const locked = d.lockedUsers || [];
-    if (!locked.length) {
-      body.innerHTML = '<span style="color:var(--green);">Sin bloqueos 2FA activos.</span>';
+    const [r2fa, rIp] = await Promise.all([
+      api('/api/admin/2fa-lockouts'),
+      api('/api/admin/blocked-ips'),
+    ]);
+    const d2fa = await r2fa.json().catch(() => ({}));
+    const dIp  = await rIp.json().catch(() => ({}));
+
+    const lockedUsers = d2fa.lockedUsers  || [];
+    const lockedIps2fa = d2fa.lockedIps   || [];
+    const lockedIpsRL  = dIp.rateLimit    || [];
+    // merge IP lists — rate-limit might overlap with 2FA, deduplicate by IP
+    const allIpBlocks = [...lockedIpsRL];
+    for (const l of lockedIps2fa) {
+      if (!allIpBlocks.find(x => x.ip === l.ip)) allIpBlocks.push({ ...l, source: '2fa' });
+    }
+    lockedIpsRL.forEach(x => { x.source = 'ratelimit'; });
+
+    const hasAny = lockedUsers.length || allIpBlocks.length;
+    if (!hasAny) {
+      body.innerHTML = '<span style="color:var(--green);">&#10003; Sin bloqueos activos.</span>';
       return;
     }
-    body.innerHTML = `<table class="data-table" style="margin-top:0;"><thead><tr><th>Usuario</th><th>Intentos</th><th>Restante</th><th></th></tr></thead><tbody>${
-      locked.map(l => {
-        const usr = _usrCache.find(u => u.id === l.userId);
-        const displayName = usr
-          ? `<span style="font-size:13px;">${esc(usr.email)}</span>${usr.name ? `<br><span style="color:var(--muted);font-size:11px;">${esc(usr.name)}</span>` : ''}`
-          : `<span class="td-mono" style="font-size:11px;">${l.userId}</span>`;
-        const emailForBtn = usr ? escAttr(usr.email) : l.userId;
-        return `<tr>
-          <td>${displayName}</td>
-          <td style="color:var(--red);font-weight:600;">${l.attempts}</td>
-          <td style="font-size:12px;">${l.remainingMin != null ? l.remainingMin + ' min' : '—'}</td>
-          <td><button class="btn btn-ghost btn-sm" onclick="unlockUser2FA('${l.userId}','${emailForBtn}')">Quitar bloqueo</button></td>
-        </tr>`;
-      }).join('')
-    }</tbody></table>`;
+
+    let html = '';
+
+    // ── Usuarios bloqueados ──────────────────────────────────────
+    if (lockedUsers.length) {
+      html += `<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Usuarios bloqueados (2FA)</div>
+      <table class="data-table" style="margin:0 0 16px;"><thead><tr><th>Usuario</th><th>Intentos</th><th>Restante</th><th></th></tr></thead><tbody>${
+        lockedUsers.map(l => {
+          const usr = _usrCache.find(u => u.id === l.userId);
+          const displayName = usr
+            ? `<span style="font-size:13px;">${esc(usr.email)}</span>${usr.name ? `<br><span style="color:var(--muted);font-size:11px;">${esc(usr.name)}</span>` : ''}`
+            : `<span class="td-mono" style="font-size:11px;">${l.userId}</span>`;
+          const emailForBtn = usr ? escAttr(usr.email) : l.userId;
+          return `<tr>
+            <td>${displayName}</td>
+            <td style="color:var(--red);font-weight:600;">${l.attempts}</td>
+            <td style="font-size:12px;">${l.remainingMin != null ? l.remainingMin + ' min' : '—'}</td>
+            <td><button class="btn btn-ghost btn-sm" onclick="unlockUser2FA('${l.userId}','${emailForBtn}')">Quitar bloqueo</button></td>
+          </tr>`;
+        }).join('')
+      }</tbody></table>`;
+    }
+
+    // ── IPs bloqueadas ───────────────────────────────────────────
+    if (allIpBlocks.length) {
+      html += `<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">IPs bloqueadas</div>
+      <table class="data-table" style="margin:0;"><thead><tr><th>IP</th><th>Motivo</th><th>Restante</th><th></th></tr></thead><tbody>${
+        allIpBlocks.map(l => {
+          const source = l.source === '2fa'
+            ? `<span style="color:var(--amber);font-size:11px;">2FA fallos</span>`
+            : `<span style="color:var(--red);font-size:11px;">Actividad sospechosa</span>`;
+          const remaining = l.remainingMin != null ? l.remainingMin + ' min'
+            : (l.expiresIn || '—');
+          return `<tr>
+            <td class="td-mono" style="font-size:12px;">${esc(l.ip)}</td>
+            <td>${source}</td>
+            <td style="font-size:12px;">${remaining}</td>
+            <td><button class="btn btn-ghost btn-sm" onclick="unlockIpBlock('${escAttr(l.ip)}','${l.source||'ratelimit'}')">Quitar bloqueo</button></td>
+          </tr>`;
+        }).join('')
+      }</tbody></table>`;
+    }
+
+    body.innerHTML = html;
   } catch {
-    body.innerHTML = '<span style="color:var(--muted);">Error al cargar lockouts.</span>';
+    body.innerHTML = '<span style="color:var(--muted);">Error al cargar bloqueos.</span>';
   }
+}
+
+async function unlockIpBlock(ip, source) {
+  let r;
+  if (source === '2fa') {
+    r = await api(`/api/admin/2fa-lockouts/ip/${encodeURIComponent(ip)}`, { method: 'DELETE' });
+  } else {
+    r = await api(`/api/security/rate-limit/unblock/${encodeURIComponent(ip)}`, { method: 'POST' });
+  }
+  if (r.ok) { toast(`IP ${ip} desbloqueada`); loadLockouts(); }
+  else toast('Error al desbloquear IP', 'error');
 }
 function renderUsers(){
   const q=(document.getElementById('usr-q')?.value||'').toLowerCase();

@@ -240,6 +240,16 @@ async function adminUnlock(userId) {
 }
 
 /**
+ * Force-unlock an IP (admin use).
+ */
+async function adminUnlockIp(ip) {
+  const { data } = await _getData(ipLockouts, `ip:${ip}`);
+  await _delData(ipLockouts, `ip:${ip}`);
+  logger.info({ event: '2fa_admin_ip_unlock', ip, wasLocked: !!data });
+  return !!data;
+}
+
+/**
  * Global stats (admin dashboard).
  */
 async function getStats() {
@@ -276,5 +286,6 @@ module.exports = {
   clearLockout,
   getLockoutStatus,
   adminUnlock,
+  adminUnlockIp,
   getStats,
 };
