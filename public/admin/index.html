@@ -1986,9 +1986,32 @@
       <div id="cfg-transcoding">
         <div class="grid2">
           <div class="card">
-            <div class="card-title">Calidades disponibles</div>
-            <p style="font-size:13px;color:var(--muted);margin-bottom:14px;">Selecciona qué resoluciones se generan.
-              Cada calidad adicional aumenta el tiempo de procesamiento.</p>
+            <div class="card-title">Calidades globales de la plataforma</div>
+            <p style="font-size:13px;color:var(--muted);margin-bottom:10px;line-height:1.6;">
+              Define qué resoluciones se generan <strong style="color:var(--text);">por defecto</strong> en la plataforma.
+              Cada calidad adicional aumenta tiempo de procesamiento y almacenamiento.
+            </p>
+            <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:12px;line-height:1.7;color:var(--muted);">
+              <strong style="color:var(--text);display:block;margin-bottom:6px;">¿A quién afecta esta configuración?</strong>
+              <div style="display:flex;flex-direction:column;gap:4px;">
+                <span>
+                  <span class="badge badge-starter" style="font-size:10px;padding:1px 6px;margin-right:4px;">Starter</span>
+                  Siempre 360p/480p/720p — cap a 720p, esta config no lo cambia.
+                </span>
+                <span>
+                  <span class="badge badge-pro" style="font-size:10px;padding:1px 6px;margin-right:4px;">Pro</span>
+                  Usa esta lista + mínimos del plan. Habilitar 1440p aquí se la da a Pro.
+                </span>
+                <span>
+                  <span class="badge badge-enterprise" style="font-size:10px;padding:1px 6px;margin-right:4px;">Enterprise</span>
+                  <strong style="color:var(--amber);">Ignorada.</strong> Enterprise siempre tiene 360p→4K. Puede configurar calidades en su dashboard.
+                </span>
+                <span>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:3px;opacity:.7;"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                  <strong style="color:var(--text);">Invitados (sin cuenta)</strong> — usan exactamente esta lista. Principal caso de uso.
+                </span>
+              </div>
+            </div>
             <div id="quality-checkboxes" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;"></div>
             <button class="btn btn-primary btn-sm" onclick="saveTranscoding()">Guardar calidades</button>
           </div>
