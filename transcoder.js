@@ -336,7 +336,8 @@ function generateSpriteSheet(inputPath, outputDir, duration) {
 const PLAN_MIN_QUALITIES = {
   starter:    new Set(['360p', '480p', '720p']),
   pro:        new Set(['360p', '480p', '720p', '1080p']),
-  enterprise: new Set(['360p', '480p', '720p', '1080p']),
+  // Enterprise always gets all presets — 4K and 1440p included regardless of global config.
+  enterprise: new Set(['360p', '480p', '720p', '1080p', '1440p', '4k']),
 };
 
 async function resolvePresetsForSource(videoInfo, workspaceId) {

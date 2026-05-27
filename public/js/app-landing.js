@@ -117,11 +117,45 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // ── Validar y subir archivo ───────────────────────────────────────────────
+  function isLoggedIn() {
+    return !!(
+      localStorage.getItem('sv_access_token')  ||
+      sessionStorage.getItem('sv_access_token') ||
+      localStorage.getItem('sv_token')          ||
+      localStorage.getItem('sv_refresh_token')  ||
+      sessionStorage.getItem('sv_refresh_token')
+    );
+  }
+
   function handleFile(file) {
     if (!file.type.startsWith('video/')) {
       showFileError('Por favor selecciona un archivo de video (MP4, MOV, AVI, MKV, WebM).');
       return;
     }
+
+    // ── Bloquear upload guest si hay sesión activa ────────────────────────
+    // Los usuarios logueados deben subir desde el dashboard para que el video
+    // quede en su workspace, use las calidades de su plan y no expire.
+    if (isLoggedIn() && !window._svForceGuestUpload) {
+      const modal = document.getElementById('sv-auth-upload-modal');
+      const fnEl  = document.getElementById('sv-auth-modal-filename');
+      if (fnEl) fnEl.textContent = `Archivo seleccionado: ${file.name}`;
+      // Determinar destino (admin vs dashboard)
+      let dest = '/dashboard/upload';
+      try {
+        const u = localStorage.getItem('sv_user') || sessionStorage.getItem('sv_user');
+        if (u && JSON.parse(u)?.platform_role === 'super_admin') dest = '/admin';
+      } catch {}
+      const goBtn = document.getElementById('sv-auth-modal-go-btn');
+      if (goBtn) goBtn.href = dest;
+      if (modal) modal.style.display = 'flex';
+      // Reset file input para que no quede el archivo seleccionado
+      if (fileInput) fileInput.value = '';
+      return;
+    }
+    // Si llegó aquí con _svForceGuestUpload, reset flag para próxima vez
+    window._svForceGuestUpload = false;
+
     const maxBytes = guestConfig.maxFileSizeMB * 1024 * 1024;
     if (file.size > maxBytes) {
       const maxLabel = guestConfig.maxFileSizeMB >= 1024
