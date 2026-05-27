@@ -1110,7 +1110,7 @@
               <rect x="1" y="4" width="22" height="16" rx="2" />
               <line x1="1" y1="10" x2="23" y2="10" />
             </svg></div>
-          <div class="stat-label">Workspaces Starter</div>
+          <div class="stat-label" id="bil-starter-label">Workspaces Starter</div>
           <div class="stat-value" id="bil-starter">—</div>
           <div class="stat-sub" id="bil-starter-pct">—</div>
         </div>
@@ -1120,7 +1120,7 @@
               <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
               <polyline points="17 6 23 6 23 12" />
             </svg></div>
-          <div class="stat-label">Workspaces Pro</div>
+          <div class="stat-label" id="bil-pro-label">Workspaces Pro</div>
           <div class="stat-value" id="bil-pro">—</div>
           <div class="stat-sub" id="bil-pro-pct">—</div>
         </div>
@@ -1129,26 +1129,26 @@
               height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
             </svg></div>
-          <div class="stat-label">Enterprise</div>
+          <div class="stat-label" id="bil-enterprise-label">Enterprise</div>
           <div class="stat-value" id="bil-enterprise">—</div>
           <div class="stat-sub" id="bil-enterprise-pct">—</div>
         </div>
       </div>
       <div class="grid2">
         <div class="card">
-          <div class="card-title">Configuración de Precios</div>
-          <div class="info-box">Los precios son referenciales. La facturación real se gestiona en Stripe.</div>
+          <div class="card-title">Precios configurados <span style="font-size:11px;font-weight:400;color:var(--muted);">(desde Planes)</span></div>
+          <div class="info-box">Los precios se leen desde <a href="#plans" onclick="go('plans',null)" style="color:var(--accent);">Planes &amp; Límites</a>. Edítalos allí para que el MRR sea exacto.</div>
           <div class="form-row" style="margin-bottom:12px;">
-            <div class="form-group" style="margin-bottom:0;"><label>Starter (USD/mes)</label><input type="number"
-                id="price-starter" value="19" min="0"></div>
-            <div class="form-group" style="margin-bottom:0;"><label>Pro (USD/mes)</label><input type="number"
-                id="price-pro" value="59" min="0"></div>
+            <div class="form-group" style="margin-bottom:0;"><label id="lbl-price-starter">Starter (USD/mes)</label><input type="number"
+                id="price-starter" value="0" min="0" oninput="recalcMrr()"></div>
+            <div class="form-group" style="margin-bottom:0;"><label id="lbl-price-pro">Pro (USD/mes)</label><input type="number"
+                id="price-pro" value="0" min="0" oninput="recalcMrr()"></div>
           </div>
           <div class="form-row" style="margin-bottom:14px;">
-            <div class="form-group" style="margin-bottom:0;"><label>Enterprise (USD/mes)</label><input type="number"
-                id="price-enterprise" value="99" min="0"></div>
+            <div class="form-group" style="margin-bottom:0;"><label id="lbl-price-enterprise">Enterprise (USD/mes)</label><input type="number"
+                id="price-enterprise" value="0" min="0" oninput="recalcMrr()"></div>
             <div style="display:flex;align-items:flex-end;"><button class="btn btn-primary btn-sm"
-                onclick="recalcMrr()">Calcular MRR</button></div>
+                onclick="recalcMrr()">Recalcular</button></div>
           </div>
         </div>
         <div class="card">
@@ -1157,7 +1157,7 @@
         </div>
       </div>
       <div class="card" style="margin-bottom:16px;">
-        <div class="card-title">Workspaces Pro & Enterprise</div>
+        <div class="card-title">Workspaces de pago</div>
         <div class="table-wrap" style="border:none;">
           <table class="data-table">
             <thead>

@@ -1008,40 +1008,112 @@ async function deleteVideo(id,title){
   else toast('Error','error');
 }
 /* ─── BILLING ────────────────────────────────────────────────── */
+// Cache de planes para billing
+let _bilPlans = null;
+
 async function loadBilling(){
+  // ── 1. Workspaces ──────────────────────────────────────────────
   if(!_wsCache.length) {
     const r = await api('/api/admin/workspaces');
     if (!r.ok) { toast('Error al cargar datos de billing', 'error'); return; }
     const d = await r.json();
-    // API returns { workspaces, total, ... } or plain array — handle both
     _wsCache = Array.isArray(d) ? d : (d.workspaces || []);
   }
-  const counts={starter:0,pro:0,enterprise:0};
-  _wsCache.forEach(w=>{if(counts[w.plan]!==undefined) counts[w.plan]++;});
-  const total=_wsCache.length||1;
-  document.getElementById('bil-starter').textContent=counts.starter;
-  document.getElementById('bil-starter-pct').textContent=`${Math.round(counts.starter/total*100)}% del total`;
-  document.getElementById('bil-pro').textContent=counts.pro;
-  document.getElementById('bil-pro-pct').textContent=`${Math.round(counts.pro/total*100)}% del total`;
-  document.getElementById('bil-enterprise').textContent=counts.enterprise;
-  document.getElementById('bil-enterprise-pct').textContent=`${Math.round(counts.enterprise/total*100)}% del total`;
+
+  // ── 2. Planes reales desde config ──────────────────────────────
+  try {
+    const pr = await fetch('/api/plans');
+    if (pr.ok) _bilPlans = await pr.json();
+  } catch {}
+  const plans = _bilPlans || {};
+  const ps = plans.starter    || {};
+  const pp = plans.pro        || {};
+  const pe = plans.enterprise || {};
+
+  // ── 3. Rellenar precios en los inputs (desde config) ───────────
+  const setPriceInput = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.value = val ?? 0;
+  };
+  setPriceInput('price-starter',    ps.price ?? 0);
+  setPriceInput('price-pro',        pp.price ?? 0);
+  setPriceInput('price-enterprise', pe.price ?? 0);
+
+  // Actualizar etiquetas con nombres reales
+  const starterLabel   = document.getElementById('bil-starter-label');
+  const proLabel       = document.getElementById('bil-pro-label');
+  const entLabel       = document.getElementById('bil-enterprise-label');
+  const lblPs          = document.getElementById('lbl-price-starter');
+  const lblPp          = document.getElementById('lbl-price-pro');
+  const lblPe          = document.getElementById('lbl-price-enterprise');
+  if (starterLabel) starterLabel.textContent = `Workspaces ${ps.name || 'Starter'}`;
+  if (proLabel)     proLabel.textContent     = `Workspaces ${pp.name || 'Pro'}`;
+  if (entLabel)     entLabel.textContent     = pe.name || 'Enterprise';
+  if (lblPs)  lblPs.textContent = `${ps.name || 'Starter'} (USD/mes)`;
+  if (lblPp)  lblPp.textContent = `${pp.name || 'Pro'} (USD/mes)`;
+  if (lblPe)  lblPe.textContent = `${pe.name || 'Enterprise'} (USD/mes)`;
+
+  // ── 4. Conteos por plan ────────────────────────────────────────
+  const counts = { starter:0, pro:0, enterprise:0 };
+  _wsCache.forEach(w => { if (counts[w.plan] !== undefined) counts[w.plan]++; });
+  const total = _wsCache.length || 1;
+  document.getElementById('bil-starter').textContent    = counts.starter;
+  document.getElementById('bil-starter-pct').textContent= `${Math.round(counts.starter/total*100)}% del total · $${ps.price??0}/mes`;
+  document.getElementById('bil-pro').textContent        = counts.pro;
+  document.getElementById('bil-pro-pct').textContent    = `${Math.round(counts.pro/total*100)}% del total · $${pp.price??0}/mes`;
+  document.getElementById('bil-enterprise').textContent = counts.enterprise;
+  document.getElementById('bil-enterprise-pct').textContent = `${Math.round(counts.enterprise/total*100)}% del total · $${pe.price??0}/mes`;
+
   recalcMrr();
-  // Plan limits table
-  document.getElementById('plan-limits-table').innerHTML=`
+
+  // ── 5. Tabla de límites dinámica desde config ──────────────────
+  const INF_SVG = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;opacity:.7"><path d="M18.178 8c5.096 0 5.096 8 0 8-5.095 0-7.133-8-12.739-8-4.585 0-4.585 8 0 8 5.606 0 7.644-8 12.74-8z"/></svg>`;
+  const fmtLim = (v, unit='') => (v === -1 || v === null || v === undefined) ? INF_SVG : `${Number(v).toLocaleString('es')}${unit}`;
+  const fmtGB  = v => (v === -1 || v === null || v === undefined) ? INF_SVG : (v >= 1024 ? `${(v/1024).toFixed(1)} TB` : `${v} GB`);
+
+  const planRows = [
+    { key:'starter',    plan: ps, cls:'badge-starter' },
+    { key:'pro',        plan: pp, cls:'badge-pro'     },
+    { key:'enterprise', plan: pe, cls:'badge-enterprise' },
+  ];
+
+  const hdrs = ['Plan','Precio','Videos','Storage','BW/mes','Tamaño máx.','Miembros'];
+  document.getElementById('plan-limits-table').innerHTML = `
     <table style="width:100%;font-size:12px;border-collapse:collapse;">
-      <thead><tr style="border-bottom:1px solid var(--border);">${['Plan','Videos','Storage','BW/mes','Miembros'].map(h=>`<th style="padding:6px 8px;text-align:left;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.8px;font-size:10px;">${h}</th>`).join('')}</tr></thead>
+      <thead><tr style="border-bottom:1px solid var(--border);">
+        ${hdrs.map(h=>`<th style="padding:6px 8px;text-align:left;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.8px;font-size:10px;">${h}</th>`).join('')}
+      </tr></thead>
       <tbody>
-        <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;"><span class="badge badge-starter">Starter</span></td><td style="padding:8px;" class="td-mono">25</td><td style="padding:8px;" class="td-mono">50 GB</td><td style="padding:8px;" class="td-mono">100 GB</td><td style="padding:8px;" class="td-mono">—</td></tr>
-        <tr style="border-bottom:1px solid var(--border);"><td style="padding:8px;"><span class="badge badge-pro">Pro</span></td><td style="padding:8px;" class="td-mono">200</td><td style="padding:8px;" class="td-mono">500 GB</td><td style="padding:8px;" class="td-mono">1 TB</td><td style="padding:8px;" class="td-mono">—</td></tr>
-        <tr><td style="padding:8px;"><span class="badge badge-enterprise">Enterprise</span></td><td style="padding:8px;" class="td-mono"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><path d="M18.178 8c5.096 0 5.096 8 0 8-5.095 0-7.133-8-12.739-8-4.585 0-4.585 8 0 8 5.606 0 7.644-8 12.74-8z"/></svg></td><td style="padding:8px;" class="td-mono">2 TB</td><td style="padding:8px;" class="td-mono">5 TB</td><td style="padding:8px;" class="td-mono">—</td></tr>
+        ${planRows.map((row, i) => {
+          const p = row.plan;
+          const isLast = i === planRows.length - 1;
+          return `<tr style="${isLast?'':'border-bottom:1px solid var(--border);'}">
+            <td style="padding:8px;"><span class="badge ${row.cls}">${esc(p.name||row.key)}</span></td>
+            <td style="padding:8px;" class="td-mono">${p.price > 0 ? `$${p.price}/mes` : '<span style="color:var(--green)">Gratis</span>'}</td>
+            <td style="padding:8px;" class="td-mono">${fmtLim(p.maxVideos)}</td>
+            <td style="padding:8px;" class="td-mono">${fmtGB(p.maxStorageGB)}</td>
+            <td style="padding:8px;" class="td-mono">${fmtGB(p.maxBandwidthGB)}</td>
+            <td style="padding:8px;" class="td-mono">${p.maxFileSizeMB ? (p.maxFileSizeMB >= 1024 ? `${(p.maxFileSizeMB/1024).toFixed(0)} GB` : `${p.maxFileSizeMB} MB`) : INF_SVG}</td>
+            <td style="padding:8px;" class="td-mono">${fmtLim(p.maxMembers)}</td>
+          </tr>`;
+        }).join('')}
       </tbody>
     </table>`;
-  // Paid workspaces
-  const paid=_wsCache.filter(w=>w.plan==='pro'||w.plan==='enterprise').sort((a,b)=>a.plan==='enterprise'?-1:1);
-  document.getElementById('paid-ws-tbody').innerHTML=paid.map(w=>`
+
+  // ── 6. Tabla workspaces — todos los de pago (precio > 0) ───────
+  const paidPlans = new Set(Object.entries(plans)
+    .filter(([k,v]) => k !== 'guest' && (v.price??0) > 0)
+    .map(([k]) => k));
+  // Si ningún plan tiene precio, mostrar todos excepto starter
+  const showAll = paidPlans.size === 0;
+  const paid = [..._wsCache]
+    .filter(w => showAll ? w.plan !== 'starter' : paidPlans.has(w.plan))
+    .sort((a,b) => (b.plan==='enterprise'?1:0)-(a.plan==='enterprise'?1:0));
+
+  document.getElementById('paid-ws-tbody').innerHTML = paid.map(w=>`
     <tr>
       <td><div style="font-weight:600;">${esc(w.name)}</div><div class="td-mono">${esc(w.slug)}</div></td>
-      <td><span class="badge badge-${w.plan}">${w.plan}</span></td>
+      <td><span class="badge badge-${w.plan}">${esc((plans[w.plan]?.name)||w.plan)}</span></td>
       <td><div style="font-size:13px;">${esc(w.owner_name||'—')}</div><div class="td-mono">${esc(w.owner_email||'—')}</div></td>
       <td class="td-mono">${w.video_count||0}</td>
       <td class="td-mono">${fmtBytes(w.storage_used_bytes||0)}</td>
@@ -1049,15 +1121,16 @@ async function loadBilling(){
       <td><button class="btn btn-ghost btn-sm" onclick="openPlanModal('${w.id}')">Plan</button></td>
     </tr>`).join('')||'<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:16px;">Sin workspaces de pago</td></tr>';
 }
+
 function recalcMrr(){
-  const ps=parseInt(document.getElementById('price-starter')?.value||'19');
-  const pp=parseInt(document.getElementById('price-pro')?.value||'59');
-  const pe=parseInt(document.getElementById('price-enterprise')?.value||'99');
-  const ss=parseInt(document.getElementById('bil-starter')?.textContent||'0');
-  const sp=parseInt(document.getElementById('bil-pro')?.textContent||'0');
-  const se=parseInt(document.getElementById('bil-enterprise')?.textContent||'0');
-  const mrr=ss*ps+sp*pp+se*pe;
-  document.getElementById('bil-mrr').textContent='$'+mrr.toLocaleString('en-US');
+  const ps = parseFloat(document.getElementById('price-starter')?.value  || '0');
+  const pp = parseFloat(document.getElementById('price-pro')?.value      || '0');
+  const pe = parseFloat(document.getElementById('price-enterprise')?.value|| '0');
+  const ss = parseInt(document.getElementById('bil-starter')?.textContent  || '0');
+  const sp = parseInt(document.getElementById('bil-pro')?.textContent      || '0');
+  const se = parseInt(document.getElementById('bil-enterprise')?.textContent|| '0');
+  const mrr = ss*ps + sp*pp + se*pe;
+  document.getElementById('bil-mrr').textContent = '$' + mrr.toLocaleString('en-US');
 }
 /* ─── QUEUE ──────────────────────────────────────────────────── */
 async function loadQueue(){
