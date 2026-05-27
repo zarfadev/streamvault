@@ -448,13 +448,20 @@ async function loadLockouts() {
       body.innerHTML = '<span style="color:var(--green);">Sin bloqueos 2FA activos.</span>';
       return;
     }
-    body.innerHTML = `<table class="data-table" style="margin-top:0;"><thead><tr><th>Usuario ID</th><th>Intentos fallidos</th><th>Bloqueo restante</th><th></th></tr></thead><tbody>${
-      locked.map(l => `<tr>
-        <td class="td-mono" style="font-size:12px;">${l.userId}</td>
-        <td style="color:var(--red);">${l.attempts}</td>
-        <td style="font-size:12px;">${l.remainingMin != null ? l.remainingMin + ' min' : '—'}</td>
-        <td><button class="btn btn-ghost btn-sm" onclick="unlockUser2FA('${l.userId}','${l.userId}')">Desbloquear</button></td>
-      </tr>`).join('')
+    body.innerHTML = `<table class="data-table" style="margin-top:0;"><thead><tr><th>Usuario</th><th>Intentos</th><th>Restante</th><th></th></tr></thead><tbody>${
+      locked.map(l => {
+        const usr = _usrCache.find(u => u.id === l.userId);
+        const displayName = usr
+          ? `<span style="font-size:13px;">${esc(usr.email)}</span>${usr.name ? `<br><span style="color:var(--muted);font-size:11px;">${esc(usr.name)}</span>` : ''}`
+          : `<span class="td-mono" style="font-size:11px;">${l.userId}</span>`;
+        const emailForBtn = usr ? escAttr(usr.email) : l.userId;
+        return `<tr>
+          <td>${displayName}</td>
+          <td style="color:var(--red);font-weight:600;">${l.attempts}</td>
+          <td style="font-size:12px;">${l.remainingMin != null ? l.remainingMin + ' min' : '—'}</td>
+          <td><button class="btn btn-ghost btn-sm" onclick="unlockUser2FA('${l.userId}','${emailForBtn}')">Quitar bloqueo</button></td>
+        </tr>`;
+      }).join('')
     }</tbody></table>`;
   } catch {
     body.innerHTML = '<span style="color:var(--muted);">Error al cargar lockouts.</span>';
@@ -519,13 +526,43 @@ function openUsrDetail(id){
         <div class="form-group"><label>Registrado</label><span style="font-size:13px;">${new Date((u.created_at||0)*1000).toLocaleString('es')}</span></div>
       </div>
     </div>
-    <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
+    <!-- Estado de bloqueo por actividad sospechosa — carga async -->
+    <div id="usr-lockout-status" style="margin:12px 0 2px;min-height:22px;">
+      <span style="color:var(--muted);font-size:12px;">Verificando bloqueos…</span>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;">
       <button class="btn btn-ghost btn-sm" onclick="closeModal('usr-detail-modal');openImpModal('${u.id}','${escAttr(u.name||u.email)}','${escAttr(u.email)}')" title="Impersonar usuario">Impersonar</button>
       <button class="btn btn-ghost btn-sm" onclick="closeModal('usr-detail-modal');openEmailModal('${u.id}','${escAttr(u.name||u.email)}','${escAttr(u.email)}')" title="Enviar email">Enviar email</button>
       ${u.two_factor_enabled ? `<button class="btn btn-ghost btn-sm" onclick="closeModal('usr-detail-modal');reset2FA('${u.id}','${escAttr(u.email)}')" title="Desactivar 2FA">Resetear 2FA</button>` : ''}
       <button class="btn btn-danger btn-sm" onclick="closeModal('usr-detail-modal');deleteUser('${u.id}','${escAttr(u.email)}')" title="Eliminar usuario">Eliminar usuario</button>
     </div>`;
   openModal('usr-detail-modal');
+  _loadUserLockoutStatus(u.id, u.email);
+}
+
+async function _loadUserLockoutStatus(userId, email) {
+  const el = document.getElementById('usr-lockout-status');
+  if (!el) return;
+  try {
+    const r = await api(`/api/admin/2fa-lockouts/${userId}`);
+    const d = await r.json().catch(() => ({}));
+    if (d.locked) {
+      el.innerHTML = `
+        <div style="background:rgba(251,191,36,0.10);border:1px solid rgba(251,191,36,0.3);border-radius:8px;padding:9px 13px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--amber,#fbbf24)" stroke-width="2.5" style="flex-shrink:0;"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <span style="color:var(--amber,#fbbf24);font-size:13px;font-weight:600;">Bloqueado por actividad sospechosa</span>
+          <span style="color:var(--muted);font-size:12px;">${d.attempts || 0} intentos · ${d.remainingMin != null ? d.remainingMin + ' min restantes' : ''}</span>
+          <button class="btn btn-sm" style="background:rgba(251,191,36,0.15);color:var(--amber,#fbbf24);border:1px solid rgba(251,191,36,0.35);margin-left:auto;white-space:nowrap;"
+            onclick="unlockUser2FA('${userId}','${email}',true)">
+            Quitar bloqueo
+          </button>
+        </div>`;
+    } else {
+      el.innerHTML = `<span style="color:var(--green,#22d3a5);font-size:12px;">&#10003; Sin bloqueo activo</span>`;
+    }
+  } catch {
+    el.innerHTML = '';
+  }
 }
 function openImpModal(id,name,email){ _impTarget={id,name,email}; document.getElementById('imp-name').textContent=name; document.getElementById('imp-email').textContent=email; openModal('imp-modal'); }
 async function doImpersonate() {
@@ -600,10 +637,21 @@ async function reset2FA(id, email) {
   if (r.ok) { toast('2FA desactivado correctamente'); loadUsers(); }
   else { const d = await r.json().catch(()=>({})); toast(d.error || 'Error al resetear 2FA', 'error'); }
 }
-async function unlockUser2FA(userId, email) {
+async function unlockUser2FA(userId, email, stayInModal = false) {
   const r = await api(`/api/admin/2fa-lockouts/${userId}`, { method: 'DELETE' });
-  if (r.ok) { toast(`Bloqueo 2FA eliminado para ${email}`); loadUsers(); }
-  else toast('Error al desbloquear', 'error');
+  if (r.ok) {
+    toast(`Bloqueo eliminado para ${email}`);
+    loadLockouts(); // refresca tabla global de lockouts
+    if (stayInModal) {
+      // Actualizar el badge dentro del modal sin cerrarlo
+      const el = document.getElementById('usr-lockout-status');
+      if (el) el.innerHTML = `<span style="color:var(--green,#22d3a5);font-size:12px;">&#10003; Bloqueo eliminado correctamente</span>`;
+    } else {
+      loadUsers();
+    }
+  } else {
+    toast('Error al desbloquear', 'error');
+  }
 }
 /* ─── VIDEOS ─────────────────────────────────────────────────── */
 let _selectedVideos = new Set();
