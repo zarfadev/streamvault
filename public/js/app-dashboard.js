@@ -6613,9 +6613,12 @@ function copyLink(id, type) {
           const isEnterprise = (ws.plan || '').toLowerCase() === 'enterprise';
           etCard.style.display = isEnterprise ? 'block' : 'none';
           if (isEnterprise) {
+            // Default for Enterprise with no saved config = ALL qualities enabled.
+            // This matches PLAN_MIN_QUALITIES.enterprise so "Save without changing"
+            // doesn't accidentally lock the workspace out of 4K/1440p.
             const tqs = Array.isArray(s.transcodingQualities) && s.transcodingQualities.length
               ? new Set(s.transcodingQualities)
-              : new Set(['360p', '480p', '720p', '1080p']);
+              : new Set(['360p', '480p', '720p', '1080p', '1440p', '4k']);
             ['360p', '480p', '720p', '1080p', '1440p', '4k'].forEach(q => {
               const el = document.getElementById(`tq-${q}`);
               if (el) el.checked = tqs.has(q);

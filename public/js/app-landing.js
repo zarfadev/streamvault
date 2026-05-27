@@ -98,6 +98,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (!fileInput || !dropzone) return;
 
+  // Referencia al archivo pendiente (para "Continuar como invitado" después del modal)
+  let _pendingFile = null;
+
+  // Expuesto globalmente para que el botón del modal pueda llamarlo
+  window._svContinueAsGuest = () => {
+    if (_pendingFile) {
+      const f = _pendingFile;
+      _pendingFile = null;
+      window._svForceGuestUpload = true;
+      handleFile(f);
+    }
+  };
+
   // Drag & drop
   ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(evt => {
     dropzone.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); });
@@ -137,9 +150,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Los usuarios logueados deben subir desde el dashboard para que el video
     // quede en su workspace, use las calidades de su plan y no expire.
     if (isLoggedIn() && !window._svForceGuestUpload) {
+      _pendingFile = file; // guardar referencia — "Continuar como invitado" la usará
       const modal = document.getElementById('sv-auth-upload-modal');
       const fnEl  = document.getElementById('sv-auth-modal-filename');
-      if (fnEl) fnEl.textContent = `Archivo seleccionado: ${file.name}`;
+      if (fnEl) fnEl.textContent = `Archivo: ${file.name} (${file.size >= 1073741824 ? (file.size/1073741824).toFixed(1)+' GB' : (file.size/1048576).toFixed(0)+' MB'})`;
       // Determinar destino (admin vs dashboard)
       let dest = '/dashboard/upload';
       try {
@@ -149,7 +163,6 @@ document.addEventListener('DOMContentLoaded', () => {
       const goBtn = document.getElementById('sv-auth-modal-go-btn');
       if (goBtn) goBtn.href = dest;
       if (modal) modal.style.display = 'flex';
-      // Reset file input para que no quede el archivo seleccionado
       if (fileInput) fileInput.value = '';
       return;
     }
