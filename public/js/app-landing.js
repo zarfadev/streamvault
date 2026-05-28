@@ -98,8 +98,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (!fileInput || !dropzone) return;
 
-  // Referencia al archivo pendiente (para "Continuar como invitado" después del modal)
+  // Referencia al archivo pendiente (para "Continuar como invitado" después del modal de usuario logueado)
   let _pendingFile = null;
+  // Archivo soltado por drag&drop cuando el usuario no estaba logueado
+  let _svPendingGuestDrop = null;
 
   // Expuesto globalmente para que el botón del modal pueda llamarlo
   window._svContinueAsGuest = () => {
@@ -109,6 +111,36 @@ document.addEventListener('DOMContentLoaded', () => {
       window._svForceGuestUpload = true;
       handleFile(f);
     }
+  };
+
+  // Exponer referencia al archivo de drag&drop pendiente para el botón del modal
+  Object.defineProperty(window, '_svPendingGuestDrop', {
+    get() { return _svPendingGuestDrop; },
+    set(v) { _svPendingGuestDrop = v; },
+    configurable: true,
+  });
+  // Callback para procesar el archivo soltado después de elegir "invitado"
+  window._handleGuestDrop = (f) => { handleFile(f); };
+
+  // Interceptar click del dropzone para mostrar el modal de elección a usuarios no logueados
+  window._svHandleDropzoneClick = () => {
+    if (!isLoggedIn()) {
+      _svPendingGuestDrop = null; // este es click, no drag&drop
+      // Actualizar etiqueta de expiración con la config actual
+      const expEl = document.getElementById('sv-choice-expiry');
+      if (expEl) expEl.textContent = guestConfig.expiryHours === 1 ? '1h' : `${guestConfig.expiryHours}h`;
+      const guestBtn = document.getElementById('sv-choice-guest-btn');
+      if (guestBtn) guestBtn.textContent = `Subir como invitado (expira en ${guestConfig.expiryHours}h)`;
+      // Actualizar links de login/registro con guest_id para recuperar sesión
+      const loginBtn = document.getElementById('sv-choice-login-btn');
+      const regBtn   = document.getElementById('sv-choice-register-btn');
+      if (loginBtn) { const u = new URL('/login', location.origin); u.searchParams.set('guest_id', guestSessionId); loginBtn.href = u.toString(); }
+      if (regBtn)   { const u = new URL('/login', location.origin); u.searchParams.set('tab','register'); u.searchParams.set('guest_id', guestSessionId); regBtn.href = u.toString(); }
+      const modal = document.getElementById('sv-guest-choice-modal');
+      if (modal) modal.style.display = 'flex';
+      return true; // devuelve true para que el onclick del dropzone no llame al file picker
+    }
+    return false; // logueado — el onclick original abre el file picker
   };
 
   // Drag & drop
@@ -132,7 +164,20 @@ document.addEventListener('DOMContentLoaded', () => {
     dropzone.addEventListener(evt, () => dropzone.classList.remove('dragover'));
   });
   dropzone.addEventListener('drop', e => {
-    if (e.dataTransfer?.files?.length) handleFile(e.dataTransfer.files[0]);
+    if (!e.dataTransfer?.files?.length) return;
+    const f = e.dataTransfer.files[0];
+    if (!isLoggedIn()) {
+      // Show choice modal with file already selected
+      _svPendingGuestDrop = f;
+      const expEl = document.getElementById('sv-choice-expiry');
+      if (expEl) expEl.textContent = guestConfig.expiryHours === 1 ? '1h' : `${guestConfig.expiryHours}h`;
+      const guestBtn = document.getElementById('sv-choice-guest-btn');
+      if (guestBtn) guestBtn.textContent = `Subir como invitado: ${f.name} (expira en ${guestConfig.expiryHours}h)`;
+      const modal = document.getElementById('sv-guest-choice-modal');
+      if (modal) modal.style.display = 'flex';
+    } else {
+      handleFile(f);
+    }
   });
   fileInput.addEventListener('change', e => {
     if (e.target.files?.length) handleFile(e.target.files[0]);

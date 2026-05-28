@@ -1106,7 +1106,7 @@ nav {
 
     <!-- DROPZONE -->
     <div id="sv-state-dropzone">
-      <div class="sv-dropzone" id="sv-dropzone" onclick="document.getElementById('sv-file-input').click()">
+      <div class="sv-dropzone" id="sv-dropzone" onclick="window._svHandleDropzoneClick&&window._svHandleDropzoneClick()||document.getElementById('sv-file-input').click()">
         <div class="sv-dz-ring">
           <div class="sv-dz-ring-inner">
             <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
@@ -1200,6 +1200,38 @@ nav {
         </a>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: usuario NO logueado — elige cuenta o invitado ═══ -->
+<div id="sv-guest-choice-modal" onclick="if(event.target===this)this.style.display='none'" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.72);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);align-items:center;justify-content:center;padding:20px;">
+  <div style="background:#111118;border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:32px 28px;max-width:420px;width:100%;box-shadow:0 24px 80px rgba(0,0,0,.7);position:relative;">
+    <button onclick="document.getElementById('sv-guest-choice-modal').style.display='none'" style="position:absolute;top:14px;right:14px;background:none;border:none;cursor:pointer;color:rgba(255,255,255,.5);line-height:1;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <div style="width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,rgba(124,108,250,.3),rgba(167,139,250,.15));display:flex;align-items:center;justify-content:center;margin-bottom:18px;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    </div>
+    <div style="font-size:17px;font-weight:700;color:#fff;margin-bottom:6px;">Sube tu video</div>
+    <div style="font-size:14px;color:rgba(255,255,255,.55);line-height:1.6;margin-bottom:22px;">
+      Con una cuenta tus videos son permanentes, privados y tienen calidades hasta 4K. O sube ahora mismo como invitado.
+    </div>
+    <a id="sv-choice-login-btn" href="/login" style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:13px;background:linear-gradient(135deg,#7c6cfa,#a78bfa);border-radius:11px;color:#fff;font-weight:700;font-size:15px;text-decoration:none;margin-bottom:8px;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+      Iniciar sesión
+    </a>
+    <a id="sv-choice-register-btn" href="/login?tab=register" style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:12px;background:rgba(124,108,250,.12);border:1px solid rgba(124,108,250,.3);border-radius:11px;color:#a78bfa;font-weight:600;font-size:14px;text-decoration:none;margin-bottom:14px;">
+      Crear cuenta gratis →
+    </a>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+      <div style="flex:1;height:1px;background:rgba(255,255,255,.08);"></div>
+      <span style="font-size:12px;color:rgba(255,255,255,.3);">o continúa sin cuenta</span>
+      <div style="flex:1;height:1px;background:rgba(255,255,255,.08);"></div>
+    </div>
+    <button id="sv-choice-guest-btn" onclick="document.getElementById('sv-guest-choice-modal').style.display='none';if(window._svPendingGuestDrop){var f=window._svPendingGuestDrop;window._svPendingGuestDrop=null;window._handleGuestDrop&&window._handleGuestDrop(f);}else{document.getElementById('sv-file-input').click();}" style="width:100%;padding:11px;background:none;border:1px solid rgba(255,255,255,.12);border-radius:11px;color:rgba(255,255,255,.5);font-size:13px;cursor:pointer;font-family:inherit;">
+      Subir como invitado (expira en <span id="sv-choice-expiry">24h</span>)
+    </button>
+    <div style="margin-top:10px;font-size:11px;color:rgba(255,255,255,.25);text-align:center;">Invitado: hasta 720p · video expira · sin analytics</div>
   </div>
 </div>
 

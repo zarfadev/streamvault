@@ -288,7 +288,7 @@ router.post('/', optionalAuth, async (req, res, next) => {
     // status change from 'queued' → 'transcoding' → 'ready' in real time.
 
     const localPath = req.file.path;
-    const plan = req.workspace?.plan || 'starter';
+    const plan = req.workspace?.plan || (workspaceId ? 'starter' : 'guest');
 
     if (!s3.isS3Enabled()) {
       // No S3 — queue job immediately with local path

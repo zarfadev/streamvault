@@ -334,6 +334,7 @@ function generateSpriteSheet(inputPath, outputDir, duration) {
 // Esto evita que una mala configuración en system_config.transcoding.qualities
 // deje a los workspaces sin las calidades a las que su plan les da derecho.
 const PLAN_MIN_QUALITIES = {
+  guest:      new Set(['360p', '480p', '720p']),
   starter:    new Set(['360p', '480p', '720p']),
   pro:        new Set(['360p', '480p', '720p', '1080p']),
   // Enterprise always gets all presets — 4K and 1440p included regardless of global config.
@@ -374,6 +375,10 @@ async function resolvePresetsForSource(videoInfo, workspaceId) {
     } catch (err) {
       logger.warn({ workspaceId, err: err.message }, 'resolvePresetsForSource: workspace lookup failed — using defaults');
     }
+  } else {
+    // Guest upload (no workspace) — capped at 720p, same limits as starter
+    maxHeight = 720;
+    planMin = PLAN_MIN_QUALITIES.guest;
   }
 
   // effectiveAllowed = unión de globalAllowed y los mínimos del plan.
