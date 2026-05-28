@@ -2460,14 +2460,15 @@ async function init() {
 
       if (!hls) {
         // First time — full initialization
-        if (videoData.spriteMeta) {
-          try {
-            const mr = await fetch(videoData.spriteMeta);
-            if (mr.ok) { spriteMeta = await mr.json(); spriteImg = new Image(); spriteImg.src = videoData.spriteUrl; }
-          } catch {}
-        }
         await fetchStreamSession(); // Get CF signed cookies before loading CDN content
         await fetchVideoToken();
+        // Sprite fetch AFTER stream session — CDN requires signed cookies
+        if (videoData.spriteMeta) {
+          try {
+            const mr = await fetch(videoData.spriteMeta, { credentials: _cfSessionActive ? 'include' : 'same-origin' });
+            if (mr.ok) { spriteMeta = await mr.json(); spriteImg = new Image(); spriteImg.crossOrigin = _cfSessionActive ? 'use-credentials' : 'anonymous'; spriteImg.src = videoData.spriteUrl; }
+          } catch {}
+        }
         initHls(videoData.m3u8Url);
         loadSubtitles();
         loadChapters();
