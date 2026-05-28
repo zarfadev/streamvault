@@ -265,7 +265,10 @@ html.embed-root, html.embed-root body {
 /* Pantallas pequeñas (móvil) — mínimos táctiles cómodos */
 @media (max-width: 480px) {
   .controls-center-cluster   { gap: 20px; }
-  .center-skip-btn           { width: 56px; height: 56px; background: rgba(255,255,255,0.12); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  /* Sin fondo permanente en móvil — el drop-shadow hace los botones visibles.
+     El fondo aparece solo al tocar (:active) para feedback inmediato. */
+  .center-skip-btn           { width: 56px; height: 56px; background: transparent; }
+  .center-skip-btn:active    { background: rgba(255,255,255,0.18); }
   .center-skip-btn svg       { width: 28px; height: 28px; }
   .center-main-btn           { width: 64px; height: 64px; }
   .center-main-btn svg       { width: 26px; height: 26px; }
@@ -569,10 +572,10 @@ html.embed-root, html.embed-root body {
 
 /* ─── Shared glass menu base ────────────────────────────────── */
 /* position:fixed escapa el overflow:hidden de player-inner en todas las pantallas.
-   El left se calcula por JS (_positionMenu) para anclar al botón que abre el menú. */
+   left y bottom se calculan por JS (_positionMenu) para anclar al dock real. */
 .quality-menu, .cc-menu, .speed-menu, .settings-menu {
   position: fixed;
-  bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  bottom: 88px; /* fallback; JS sobreescribe con altura real del dock */
   left: 50%; /* fallback, JS sobreescribe */
   right: auto;
   top: auto;
@@ -1796,9 +1799,8 @@ video::cue {
   /* Info debajo del player: ocultar en landscape para ganar espacio */
   .player-page .video-info { display: none !important; }
 
-  /* Dock de ajustes: subir el menú un poco menos (dock más pequeño) */
+  /* Dock de ajustes: JS calcula el bottom real; solo limitar max-height en landscape */
   .quality-menu, .cc-menu, .speed-menu, .settings-menu {
-    bottom: 72px !important;
     max-height: min(55vh, calc(100dvh - 90px)) !important;
   }
 
@@ -1818,7 +1820,7 @@ video::cue {
    ──────────────────────────────────────────────────────────────── */
 @media (orientation: landscape) and (min-height: 501px) and (max-height: 768px) {
   .quality-menu, .cc-menu, .speed-menu, .settings-menu {
-    bottom: 80px !important;
+    max-height: min(58vh, calc(100dvh - 105px)) !important; /* bottom calculado por JS */
     max-height: min(58vh, calc(100dvh - 105px)) !important;
   }
 }

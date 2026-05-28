@@ -1515,23 +1515,32 @@ router.get('/:id/download-file', optionalAuth, async (req, res) => {
   }
 
   // Strategy 2: CDN/S3 — stream-remux HLS segments fetched from CDN.
-  // FFmpeg reads segments over HTTPS and pipes MP4 to the browser in real time.
-  // When TrustedKeyGroups is active, FFmpeg can't send cookies so we use a Signed URL.
+  // FFmpeg reads the m3u8 + segments over HTTPS. When CloudFront signing is enabled,
+  // we generate signed cookies for the video prefix and pass them via FFmpeg -headers
+  // so ALL requests (m3u8 + every .ts segment) are authenticated.
   if (video.hls_cdn_url) {
     const cfSigned = require('../services/cfSigned');
     const cdnBase = video.hls_cdn_url.replace(/\/master\.m3u8$/i, '');
-    let cdnM3u8 = quality
+    const cdnM3u8 = quality
       ? `${cdnBase}/${quality.replace(/p$/i, '')}p/index.m3u8`
       : video.hls_cdn_url;
 
-    // Sign the URL for FFmpeg (it can't use cookies)
+    let extraHeaders = [];
     if (cfSigned.isSigningEnabled()) {
-      cdnM3u8 = cfSigned.generateSignedUrl(cdnM3u8, 1); // 1-hour expiry for download
+      const signed = cfSigned.generateSignedCookies(
+        video.workspace_id, video.id,
+        { expiryHours: 2, s3ObjectPrefix: video.s3_object_prefix || undefined }
+      );
+      if (signed?.cookies) {
+        const cookieStr = Object.entries(signed.cookies).map(([k, v]) => `${k}=${v}`).join('; ');
+        // FFmpeg requires \r\n to terminate each custom header
+        extraHeaders = ['-headers', `Cookie: ${cookieStr}\r\n`];
+      }
     }
 
     _streamFfmpegToResponse(
       cdnM3u8,
-      ['-protocol_whitelist', 'file,http,https,tcp,tls,crypto']
+      [...extraHeaders, '-protocol_whitelist', 'file,http,https,tcp,tls,crypto']
     );
     return;
   }

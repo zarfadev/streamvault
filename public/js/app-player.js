@@ -821,10 +821,16 @@ const _chev_r = `<svg class="settings-row-chevron" viewBox="0 0 24 24" fill="non
 const _chev_l = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0"><polyline points="15 18 9 12 15 6"/></svg>`;
 const _chk    = `<svg class="settings-opt-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>`;
 
-// Posiciona un menú horizontalmente centrado sobre el botón que lo abrió,
-// clampeado para no salirse del viewport. El bottom lo fija el CSS.
+// Posiciona un menú sobre el botón que lo abrió.
+// Ancla horizontalmente al botón y calcula bottom desde la altura real del dock.
 function _positionMenu(menu, triggerEl) {
   if (!menu || !triggerEl) return;
+  // Altura real del dock para que el menú quede justo encima
+  const dock  = document.getElementById('player-progress-dock');
+  const dockH = dock ? dock.offsetHeight : 80;
+  const safeB = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sab') || '0', 10) || 0;
+  menu.style.bottom = (dockH + 8 + safeB) + 'px';
+  // Posición horizontal: centrado sobre el botón, clampeado al viewport
   const menuW = Math.min(340, window.innerWidth * 0.92);
   const btnR  = triggerEl.getBoundingClientRect();
   const ideal = btnR.left + btnR.width / 2 - menuW / 2;
@@ -1046,26 +1052,29 @@ function renderSettingsMenu() {
 
 function setQuality(level) {
   if (!hls) return;
-  // Guardar posición actual para restaurarla después del cambio de calidad
-  const savedTime    = video.currentTime;
-  const wasPaused    = video.paused;
-  hls.currentLevel   = level;
-  currentLevel       = level;
   document.getElementById('settings-menu').classList.remove('open');
   updateSettingsBadge();
   trackEvent('quality_change', { quality: level === -1 ? 'AUTO' : (levels[level]?.height ? levels[level].height + 'p' : `L${level}`) });
   wakeChrome();
-  // HLS.js puede resetear la posición al cambiar nivel — re-seek si se desplazó >1s
-  const _onFrag = () => {
-    if (Math.abs(video.currentTime - savedTime) > 1) {
-      video.currentTime = savedTime;
-    }
-    if (!wasPaused && video.paused) video.play().catch(() => {});
-    hls.off(Hls.Events.FRAG_BUFFERED, _onFrag);
-  };
-  hls.on(Hls.Events.FRAG_BUFFERED, _onFrag);
-  // Safety: limpiar listener tras 8s si no disparó
-  setTimeout(() => hls?.off(Hls.Events.FRAG_BUFFERED, _onFrag), 8000);
+  if (level === -1) {
+    // AUTO: dejar que HLS.js elija — sin freeze, switch limpio
+    hls.currentLevel = -1;
+    currentLevel = -1;
+  } else {
+    // Calidad específica: usar nextLevel para aplicar en el próximo keyframe boundary.
+    // Evita el flush inmediato del buffer (video congelado + audio por delante).
+    hls.nextLevel = level;
+    // Actualizar currentLevel cuando el switch realmente ocurra
+    hls.once(Hls.Events.LEVEL_SWITCHED, (_, d) => { currentLevel = d.level; updateSettingsBadge(); });
+    // Fallback si nextLevel tarda más de 10s (p.ej. vídeo en pausa)
+    setTimeout(() => {
+      if (hls && hls.currentLevel !== level) {
+        hls.currentLevel = level;
+        currentLevel     = level;
+        updateSettingsBadge();
+      }
+    }, 10000);
+  }
 }
 function setAudioTrack(index) {
   currentAudioTrack = index;
