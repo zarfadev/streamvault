@@ -47,14 +47,23 @@ const thumbUpload = multer({
 });
 
 function playbackUrls(video) {
+  const cfSigned = require('../services/cfSigned');
   const cdn = video.hls_cdn_url;
   const base = cdn ? cdn.replace(/\/master\.m3u8$/i, '') : null;
   // Prefer the early-uploaded thumbnail_url (set right after thumb generation)
   // over the hls_cdn_url-derived URL so thumbnails appear even during transcoding.
   const thumbnailUrl = video.thumbnail_url
     || (base ? `${base}/thumb.jpg` : `/videos/${video.id}/thumb.jpg`);
+
+  // When CloudFront signing is enabled, we use Signed Cookies (not Signed URLs)
+  // so all sub-resources (.ts segments, sub-playlists) under the video prefix
+  // are automatically covered by the wildcard cookie policy.
+  // The player fetches /stream-session first, which sets the cookies,
+  // then loads HLS with withCredentials:true → browser sends cookies to CDN.
+  let m3u8Url = cdn || `/videos/${video.id}/master.m3u8`;
+
   return {
-    m3u8Url: cdn || `/videos/${video.id}/master.m3u8`,
+    m3u8Url,
     thumbnailUrl,
     spriteUrl: base ? `${base}/thumbs_sprite.jpg` : `/videos/${video.id}/thumbs_sprite.jpg`,
     spriteMeta: base ? `${base}/thumbs_meta.json` : `/videos/${video.id}/thumbs_meta.json`,
@@ -172,8 +181,12 @@ router.use(scopeToWorkspace);
 router.get('/', async (req, res) => {
   try {
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit || '20', 10)));
+    // Support both page-based and cursor-based pagination.
+    // Frontends may send ?page=N — translate to OFFSET so numeric pagination works.
+    const pageParam = parseInt(req.query.page || '1', 10);
+    const page = isNaN(pageParam) || pageParam < 1 ? 1 : pageParam;
     // Cursor-based pagination: cursor = created_at of last seen item (BIGINT unix timestamp)
-    // Much faster than OFFSET for large tables — no table scan needed.
+    // When page > 1 and no cursor, derive offset from page number.
     const cursor = req.query.cursor ? parseInt(req.query.cursor, 10) : null;
     if (cursor !== null && (isNaN(cursor) || cursor < 0)) {
       return res.status(400).json({ error: 'Invalid cursor value' });
@@ -194,6 +207,7 @@ router.get('/', async (req, res) => {
     }
 
     let videos;
+    let totalCount = null; // populated for workspace requests
     if (req.workspace) {
       const clauses = ['workspace_id = ?'];
       const baseParams = [req.workspace.id];
@@ -202,12 +216,26 @@ router.get('/', async (req, res) => {
       else if (folderFilter) { clauses.push('folder_id = ?'); baseParams.push(folderFilter); }
       // Tag filter: match JSON array containing the tag (e.g. ["news","sport"] contains "news")
       if (tagFilter) { clauses.push(`tags ILIKE ?`); baseParams.push(`%"${tagFilter}"%`); }
-      // Cursor: only return items older than the cursor
-      if (cursor !== null) { clauses.push('created_at < ?'); baseParams.push(cursor); }
+
       const where = `WHERE ${clauses.join(' AND ')}`;
-      videos = await db.prepare(
-        `SELECT * FROM videos ${where} ORDER BY created_at DESC LIMIT ?`
-      ).all(...baseParams, limit + 1); // fetch one extra to detect if there's a next page
+
+      // Run COUNT in parallel with the main query to get pagination totals
+      const countRow = await db.prepare(`SELECT COUNT(*) AS n FROM videos ${where}`).get(...baseParams);
+      totalCount = Number(countRow?.n || 0);
+
+      // Cursor takes priority; otherwise use page-based OFFSET
+      if (cursor !== null) {
+        // Cursor: only return items older than the cursor
+        const cursorParams = [...baseParams, cursor];
+        videos = await db.prepare(
+          `SELECT * FROM videos ${where} AND created_at < ? ORDER BY created_at DESC LIMIT ?`
+        ).all(...cursorParams, limit + 1);
+      } else {
+        const offset = (page - 1) * limit;
+        videos = await db.prepare(
+          `SELECT * FROM videos ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`
+        ).all(...baseParams, limit + 1, offset);
+      }
     } else {
       // No workspace context: only show public/ready non-DMCA-suspended videos.
       // ?workspace_id=<uuid> is accepted as a read-only filter so the watch page
@@ -266,6 +294,8 @@ router.get('/', async (req, res) => {
       }));
     }
 
+    const totalPages = totalCount !== null ? Math.ceil(totalCount / limit) : null;
+
     res.json({
       videos: videos.map(v => ({
         ...v,
@@ -281,11 +311,9 @@ router.get('/', async (req, res) => {
         limit,
         hasMore,
         nextCursor,    // pass as ?cursor=<value> in next request
-        // Legacy offset fields kept for backwards compatibility with existing frontends
-        // Will be removed in v3.0
-        page: 1,
-        total: null,   // not available with cursor pagination (use hasMore instead)
-        pages: null,
+        page,
+        total: totalCount,
+        pages: totalPages,
       },
     });
   } catch (err) {
@@ -315,6 +343,13 @@ router.get('/:id', async (req, res) => {
     }
 
     if (req.workspace && video.workspace_id !== req.workspace.id) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+
+    // Si la petición llega desde un custom domain, el video DEBE pertenecer
+    // al workspace dueño de ese dominio — impide servir videos ajenos bajo
+    // el dominio personalizado de otro workspace.
+    if (req.customDomainWorkspaceId && video.workspace_id !== req.customDomainWorkspaceId) {
       return res.status(404).json({ error: 'Not found' });
     }
 
@@ -464,10 +499,24 @@ router.get('/:id', async (req, res) => {
       }
     }
 
-    // ── Platform Ads para videos sin workspace ─────────────────────────────────
-    // Videos que no pertenecen a ningún workspace (workspace_id IS NULL) no tienen
-    // ads configurados por el owner. Aún así, el super admin puede monetizarlos
-    // inyectando Platform Ads (si están habilitados para el plan "starter").
+    // ── Videos sin workspace: logo de plataforma + Platform Ads ────────────────
+    // Videos guest (workspace_id IS NULL) no tienen embedConfig del workspace.
+    // Inyectamos el logo de plataforma (branded) y los Platform Ads del admin.
+    if (!video.workspace_id) {
+      try {
+        const dynCfg = require('../services/dynamicConfig');
+        const platformCfg = await dynCfg.getDynSection('platform', {
+          platformLogoUrl: '', platformLogoPos: 'tr', platformName: 'StreamVault',
+        });
+        if (platformCfg.platformLogoUrl) {
+          embedConfig.platformLogoUrl = platformCfg.platformLogoUrl;
+          embedConfig.platformLogoPos = platformCfg.platformLogoPos || 'tr';
+          embedConfig.platformName    = platformCfg.platformName || 'StreamVault';
+          embedConfig.embedTier       = 'branded';
+        }
+      } catch (_) {}
+    }
+
     if (!video.workspace_id && !embedConfig.ads) {
       try {
         const dynCfg = require('../services/dynamicConfig');
@@ -548,6 +597,11 @@ router.get('/:id/token', rateLimit(60, 60_000), async (req, res) => {
       });
     }
 
+    // Custom domain: el video debe pertenecer al workspace dueño del dominio
+    if (req.customDomainWorkspaceId && video.workspace_id !== req.customDomainWorkspaceId) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+
     const raw = req.headers.origin || req.headers.referer || '';
     let origin = '';
     try { origin = new URL(raw).hostname; } catch {}
@@ -574,10 +628,81 @@ router.get('/:id/token', rateLimit(60, 60_000), async (req, res) => {
   }
 });
 
+// ── Stream Session — CloudFront Signed Cookies ────────────────────────────────
+// Returns signed cookies that grant temporary access to the CDN for this video's
+// HLS content. The player calls this once before loading the m3u8 from CloudFront.
+// External players/apps can call this endpoint with a valid API key or video token
+// to get a cookie-based session for their allowed domains.
+router.get('/:id/stream-session', rateLimit(30, 60_000), async (req, res) => {
+  const cfSigned = require('../services/cfSigned');
+  
+  if (!cfSigned.isSigningEnabled()) {
+    // Signing not configured — return empty response (CDN serves publicly)
+    return res.json({ signed: false, message: 'CDN signing not configured — content served publicly' });
+  }
+
+  try {
+    const video = await db.prepare(`SELECT id, workspace_id, visibility, dmca_suspended FROM videos WHERE id=?`).get(req.params.id);
+    if (!video) return res.status(404).json({ error: 'Not found' });
+    if (video.dmca_suspended) return res.status(451).json({ error: 'unavailable_legal' });
+
+    // Domain validation — check Origin/Referer against workspace allowed domains
+    const raw = req.headers.origin || req.headers.referer || '';
+    let origin = '';
+    try { origin = new URL(raw).hostname; } catch {}
+    const isLocal = !origin || origin === 'localhost' || origin.startsWith('127.');
+
+    if (video.workspace_id) {
+      const ws = await db.prepare(`SELECT settings FROM workspaces WHERE id=?`).get(video.workspace_id);
+      const s = safeJsonParse(ws?.settings, {});
+      const allowed = s.embedAllowedDomains;
+
+      // Enforce domain allowlist only when configured AND request is not local
+      if (!isLocal && Array.isArray(allowed) && allowed.length > 0) {
+        if (!allowed.some(d => origin === d || origin.endsWith('.' + d))) {
+          return res.status(403).json({
+            error: 'Domain not authorized for streaming',
+            code: 'DOMAIN_NOT_ALLOWED',
+          });
+        }
+      }
+    }
+
+    // Generate signed cookies for this video
+    const result = cfSigned.generateSignedCookies(video.workspace_id || '_public', video.id);
+    if (!result) {
+      return res.status(500).json({ error: 'Failed to generate stream session' });
+    }
+
+    // Set the cookies on the response (for browser-based players)
+    const cookieOpts = cfSigned.getCookieOptions(result.expiresAt);
+    for (const [name, value] of Object.entries(result.cookies)) {
+      res.cookie(name, value, cookieOpts);
+    }
+
+    // Also return cookies in the JSON body (for native apps/custom players
+    // that can't use Set-Cookie headers cross-origin)
+    res.json({
+      signed: true,
+      expiresAt: result.expiresAt,
+      cookies: result.cookies,
+      cookieDomain: cfSigned.COOKIE_DOMAIN || undefined,
+    });
+  } catch (err) {
+    logger.error({ err }, 'Stream session error');
+    res.status(500).json({ error: 'Failed to create stream session' });
+  }
+});
+
 router.get('/:id/hlskey/:keyId', async (req, res) => {
   try {
     const video = await db.prepare(`SELECT hls_key, hls_key_id, workspace_id FROM videos WHERE id=?`).get(req.params.id);
     if (!video) return res.status(404).end();
+
+    // Custom domain: el video debe pertenecer al workspace dueño del dominio
+    if (req.customDomainWorkspaceId && video.workspace_id !== req.customDomainWorkspaceId) {
+      return res.status(403).end();
+    }
 
     // If hls_key is missing from DB, fall back to the on-disk file (handles videos
     // where the final DB UPDATE failed mid-transcoding but the file survived).
@@ -1389,11 +1514,18 @@ router.get('/:id/download-file', optionalAuth, async (req, res) => {
 
   // Strategy 2: CDN/S3 — stream-remux HLS segments fetched from CDN.
   // FFmpeg reads segments over HTTPS and pipes MP4 to the browser in real time.
+  // When TrustedKeyGroups is active, FFmpeg can't send cookies so we use a Signed URL.
   if (video.hls_cdn_url) {
+    const cfSigned = require('../services/cfSigned');
     const cdnBase = video.hls_cdn_url.replace(/\/master\.m3u8$/i, '');
-    const cdnM3u8 = quality
+    let cdnM3u8 = quality
       ? `${cdnBase}/${quality.replace(/p$/i, '')}p/index.m3u8`
       : video.hls_cdn_url;
+
+    // Sign the URL for FFmpeg (it can't use cookies)
+    if (cfSigned.isSigningEnabled()) {
+      cdnM3u8 = cfSigned.generateSignedUrl(cdnM3u8, 1); // 1-hour expiry for download
+    }
 
     _streamFfmpegToResponse(
       cdnM3u8,

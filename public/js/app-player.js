@@ -28,9 +28,38 @@ async function fetchVideoToken() {
     _tokenTimer = setTimeout(fetchVideoToken, Math.max(30000, renewIn));
   } catch {}
 }
+
+// ── CloudFront Signed Cookies stream session ─────────────────────────────────
+// Called once before loading HLS from CDN. Sets signed cookies so CloudFront
+// serves the video segments. The cookies are set via Set-Cookie (credentials:include)
+// and also stored for hls.js xhrSetup to forward via withCredentials.
+let _cfSessionActive = false;
+let _cfSessionTimer = null;
+
+async function fetchStreamSession() {
+  try {
+    const r = await fetch(`${BASE}/api/videos/${videoId}/stream-session`, {
+      credentials: 'include', // receive and store Set-Cookie from the server
+    });
+    if (!r.ok) return;
+    const d = await r.json();
+    if (d.signed) {
+      _cfSessionActive = true;
+      // Renew session 30 min before expiry
+      const renewIn = Math.max(60_000, (d.expiresAt - Math.floor(Date.now()/1000) - 1800) * 1000);
+      clearTimeout(_cfSessionTimer);
+      _cfSessionTimer = setTimeout(fetchStreamSession, renewIn);
+    }
+  } catch {}
+}
 function hlsXhrSetup(xhr, url) {
   if (_videoToken && (url.includes('/videos/') || url.includes('/api/videos/'))) {
     xhr.open('GET', url + (url.includes('?') ? '&' : '?') + 'token=' + _videoToken, true);
+  }
+  // When CloudFront Signed Cookies are active, send cookies with every CDN request
+  // so .ts segments and sub-manifests are authorized by the edge (TrustedKeyGroups).
+  if (_cfSessionActive) {
+    xhr.withCredentials = true;
   }
 }
 
@@ -733,25 +762,13 @@ progressTrack.addEventListener('touchcancel', () => { touchScrub = false; hidePr
 wrap.addEventListener('mousemove', wakeChrome);
 wrap.addEventListener('touchstart', wakeChrome, { passive: true });
 wrap.addEventListener('touchmove',  wakeChrome, { passive: true });
+// Double-tap seek deshabilitado — los botones de skip visibles lo reemplazan.
 let lastTap = 0, _dtPaused = false;
 wrap.addEventListener('touchstart', e => {
   if (e.target.closest('button, input, .settings-wrap, .cc-wrap, .player-progress-dock')) return;
-  const now = Date.now(), diff = now - lastTap;
-  if (diff < 300 && diff > 0) {
-    // ── Double-tap: seek without changing play/pause state ──────
-    e.preventDefault(); // Prevent second tap's click (play/pause toggle)
-    const cx  = e.touches[0].clientX - wrap.getBoundingClientRect().left;
-    const dir = cx < wrap.offsetWidth / 2 ? -10 : 10;
-    skip(dir, { showFeedback: true });
-    // Restore play state changed by first tap's click
-    if (_dtPaused) video.pause().catch?.(() => {});
-    else           video.play().catch(() => {});
-    lastTap = 0; // Reset — prevent triple-tap triggering again
-  } else {
-    // ── First tap: record current play state before click fires ─
-    _dtPaused = video.paused;
-    lastTap   = now;
-  }
+  const now = Date.now();
+  _dtPaused = video.paused;
+  lastTap   = now;
 }, { passive: false });
 let _chromePlayClickTimer = null;
 wrap.addEventListener('click', e => {
@@ -1622,6 +1639,8 @@ function initHls(m3u8Url) {
       if (!isOurs) video.textTracks[i].mode = 'disabled';
     }
 
+    // When signed cookies are active, tell Safari to send credentials cross-origin
+    if (_cfSessionActive) video.crossOrigin = 'use-credentials';
     video.src = m3u8Url;
     if (!spriteMeta) thumbV.src = m3u8Url;
 
@@ -2351,7 +2370,14 @@ async function init() {
       document.documentElement.style.setProperty('--pv-accent', cfg.color);
       document.documentElement.style.setProperty('--pv-scrub',  cfg.color);
       const hex = cfg.color.replace('#','');
-      document.documentElement.style.setProperty('--pv-accent-rgb', `${parseInt(hex.slice(0,2),16)}, ${parseInt(hex.slice(2,4),16)}, ${parseInt(hex.slice(4,6),16)}`);
+      const r = parseInt(hex.slice(0,2),16);
+      const g = parseInt(hex.slice(2,4),16);
+      const b = parseInt(hex.slice(4,6),16);
+      document.documentElement.style.setProperty('--pv-accent-rgb', `${r}, ${g}, ${b}`);
+      // Calcular luminancia relativa (WCAG) para elegir texto negro o blanco
+      // sobre fondos con el color de acento (ej. botón "Continuar viendo")
+      const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+      document.documentElement.style.setProperty('--pv-accent-text', luminance > 0.55 ? '#111' : '#fff');
     }
     if (cfg.playerName) document.title = videoData.title + ' — ' + cfg.playerName;
 
@@ -2440,6 +2466,7 @@ async function init() {
             if (mr.ok) { spriteMeta = await mr.json(); spriteImg = new Image(); spriteImg.src = videoData.spriteUrl; }
           } catch {}
         }
+        await fetchStreamSession(); // Get CF signed cookies before loading CDN content
         await fetchVideoToken();
         initHls(videoData.m3u8Url);
         loadSubtitles();
@@ -2469,39 +2496,20 @@ function _detectAdBlock(hasAds) {
   if (_adblockChecked) return;
   _adblockChecked = true;
 
-  // Crear elemento señuelo con nombre que los adblockers bloquean
-  const bait = document.createElement('div');
-  bait.className = 'ad-banner pub_300x250 pub_300x250m pub_728x90 text-ad textAd text_ad text_ads';
-  bait.style.cssText = 'position:absolute;top:-9999px;left:-9999px;width:1px;height:1px;pointer-events:none;';
-  document.body.appendChild(bait);
-
-  // También intentar cargar un script con nombre típico de ad (doble detección)
-  const baitScript = document.createElement('script');
-  baitScript.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js';
-  baitScript.onerror = () => _showAdBlockOverlay(hasAds);
-  baitScript.onload  = () => {}; // si carga, no hay adblock
-  baitScript.style.cssText = 'display:none;position:absolute;top:-9999px;';
-  document.body.appendChild(baitScript); // ← necesario para que onerror se dispare
-
-  setTimeout(() => {
-    // Verificar si el elemento bait fue ocultado/bloqueado por CSS de adblockers
-    const blocked = !bait.offsetParent
-      || bait.offsetHeight === 0
-      || bait.offsetWidth === 0
-      || window.getComputedStyle(bait).display === 'none'
-      || window.getComputedStyle(bait).visibility === 'hidden';
-
-    bait.remove();
-
-    if (blocked) {
-      _showAdBlockOverlay(hasAds);
-    } else {
-      // Fallback: intentar fetch a URL de ad conocida
-      fetch('https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js', {
-        method: 'HEAD', mode: 'no-cors', cache: 'no-store'
-      }).catch(() => _showAdBlockOverlay(hasAds));
-    }
-  }, 300);
+  // Detección SOLO via fetch — no usamos elementos señuelo con clases de anuncios
+  // porque los browsers modernos y filtros del sistema los bloquean por CSS
+  // incluso sin extensión instalada, causando falsos positivos.
+  // El fetch a un recurso conocido de Google Ads es el método más fiable.
+  fetch('https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js', {
+    method: 'HEAD',
+    mode: 'no-cors',
+    cache: 'no-store',
+  }).then(() => {
+    // Cargó correctamente — no hay adblock activo
+  }).catch(() => {
+    // Falló — adblock bloqueó el recurso
+    _showAdBlockOverlay(hasAds);
+  });
 }
 
 function _showAdBlockOverlay(hasAds) {
@@ -2530,7 +2538,7 @@ function _showAdBlockOverlay(hasAds) {
     ? 'Este contenido se financia con publicidad. Por favor, desactiva tu bloqueador de anuncios para ver el video.'
     : 'Hemos detectado un bloqueador de anuncios activo. Para una mejor experiencia, considera desactivarlo en este sitio.';
 
-  const btnText = hasAds ? 'Ya lo desactivé — continuar' : 'Continuar de todas formas';
+  const btnText = hasAds ? 'Ya lo desactivé — verificar' : 'Continuar de todas formas';
   const btnStyle = hasAds
     ? 'background:#7c6cfa;color:#fff;border:none;border-radius:8px;padding:10px 22px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;'
     : 'background:rgba(255,255,255,0.1);color:#fff;border:1px solid rgba(255,255,255,0.2);border-radius:8px;padding:10px 22px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;';
@@ -2546,10 +2554,30 @@ function _showAdBlockOverlay(hasAds) {
   document.getElementById('player-inner')?.appendChild(overlay);
 
   document.getElementById('sv-adblock-dismiss')?.addEventListener('click', () => {
-    overlay.remove();
-    // Si tiene anuncios, intentar reproducir el video al cerrar
-    if (!video.paused) return;
-    video.play().catch(() => {});
+    if (hasAds) {
+      // Re-verificar si el adblock sigue activo — misma técnica fetch, sin elementos señuelo
+      // que causan falsos positivos con filtros del sistema/browser.
+      const btn = document.getElementById('sv-adblock-dismiss');
+      if (btn) { btn.disabled = true; btn.textContent = 'Verificando…'; }
+      fetch('https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js', {
+        method: 'HEAD',
+        mode: 'no-cors',
+        cache: 'no-store',
+      }).then(() => {
+        // Desactivado correctamente
+        overlay.remove();
+        video.play().catch(() => {});
+      }).catch(() => {
+        // Sigue activo — actualizar mensaje
+        const msgEl = overlay.querySelector('div[style*="color:rgba"]');
+        if (msgEl) msgEl.textContent = 'El bloqueador de anuncios sigue activo. Por favor desactívalo completamente y recarga la página.';
+        if (btn) { btn.disabled = false; btn.textContent = 'Recargar página'; btn.onclick = () => location.reload(); }
+      });
+    } else {
+      overlay.remove();
+      if (!video.paused) return;
+      video.play().catch(() => {});
+    }
   });
 }
 
@@ -2983,12 +3011,26 @@ function _showBanner(adsCfg) {
   const pos    = adsCfg.bannerPosition || 'bottom';
   const banner = document.createElement('div');
   banner.id    = 'sv-ad-banner';
-  banner.style.cssText = `position:absolute;${pos === 'top' ? 'top:0' : 'bottom:52px'};left:0;right:0;z-index:30;`;
+  // overflow:hidden + max-height evita que el contenido HTML del banner se salga del player en mobile.
+  // box-sizing:border-box garantiza que padding no expanda el ancho más allá de left:0;right:0.
+  banner.style.cssText = [
+    'position:absolute',
+    pos === 'top' ? 'top:0' : 'bottom:52px',
+    'left:0',
+    'right:0',
+    'z-index:30',
+    'overflow:hidden',
+    'max-height:120px',
+    'box-sizing:border-box',
+    'width:100%',
+  ].join(';') + ';';
 
   const dismiss = () => { banner.remove(); _adsBannerEl = null; };
 
   // Build scoped + sanitized DOM element
   const scopedEl = _buildScopedBanner(adsCfg.bannerHtml, adsCfg.creativeId || null);
+  // Asegurar que el contenido escoped tampoco desborde
+  scopedEl.style.cssText = (scopedEl.style.cssText || '') + ';max-width:100%;overflow:hidden;box-sizing:border-box;';
 
   // Detect close button: explicit class/attr OR aria-label Cerrar/Close
   const CLOSE_SEL = '.sv-close-btn, [data-sv-close], button[aria-label*="errar" i], button[aria-label*="lose" i]';
@@ -3000,13 +3042,13 @@ function _showBanner(adsCfg) {
     });
     banner.appendChild(scopedEl);
   } else {
-    banner.style.cssText += 'background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:space-between;padding:8px 12px;gap:10px;';
+    banner.style.cssText += 'background:rgba(0,0,0,.82);display:flex;align-items:center;justify-content:space-between;padding:8px 12px;gap:10px;';
     const content = document.createElement('div');
-    content.style.cssText = 'flex:1;font-size:13px;color:#fff;overflow:hidden;';
+    content.style.cssText = 'flex:1;min-width:0;font-size:13px;color:#fff;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;';
     content.appendChild(scopedEl);
     const closeBtn = document.createElement('button');
     closeBtn.textContent = '×';
-    closeBtn.style.cssText = 'background:none;border:none;color:rgba(255,255,255,.6);font-size:18px;cursor:pointer;padding:0 4px;flex-shrink:0;';
+    closeBtn.style.cssText = 'background:none;border:none;color:rgba(255,255,255,.6);font-size:20px;line-height:1;cursor:pointer;padding:0 4px;flex-shrink:0;';
     closeBtn.onclick = dismiss;
     banner.appendChild(content);
     banner.appendChild(closeBtn);
