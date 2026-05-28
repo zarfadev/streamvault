@@ -216,11 +216,14 @@ html.embed-root, html.embed-root body {
   transition: transform 0.18s var(--pv-ease), color 0.12s, background 0.12s;
   filter: drop-shadow(0 2px 12px rgba(0,0,0,0.6));
 }
-.center-skip-btn:hover {
-  color: #fff;
-  transform: scale(1.12);
-  background: rgba(255,255,255,0.1);
-  filter: drop-shadow(0 4px 20px rgba(0,0,0,0.75));
+/* Hover solo en dispositivos con mouse real — evita el "sticky hover" bug en iOS/touch */
+@media (hover: hover) {
+  .center-skip-btn:hover {
+    color: #fff;
+    transform: scale(1.12);
+    background: rgba(255,255,255,0.1);
+    filter: drop-shadow(0 4px 20px rgba(0,0,0,0.75));
+  }
 }
 .center-skip-btn:active { transform: scale(0.91); }
 .center-skip-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px #000, 0 0 0 4px rgba(255,255,255,0.4); }
@@ -244,9 +247,11 @@ html.embed-root, html.embed-root body {
   box-shadow: none;
   transition: transform 0.18s var(--pv-ease), background 0.15s, opacity 0.2s;
 }
-.center-main-btn:hover {
-  transform: scale(1.1);
-  background: rgba(255,255,255,0.28);
+@media (hover: hover) {
+  .center-main-btn:hover {
+    transform: scale(1.1);
+    background: rgba(255,255,255,0.28);
+  }
 }
 .center-main-btn:active { transform: scale(0.93); }
 .center-main-btn:focus-visible { outline: none; }
@@ -452,7 +457,9 @@ html.embed-root, html.embed-root body {
   outline: none;
   position: relative;
 }
-.ctrl-btn:hover  { background: rgba(255,255,255,0.12); color: #fff; }
+@media (hover: hover) {
+  .ctrl-btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
+}
 .ctrl-btn:active { transform: scale(0.88); }
 .ctrl-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px #000, 0 0 0 4px rgba(var(--pv-accent-rgb),0.6); }
 /* Chromecast active state — button glows with accent color while casting */

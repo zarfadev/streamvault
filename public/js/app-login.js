@@ -31,6 +31,7 @@ const _svc = {
 const PIECE_W   = 48;   // px — ancho de pieza y slot (idénticos)
 const PIECE_M   = 4;    // px — margen izquierdo inicial y derecho mínimo
 const TOLERANCE = 0.08; // ±8% de rango útil
+let _svcLastTargetPct = null; // posición anterior para garantizar cambio significativo
 
 // AbortController activo para limpiar listeners al re-inicializar
 let _svcAC = null;
@@ -64,13 +65,23 @@ async function initSvCaptcha() {
   if (btnReg) { btnReg.disabled = true; btnReg.style.opacity = '.5'; btnReg.style.cursor = 'not-allowed'; }
 
   // ── Fetch challenge ───────────────────────────────────────────────────────
+  // Garantiza que la nueva posición difiere ≥20% de la anterior (anti-brute-force)
   try {
-    const r = await fetch('/api/captcha/challenge');
-    if (!r.ok) throw new Error();
-    const d = await r.json();
-    _svc.token     = d.token;
-    _svc.targetPct = d.targetPct;
-    _svc.startedAt = Date.now();
+    let attempts = 0;
+    while (attempts < 3) {
+      const r = await fetch('/api/captcha/challenge');
+      if (!r.ok) throw new Error();
+      const d = await r.json();
+      attempts++;
+      if (_svcLastTargetPct === null || Math.abs(d.targetPct - _svcLastTargetPct) >= 0.20) {
+        _svc.token     = d.token;
+        _svc.targetPct = d.targetPct;
+        _svc.startedAt = Date.now();
+        _svcLastTargetPct = d.targetPct;
+        break;
+      }
+      // Demasiado cercano al anterior — pedir otra
+    }
   } catch {
     status.textContent = '⚠ Error al cargar el captcha';
     return;

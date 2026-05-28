@@ -196,7 +196,8 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
   .sv-footer{padding:16px;flex-direction:column;align-items:center;text-align:center;}
   .page{padding:0 0 48px;}
   .watch-grid{gap:0;}
-  .player-shell{border-radius:0;}
+  /* Sticky player en mobile: el video permanece visible al hacer scroll */
+  .player-shell{border-radius:0;position:sticky;top:56px;z-index:50;}
   .player-wrap{border-radius:0;}
   .video-info{padding:16px 16px 0;}
   .action-row{padding:0 16px 16px;}

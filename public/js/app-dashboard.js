@@ -196,7 +196,7 @@ function doLogout() {
         localStorage.removeItem(k);
         sessionStorage.removeItem(k);
       });
-      window.location.href = '/login';
+      window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname + window.location.hash);
     }
 
     function getInitials(name, email) {
@@ -400,7 +400,7 @@ function doLogout() {
 
     async function restoreSession() {
       if (!authToken) {
-        window.location.href = '/login';
+        window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname + window.location.hash);
         return;
       }
       try {
@@ -418,7 +418,7 @@ function doLogout() {
           }
           authToken = ''; authUser = null; authWorkspace = null;
           ['sv_access_token', 'sv_token'].forEach(k => localStorage.removeItem(k));
-          window.location.href = '/login';
+          window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname + window.location.hash);
           return;
         }
         const d = await r.json();
@@ -428,7 +428,7 @@ function doLogout() {
         const savedId = localStorage.getItem('sv_workspace_id');
         authWorkspace = (savedId && authWorkspaces.find(w => w.id === savedId)) || authWorkspaces[0] || null;
       } catch {
-        window.location.href = '/login';
+        window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname + window.location.hash);
         return;
       }
       updateAuthBar();
