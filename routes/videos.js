@@ -635,7 +635,20 @@ router.get('/:id/token', rateLimit(60, 60_000), async (req, res) => {
 // to get a cookie-based session for their allowed domains.
 router.get('/:id/stream-session', rateLimit(30, 60_000), async (req, res) => {
   const cfSigned = require('../services/cfSigned');
-  
+
+  // ── Custom domain redirect ────────────────────────────────────────────────
+  // CloudFront signed cookies MUST be set by the main app domain (streamvault.es).
+  // When a request comes from a custom domain (Host: videos.cliente.com), the browser
+  // would reject Set-Cookie for .streamvault.es because the domain doesn't match.
+  // Fix: redirect to the canonical app URL so the main domain sets the cookies.
+  if (req.customDomainWorkspaceId) {
+    const appUrl = require('../config').appUrl || process.env.APP_URL || '';
+    if (appUrl) {
+      const qs = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+      return res.redirect(302, `${appUrl}/api/videos/${req.params.id}/stream-session${qs}`);
+    }
+  }
+
   if (!cfSigned.isSigningEnabled()) {
     // Signing not configured — return empty response (CDN serves publicly)
     return res.json({ signed: false, message: 'CDN signing not configured — content served publicly' });
