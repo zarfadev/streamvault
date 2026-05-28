@@ -48,6 +48,14 @@ module.exports = function cspMiddleware(req, res, next) {
     'connect-src': [
       "'self'",
       'https://api.stripe.com',
+      // CDN y dominios de la plataforma (signed cookies, HLS keys, sprites)
+      'https://cdn.streamvault.es',
+      'https://streamvault.link',
+      'https://*.streamvault.es',
+      // Necesario para la detección de AdBlock via fetch().
+      // El fetch a este dominio falla SOLO si hay una extensión bloqueando la red.
+      // Sin esta entrada el CSP lo bloquea antes, causando falsos positivos.
+      'https://pagead2.googlesyndication.com',
     ],
     'frame-src': [
       "'self'",
