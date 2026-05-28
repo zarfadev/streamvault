@@ -65,23 +65,25 @@ async function initSvCaptcha() {
   if (btnReg) { btnReg.disabled = true; btnReg.style.opacity = '.5'; btnReg.style.cursor = 'not-allowed'; }
 
   // ── Fetch challenge ───────────────────────────────────────────────────────
-  // Garantiza que la nueva posición difiere ≥20% de la anterior (anti-brute-force)
+  // Intenta obtener una posición ≥20% diferente a la anterior (anti-brute-force).
+  // Si tras 3 intentos no hay una posición suficientemente diferente, usa la última de todas formas
+  // para garantizar que SIEMPRE se asigna una nueva posición y el slot se mueve visiblemente.
   try {
-    let attempts = 0;
-    while (attempts < 3) {
+    let bestChallenge = null;
+    for (let attempts = 0; attempts < 3; attempts++) {
       const r = await fetch('/api/captcha/challenge');
-      if (!r.ok) throw new Error();
+      if (!r.ok) throw new Error('captcha fetch failed');
       const d = await r.json();
-      attempts++;
+      bestChallenge = d;
       if (_svcLastTargetPct === null || Math.abs(d.targetPct - _svcLastTargetPct) >= 0.20) {
-        _svc.token     = d.token;
-        _svc.targetPct = d.targetPct;
-        _svc.startedAt = Date.now();
-        _svcLastTargetPct = d.targetPct;
-        break;
+        break; // posición suficientemente diferente
       }
-      // Demasiado cercano al anterior — pedir otra
     }
+    // Siempre asignar el mejor challenge encontrado
+    _svc.token        = bestChallenge.token;
+    _svc.targetPct    = bestChallenge.targetPct;
+    _svc.startedAt    = Date.now();
+    _svcLastTargetPct = bestChallenge.targetPct;
   } catch {
     status.textContent = '⚠ Error al cargar el captcha';
     return;

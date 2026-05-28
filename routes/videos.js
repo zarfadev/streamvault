@@ -646,20 +646,30 @@ router.get('/:id/stream-session', rateLimit(30, 60_000), async (req, res) => {
     if (!video) return res.status(404).json({ error: 'Not found' });
     if (video.dmca_suspended) return res.status(451).json({ error: 'unavailable_legal' });
 
-    // Domain validation — check Origin/Referer against workspace allowed domains
-    const raw = req.headers.origin || req.headers.referer || '';
-    let origin = '';
-    try { origin = new URL(raw).hostname; } catch {}
-    const isLocal = !origin || origin === 'localhost' || origin.startsWith('127.');
+    // Domain validation — check the PARENT page origin against workspace allowed domains.
+    // The player iframe always runs on streamvault.es, so we must check the Referer
+    // (parent page URL) rather than the Origin header (which is always streamvault.es).
+    const appHostname = (() => { try { return new URL(process.env.APP_URL || '').hostname; } catch { return ''; } })();
+    // Use Referer to get parent page hostname; fall back to Origin if no Referer
+    let parentOrigin = '';
+    try {
+      const refRaw = req.headers.referer || req.headers.origin || '';
+      parentOrigin = new URL(refRaw).hostname;
+    } catch {}
+    // Requests from our own app domain (e.g. streamvault.es) are always trusted
+    const isTrustedOrigin = !parentOrigin ||
+      parentOrigin === 'localhost' ||
+      parentOrigin.startsWith('127.') ||
+      parentOrigin === appHostname ||
+      (appHostname && parentOrigin.endsWith('.' + appHostname));
 
-    if (video.workspace_id) {
+    if (!isTrustedOrigin && video.workspace_id) {
       const ws = await db.prepare(`SELECT settings FROM workspaces WHERE id=?`).get(video.workspace_id);
       const s = safeJsonParse(ws?.settings, {});
       const allowed = s.embedAllowedDomains;
 
-      // Enforce domain allowlist only when configured AND request is not local
-      if (!isLocal && Array.isArray(allowed) && allowed.length > 0) {
-        if (!allowed.some(d => origin === d || origin.endsWith('.' + d))) {
+      if (Array.isArray(allowed) && allowed.length > 0) {
+        if (!allowed.some(d => parentOrigin === d || parentOrigin.endsWith('.' + d))) {
           return res.status(403).json({
             error: 'Domain not authorized for streaming',
             code: 'DOMAIN_NOT_ALLOWED',

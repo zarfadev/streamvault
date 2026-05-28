@@ -308,6 +308,10 @@ updateFsIcon();
 video.addEventListener('webkitbeginfullscreen', () => {
   _iosNativeFs = true;
   updateFsIcon();
+  // Precargar todos los tracks que estén disabled → hidden para que iOS pueda mostrarlos
+  for (let i = 0; i < video.textTracks.length; i++) {
+    if (video.textTracks[i].mode === 'disabled') video.textTracks[i].mode = 'hidden';
+  }
   // ── Subtitles for iOS native player ──────────────────────────
   // The iOS player reads native <track> elements (mode='showing').
   // Our custom VTT overlay is HTML — invisible inside the iOS player.
@@ -343,11 +347,22 @@ video.addEventListener('webkitbeginfullscreen', () => {
   }
 
   // ── Audio for iOS native player ───────────────────────────────
-  // iOS exposes audioTracks asynchronously — try immediately and after a short delay
+  // iOS exposes audioTracks asynchronously — try immediately and after a short delay.
+  // If there's only one audio track, always enable it (single-audio video).
   function _applyIosAudioTrack() {
     if (!video.audioTracks || video.audioTracks.length < 1) return false;
+    // Single track: just enable it — no language matching needed
+    if (video.audioTracks.length === 1) {
+      video.audioTracks[0].enabled = true;
+      return true;
+    }
     const savedLang = audioTracks[currentAudioTrack >= 0 ? currentAudioTrack : 0]?.lang || null;
-    if (!savedLang) return true;
+    if (!savedLang) {
+      // No preference — enable first track
+      video.audioTracks[0].enabled = true;
+      for (let i = 1; i < video.audioTracks.length; i++) video.audioTracks[i].enabled = false;
+      return true;
+    }
     let found = false;
     for (let i = 0; i < video.audioTracks.length; i++) {
       const tLang = (video.audioTracks[i].language || '').split('-')[0].toLowerCase();
@@ -1053,28 +1068,11 @@ function renderSettingsMenu() {
 function setQuality(level) {
   if (!hls) return;
   document.getElementById('settings-menu').classList.remove('open');
+  hls.currentLevel = level;
+  currentLevel     = level;
   updateSettingsBadge();
   trackEvent('quality_change', { quality: level === -1 ? 'AUTO' : (levels[level]?.height ? levels[level].height + 'p' : `L${level}`) });
   wakeChrome();
-  if (level === -1) {
-    // AUTO: dejar que HLS.js elija — sin freeze, switch limpio
-    hls.currentLevel = -1;
-    currentLevel = -1;
-  } else {
-    // Calidad específica: usar nextLevel para aplicar en el próximo keyframe boundary.
-    // Evita el flush inmediato del buffer (video congelado + audio por delante).
-    hls.nextLevel = level;
-    // Actualizar currentLevel cuando el switch realmente ocurra
-    hls.once(Hls.Events.LEVEL_SWITCHED, (_, d) => { currentLevel = d.level; updateSettingsBadge(); });
-    // Fallback si nextLevel tarda más de 10s (p.ej. vídeo en pausa)
-    setTimeout(() => {
-      if (hls && hls.currentLevel !== level) {
-        hls.currentLevel = level;
-        currentLevel     = level;
-        updateSettingsBadge();
-      }
-    }, 10000);
-  }
 }
 function setAudioTrack(index) {
   currentAudioTrack = index;

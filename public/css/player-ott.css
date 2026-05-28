@@ -265,10 +265,7 @@ html.embed-root, html.embed-root body {
 /* Pantallas pequeñas (móvil) — mínimos táctiles cómodos */
 @media (max-width: 480px) {
   .controls-center-cluster   { gap: 20px; }
-  /* Sin fondo permanente en móvil — el drop-shadow hace los botones visibles.
-     El fondo aparece solo al tocar (:active) para feedback inmediato. */
-  .center-skip-btn           { width: 56px; height: 56px; background: transparent; }
-  .center-skip-btn:active    { background: rgba(255,255,255,0.18); }
+  .center-skip-btn           { width: 56px; height: 56px; background: rgba(0,0,0,0.45); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
   .center-skip-btn svg       { width: 28px; height: 28px; }
   .center-main-btn           { width: 64px; height: 64px; }
   .center-main-btn svg       { width: 26px; height: 26px; }
