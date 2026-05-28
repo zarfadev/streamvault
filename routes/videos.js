@@ -642,7 +642,7 @@ router.get('/:id/stream-session', rateLimit(30, 60_000), async (req, res) => {
   }
 
   try {
-    const video = await db.prepare(`SELECT id, workspace_id, visibility, dmca_suspended FROM videos WHERE id=?`).get(req.params.id);
+    const video = await db.prepare(`SELECT id, workspace_id, visibility, dmca_suspended, s3_object_prefix FROM videos WHERE id=?`).get(req.params.id);
     if (!video) return res.status(404).json({ error: 'Not found' });
     if (video.dmca_suspended) return res.status(451).json({ error: 'unavailable_legal' });
 
@@ -668,8 +668,10 @@ router.get('/:id/stream-session', rateLimit(30, 60_000), async (req, res) => {
       }
     }
 
-    // Generate signed cookies for this video
-    const result = cfSigned.generateSignedCookies(video.workspace_id || '_public', video.id);
+    // Generate signed cookies for this video — use s3_object_prefix for accurate resource path
+    const result = cfSigned.generateSignedCookies(video.workspace_id || '_public', video.id, {
+      s3ObjectPrefix: video.s3_object_prefix || undefined,
+    });
     if (!result) {
       return res.status(500).json({ error: 'Failed to generate stream session' });
     }
