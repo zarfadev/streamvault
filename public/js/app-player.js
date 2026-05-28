@@ -821,51 +821,53 @@ const _chev_r = `<svg class="settings-row-chevron" viewBox="0 0 24 24" fill="non
 const _chev_l = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0"><polyline points="15 18 9 12 15 6"/></svg>`;
 const _chk    = `<svg class="settings-opt-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>`;
 
+// Posiciona un menú horizontalmente centrado sobre el botón que lo abrió,
+// clampeado para no salirse del viewport. El bottom lo fija el CSS.
+function _positionMenu(menu, triggerEl) {
+  if (!menu || !triggerEl) return;
+  const menuW = Math.min(340, window.innerWidth * 0.92);
+  const btnR  = triggerEl.getBoundingClientRect();
+  const ideal = btnR.left + btnR.width / 2 - menuW / 2;
+  const left  = Math.max(8, Math.min(window.innerWidth - menuW - 8, ideal));
+  menu.style.left = left + 'px';
+}
+
 function toggleSettingsMenu(event) {
-  if (event) event.stopPropagation(); // Evita que el listener global cierre el menú
+  if (event) event.stopPropagation();
   const menu = document.getElementById('settings-menu');
   const alreadyOpenOnMain = menu.classList.contains('open') && settingsView === 'main';
-  if (alreadyOpenOnMain) {
-    menu.classList.remove('open');
-    return;
-  }
-  // Si está abierto en otra sección O cerrado, abrirlo en main
+  if (alreadyOpenOnMain) { menu.classList.remove('open'); return; }
   if (hls) { audioTracks = hls.audioTracks || []; currentAudioTrack = hls.audioTrack ?? -1; }
   settingsView = 'main';
   renderSettingsMenu();
+  _positionMenu(menu, event?.currentTarget || event?.target);
   menu.classList.add('open');
   wakeChrome();
 }
 function showSettingsSection(view) { settingsView = view; renderSettingsMenu(); }
 
-// Abre el menú de subtítulos directamente desde el botón CC en la toolbar
 function openSubtitlesMenu(event) {
-  if (event) event.stopPropagation(); // Evita que el listener global cierre el menú
+  if (event) event.stopPropagation();
   const menu = document.getElementById('settings-menu');
   const alreadyOpen = menu.classList.contains('open') && settingsView === 'subtitles';
-  if (alreadyOpen) {
-    menu.classList.remove('open');
-    return;
-  }
+  if (alreadyOpen) { menu.classList.remove('open'); return; }
   if (hls) { audioTracks = hls.audioTracks || []; currentAudioTrack = hls.audioTrack ?? -1; }
   settingsView = 'subtitles';
   renderSettingsMenu();
+  _positionMenu(menu, event?.currentTarget || event?.target);
   menu.classList.add('open');
   wakeChrome();
 }
 
-// Abre el menú de calidad directamente desde el badge de calidad en la toolbar
 function openQualityMenu(event) {
-  if (event) event.stopPropagation(); // Evita que el listener global cierre el menú
+  if (event) event.stopPropagation();
   const menu = document.getElementById('settings-menu');
   const alreadyOpenOnQuality = menu.classList.contains('open') && settingsView === 'quality';
-  if (alreadyOpenOnQuality) {
-    menu.classList.remove('open');
-    return;
-  }
+  if (alreadyOpenOnQuality) { menu.classList.remove('open'); return; }
   if (hls) { audioTracks = hls.audioTracks || []; currentAudioTrack = hls.audioTrack ?? -1; }
   settingsView = 'quality';
   renderSettingsMenu();
+  _positionMenu(menu, event?.currentTarget || event?.target);
   menu.classList.add('open');
   wakeChrome();
 }
@@ -1044,23 +1046,48 @@ function renderSettingsMenu() {
 
 function setQuality(level) {
   if (!hls) return;
-  hls.currentLevel = level; currentLevel = level;
+  // Guardar posición actual para restaurarla después del cambio de calidad
+  const savedTime    = video.currentTime;
+  const wasPaused    = video.paused;
+  hls.currentLevel   = level;
+  currentLevel       = level;
   document.getElementById('settings-menu').classList.remove('open');
   updateSettingsBadge();
   trackEvent('quality_change', { quality: level === -1 ? 'AUTO' : (levels[level]?.height ? levels[level].height + 'p' : `L${level}`) });
   wakeChrome();
+  // HLS.js puede resetear la posición al cambiar nivel — re-seek si se desplazó >1s
+  const _onFrag = () => {
+    if (Math.abs(video.currentTime - savedTime) > 1) {
+      video.currentTime = savedTime;
+    }
+    if (!wasPaused && video.paused) video.play().catch(() => {});
+    hls.off(Hls.Events.FRAG_BUFFERED, _onFrag);
+  };
+  hls.on(Hls.Events.FRAG_BUFFERED, _onFrag);
+  // Safety: limpiar listener tras 8s si no disparó
+  setTimeout(() => hls?.off(Hls.Events.FRAG_BUFFERED, _onFrag), 8000);
 }
 function setAudioTrack(index) {
   currentAudioTrack = index;
+  document.getElementById('settings-menu').classList.remove('open');
   if (hls) {
-    // HLS.js path (Chrome, Firefox, Edge)
-    hls.audioTrack = index;
+    const savedTime = video.currentTime;
+    const wasPaused = video.paused;
+    hls.audioTrack  = index;
     const lang = hls.audioTracks?.[index]?.lang || hls.audioTracks?.[index]?.name || null;
     if (lang) localStorage.setItem(`sv_audio_${videoId}`, lang);
     else localStorage.removeItem(`sv_audio_${videoId}`);
     if (_castSession) _castEditTracks(lang, null);
+    // Watchdog: si el video sigue en buffering tras 5s, forzar play desde la posición guardada
+    const _wd = setTimeout(() => {
+      if (video.readyState < 3 || video.networkState === 2) {
+        video.currentTime = savedTime;
+        if (!wasPaused) video.play().catch(() => {});
+      }
+    }, 5000);
+    const _cleanup = () => { clearTimeout(_wd); hls.off(Hls.Events.AUDIO_TRACK_SWITCHED, _cleanup); };
+    hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, _cleanup);
   } else if (video.audioTracks && video.audioTracks.length > index) {
-    // Native HLS path (Safari / iOS) — toggle via HTMLMediaElement.audioTracks
     const lang = audioTracks[index]?.lang || audioTracks[index]?.name || null;
     for (let i = 0; i < video.audioTracks.length; i++) {
       video.audioTracks[i].enabled = (i === index);
@@ -1068,7 +1095,6 @@ function setAudioTrack(index) {
     if (lang) localStorage.setItem(`sv_audio_${videoId}`, lang);
     else localStorage.removeItem(`sv_audio_${videoId}`);
   }
-  document.getElementById('settings-menu').classList.remove('open');
   renderSettingsMenu();
 }
 

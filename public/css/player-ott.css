@@ -568,14 +568,15 @@ html.embed-root, html.embed-root body {
 }
 
 /* ─── Shared glass menu base ────────────────────────────────── */
-/* position:fixed escapa el overflow:hidden de player-inner en todas las pantallas */
+/* position:fixed escapa el overflow:hidden de player-inner en todas las pantallas.
+   El left se calcula por JS (_positionMenu) para anclar al botón que abre el menú. */
 .quality-menu, .cc-menu, .speed-menu, .settings-menu {
   position: fixed;
   bottom: calc(76px + env(safe-area-inset-bottom, 0px));
-  left: 50%;
+  left: 50%; /* fallback, JS sobreescribe */
   right: auto;
   top: auto;
-  transform: translateX(-50%) translateY(14px);
+  transform: translateY(14px); /* solo vertical — horizontal lo pone JS */
   background: rgba(8, 8, 14, 0.96);
   border: 1px solid rgba(255,255,255,0.1);
   border-radius: 14px;
@@ -595,7 +596,7 @@ html.embed-root, html.embed-root body {
   transition: opacity 0.2s var(--pv-ease-std), transform 0.2s var(--pv-ease-std);
 }
 .quality-menu.open, .cc-menu.open, .speed-menu.open, .settings-menu.open {
-  opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto;
+  opacity: 1; transform: translateY(0); pointer-events: auto;
 }
 .settings-menu { overflow: hidden; }
 .settings-wrap .settings-menu { min-width: 280px; max-height: 80vh; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.12) transparent; }
@@ -1628,8 +1629,8 @@ video::cue {
 
   /* Settings / quality / CC menus en touch: overrides para pantalla pequeña */
   .quality-menu, .cc-menu, .speed-menu, .settings-menu {
-    min-width: min(320px, 92vw);
-    max-width: 92vw;
+    min-width: min(300px, 88vw);
+    max-width: 88vw;
   }
 
   /* Thumb preview más pequeña */

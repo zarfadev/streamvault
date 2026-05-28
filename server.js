@@ -1071,9 +1071,8 @@ app.get('/watch/:id', async (req, res) => {
 
     // Inject OG meta tags if video exists and is public
     if (video && video.visibility !== 'private') {
-      const thumbUrl = video.hls_cdn_url
-        ? video.hls_cdn_url.replace(/\/master\.m3u8$/i, '') + '/thumb.jpg'
-        : `${appUrl}/videos/${video.id}/thumb.jpg`;
+      // Usar el proxy de thumbnail para que las OG tags funcionen sin cookies CDN
+      const thumbUrl = `${appUrl}/api/videos/${video.id}/thumb`;
 
       // SECURITY: Sanitize all user-controlled strings before injecting into HTML
       // to prevent stored XSS via title/description fields.
