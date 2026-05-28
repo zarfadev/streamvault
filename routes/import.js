@@ -97,10 +97,20 @@ function guessTitle(url) {
   }
 }
 
+// Timeout de conexión inicial (ms) — tiempo máximo para establecer la conexión y recibir headers
+const CONNECT_TIMEOUT_MS = 60_000;       // 60 s
+// Timeout total de descarga (ms) — tiempo máximo para descargar todo el archivo
+const DOWNLOAD_TIMEOUT_MS = 30 * 60_000; // 30 min
+
 function download(url, destPath, onProgress) {
   return new Promise((resolve, reject) => {
     let received = 0;
     let total    = 0;
+    let downloadTimer = null;
+
+    function cleanup() {
+      if (downloadTimer) { clearTimeout(downloadTimer); downloadTimer = null; }
+    }
 
     function doRequest(requestUrl, redirects = 0) {
       if (redirects > 5) return reject(new Error('Too many redirects'));
@@ -120,7 +130,7 @@ function download(url, destPath, onProgress) {
     function doFetch(parsed, requestUrl, redirects) {
       const lib = parsed.protocol === 'https:' ? https : http;
 
-      const req = lib.get(requestUrl, { timeout: 30_000 }, res => {
+      const req = lib.get(requestUrl, { timeout: CONNECT_TIMEOUT_MS }, res => {
         // Follow redirects — re-validate destination to prevent SSRF via open redirects
         if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
           return doRequest(new URL(res.headers.location, requestUrl).href, redirects + 1);
@@ -142,10 +152,17 @@ function download(url, destPath, onProgress) {
           return reject(new Error(`File too large (${(total / 1e9).toFixed(1)} GB, max 10 GB)`));
         }
 
+        // Iniciar timer de descarga total (30 min máximo para descargar el archivo)
+        downloadTimer = setTimeout(() => {
+          req.destroy();
+          reject(new Error('Download timeout — el archivo tardó demasiado en descargarse'));
+        }, DOWNLOAD_TIMEOUT_MS);
+
         const out = fs.createWriteStream(destPath);
         res.on('data', chunk => {
           received += chunk.length;
           if (received > MAX_BYTES) {
+            cleanup();
             req.destroy();
             out.destroy();
             reject(new Error('File exceeded 10 GB limit during download'));
@@ -154,12 +171,12 @@ function download(url, destPath, onProgress) {
           if (total > 0 && onProgress) onProgress(Math.round((received / total) * 100));
         });
         res.pipe(out);
-        out.on('finish', () => resolve({ size: received, contentType: ct }));
-        out.on('error', reject);
+        out.on('finish', () => { cleanup(); resolve({ size: received, contentType: ct }); });
+        out.on('error', err => { cleanup(); reject(err); });
       });
 
-      req.on('timeout', () => { req.destroy(); reject(new Error('Download timeout')); });
-      req.on('error', reject);
+      req.on('timeout', () => { cleanup(); req.destroy(); reject(new Error('Connection timeout — no se pudo conectar al servidor')); });
+      req.on('error', err => { cleanup(); reject(err); });
     }
 
     doRequest(url);

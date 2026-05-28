@@ -11,34 +11,50 @@ let _prices = { starter: 19, pro: 59, enterprise: 99 };
 
 function esc(str)     { return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 function escAttr(str) { return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+// ── Silent token refresh helper (shared by init + api) ─────────────────────
+async function _silentRefresh() {
+  const rt = localStorage.getItem('sv_refresh_token') || sessionStorage.getItem('sv_refresh_token') || localStorage.getItem('sv_refresh');
+  if (!rt) return false;
+  try {
+    const rr = await fetch(`${BASE}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: rt }),
+    });
+    if (!rr.ok) return false;
+    const rd = await rr.json();
+    if (!rd.accessToken) return false;
+    // Preserve the store the user originally chose (localStorage = remember-me ON)
+    const inSession = !localStorage.getItem('sv_access_token') && !!sessionStorage.getItem('sv_access_token');
+    const store = (inSession || !localStorage.getItem('sv_access_token')) ? localStorage : sessionStorage;
+    _token = rd.accessToken;
+    store.setItem('sv_access_token', _token);
+    if (rd.refreshToken) {
+      store.setItem('sv_refresh_token', rd.refreshToken);
+      localStorage.setItem('sv_refresh_token', rd.refreshToken); // always persist for cross-tab
+    }
+    return true;
+  } catch { return false; }
+}
+
 (async function init() {
-  if (!_token) return rl();
+  // If no access token in storage, try silent refresh before giving up.
+  // This covers: tab closed and reopened (sessionStorage cleared),
+  // 15-min access token expiry when user has "remember me" enabled,
+  // and any other case where the refresh token outlives the access token.
+  if (!_token) {
+    const refreshed = await _silentRefresh();
+    if (!refreshed) return rl();
+  }
 
   try {
     let r = await fetch(`${BASE}/auth/me`, { headers: { Authorization: 'Bearer ' + _token } });
 
-    // Token expired — try silent refresh before redirecting to login
+    // Token expired mid-session — try silent refresh before redirecting to login
     if (r.status === 401) {
-      const rt = localStorage.getItem('sv_refresh_token') || sessionStorage.getItem('sv_refresh_token') || localStorage.getItem('sv_refresh');
-      if (rt) {
-        try {
-          const rr = await fetch(`${BASE}/auth/refresh`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ refreshToken: rt }),
-          });
-          if (rr.ok) {
-            const rd = await rr.json();
-            if (rd.accessToken) {
-              const inSession = !localStorage.getItem('sv_access_token') && !!sessionStorage.getItem('sv_access_token');
-              const store = inSession ? sessionStorage : localStorage;
-              _token = rd.accessToken;
-              store.setItem('sv_access_token', _token);
-              if (rd.refreshToken) store.setItem('sv_refresh_token', rd.refreshToken);
-              r = await fetch(`${BASE}/auth/me`, { headers: { Authorization: 'Bearer ' + _token } });
-            }
-          }
-        } catch {}
+      const refreshed = await _silentRefresh();
+      if (refreshed) {
+        r = await fetch(`${BASE}/auth/me`, { headers: { Authorization: 'Bearer ' + _token } });
       }
     }
 
@@ -78,7 +94,10 @@ function escAttr(str) { return String(str||'').replace(/&/g,'&amp;').replace(/</
 // redirect back here and create an infinite loop.
 function rl() {
   ['sv_access_token','sv_token'].forEach(k => { localStorage.removeItem(k); sessionStorage.removeItem(k); });
-  window.location.href = '/login?redirect=/admin';
+  // Build the redirect URL from the current admin location (strip any stray ? or # so
+  // the login page does not end up with a double-? in the URL like /login?redirect=/admin??)
+  const adminPath = '/admin' + (window.location.hash || '');
+  window.location.href = '/login?redirect=' + encodeURIComponent(adminPath);
 }
 function doLogout() {
   const rt = localStorage.getItem('sv_refresh_token') || sessionStorage.getItem('sv_refresh_token') || localStorage.getItem('sv_refresh');
@@ -92,17 +111,45 @@ function hdr() {
     'Content-Type': 'application/json'
   };
 }
+let _refreshing = false;
+async function tryRefresh() {
+  if (_refreshing) return false;
+  _refreshing = true;
+  try {
+    const rt = localStorage.getItem('sv_refresh_token') || sessionStorage.getItem('sv_refresh_token') || localStorage.getItem('sv_refresh');
+    if (!rt) return false;
+    const rr = await fetch(`${BASE}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: rt }),
+    });
+    if (!rr.ok) return false;
+    const rd = await rr.json();
+    if (!rd.accessToken) return false;
+    const inSession = !localStorage.getItem('sv_access_token') && !!sessionStorage.getItem('sv_access_token');
+    const store = inSession ? sessionStorage : localStorage;
+    _token = rd.accessToken;
+    store.setItem('sv_access_token', _token);
+    if (rd.refreshToken) store.setItem('sv_refresh_token', rd.refreshToken);
+    return true;
+  } catch { return false; } finally { _refreshing = false; }
+}
 async function api(url, opts={}) {
-  const r = await fetch(BASE+url, { ...opts, headers:hdr() });
+  let r = await fetch(BASE+url, { ...opts, headers:hdr() });
+  if (r.status===401) {
+    const ok = await tryRefresh();
+    if (ok) r = await fetch(BASE+url, { ...opts, headers:hdr() });
+    else { rl(); throw new Error('401'); }
+  }
   if (r.status===401) { rl(); throw new Error('401'); }
-  if (r.status===403) { 
+  if (r.status===403) {
     alert('Acceso denegado: Se requiere rol de Super Admin');
     window.location.href = '/dashboard';
-    throw new Error('403'); 
+    throw new Error('403');
   }
   return r;
 }
-const SECTIONS = ['overview','workspaces','users','videos','billing','plans','gateways','referrals','ads','ad-library','queue','storage','security','audit','live','config'];
+const SECTIONS = ['overview','workspaces','users','videos','billing','plans','gateways','referrals','incidents','reports','ads','ad-library','queue','storage','security','audit','live','config'];
 function go(name, el) {
   SECTIONS.forEach(s => { const e=document.getElementById('s-'+s); if(e) e.style.display=s===name?'block':'none'; });
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
@@ -113,7 +160,7 @@ function go(name, el) {
   if (window.location.hash !== '#' + name) {
     window.location.hash = name;
   }
-  ({overview:loadOverview,workspaces:loadWorkspaces,users:loadUsers,videos:loadAdminVideos,billing:loadBilling,plans:loadPlansConfig,gateways:loadGateways,referrals:loadReferrals,ads:loadAdsOverview,'ad-library':loadAdLibrary,queue:loadQueue,storage:loadStorage,security:loadLockouts,audit:()=>loadAudit(1),live:loadLive,config:loadConfig})[name]?.();
+  ({overview:loadOverview,workspaces:loadWorkspaces,users:loadUsers,videos:loadAdminVideos,billing:loadBilling,plans:loadPlansConfig,gateways:loadGateways,referrals:loadReferrals,incidents:loadIncidentsAdmin,reports:loadReports,ads:loadAdsOverview,'ad-library':loadAdLibrary,queue:loadQueue,storage:loadStorage,security:loadLockouts,audit:()=>loadAudit(1),live:loadLive,config:loadConfig})[name]?.();
 }
 // Función para restaurar la sección desde el hash de la URL
 function restoreSection() {
@@ -1400,6 +1447,32 @@ function clearPlatformLogo() {
   const el = document.getElementById('cfg-platform-logo');
   if (el) el.value = '';
   previewPlatformLogo();
+}
+
+async function uploadPlatformLogo(input) {
+  const file = input?.files?.[0];
+  if (!file) return;
+  const statusEl = document.getElementById('cfg-platform-logo-upload-status');
+  if (statusEl) { statusEl.style.display = 'block'; statusEl.style.color = 'var(--muted)'; statusEl.textContent = 'Subiendo…'; }
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    const r = await fetch('/api/admin/upload-asset', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + (localStorage.getItem('sv_access_token') || '') },
+      body: formData,
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Error al subir');
+    const urlEl = document.getElementById('cfg-platform-logo');
+    if (urlEl) urlEl.value = d.url;
+    previewPlatformLogo();
+    if (statusEl) { statusEl.style.color = 'var(--green)'; statusEl.textContent = '✓ Logo subido correctamente'; }
+    // Reset file input so the same file can be uploaded again if needed
+    input.value = '';
+  } catch (err) {
+    if (statusEl) { statusEl.style.color = 'var(--red)'; statusEl.textContent = '✗ ' + (err.message || 'Error al subir'); }
+  }
 }
 
 async function savePlatform(){
@@ -3221,6 +3294,323 @@ async function loadReferrals(page = 1) {
   } catch (e) {
     toast('Error de conexión', 'error');
   }
+}
+
+/* ─── INCIDENTS & MAINTENANCE ───────────────────────────────── */
+let _incAllItems = [];
+let _incActiveFilter = 'all';
+let _incEditId = null;
+
+const INC_STATUS_LABELS = {
+  investigating: 'Investigando', identified: 'Identificado',
+  monitoring: 'Monitoreando', resolved: 'Resuelto',
+  scheduled: 'Programado', in_progress: 'En progreso', completed: 'Completado',
+};
+const INC_IMPACT_LABELS = { critical: 'Critico', major: 'Mayor', minor: 'Menor', maintenance: 'Mantenimiento' };
+const INC_BADGE_CLS = {
+  investigating: 'badge-danger', identified: 'badge-amber', monitoring: 'badge-blue',
+  resolved: 'badge-green', scheduled: 'badge-purple', in_progress: 'badge-amber', completed: 'badge-green',
+};
+
+function _fmtIncDate(ts) {
+  if (!ts) return '—';
+  return new Date(ts * 1000).toLocaleString('es-CO', {
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota',
+  });
+}
+
+async function loadIncidentsAdmin() {
+  const el = document.getElementById('incidents-admin-list');
+  if (!el) return;
+  el.innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted);font-size:13px;">Cargando…</div>';
+  try {
+    const r = await api('/api/health/incidents?limit=50');
+    const d = await r.json();
+    _incAllItems = d.incidents || [];
+    _renderIncidentsList();
+  } catch (e) {
+    el.innerHTML = '<div style="text-align:center;padding:32px;color:var(--red);font-size:13px;">Error al cargar incidentes.</div>';
+  }
+}
+
+function filterIncidentsAdmin(type, btn) {
+  _incActiveFilter = type;
+  document.querySelectorAll('#inc-tab-all, #inc-tab-incident, #inc-tab-maintenance').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  _renderIncidentsList();
+}
+
+function _renderIncidentsList() {
+  const el = document.getElementById('incidents-admin-list');
+  if (!el) return;
+  const items = _incActiveFilter === 'all' ? _incAllItems
+    : _incAllItems.filter(i => i.type === _incActiveFilter);
+  if (!items.length) {
+    el.innerHTML = `<div style="text-align:center;padding:48px 24px;color:var(--muted);">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:.3;margin-bottom:12px;display:block;margin-inline:auto;"><circle cx="12" cy="12" r="10"/><polyline points="20 6 9 17 4 12"/></svg>
+      Sin ${_incActiveFilter === 'maintenance' ? 'mantenimientos' : _incActiveFilter === 'incident' ? 'incidentes' : 'registros'}
+    </div>`;
+    return;
+  }
+  el.innerHTML = items.map(inc => {
+    const badgeCls = INC_BADGE_CLS[inc.status] || 'badge-user';
+    const badgeLabel = INC_STATUS_LABELS[inc.status] || inc.status;
+    const impactLabel = INC_IMPACT_LABELS[inc.impact] || inc.impact || '';
+    const svcs = Array.isArray(inc.services) ? inc.services.join(', ') : (inc.services || '');
+    const typeIcon = inc.type === 'maintenance'
+      ? `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent2)" stroke-width="2" style="flex-shrink:0;"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>`
+      : `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" stroke-width="2" style="flex-shrink:0;"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
+    const updates = (inc.updates || []);
+    const lastUpdate = updates.length ? updates[updates.length - 1] : null;
+    return `<div style="background:var(--surface);border:1px solid rgba(255,255,255,.08);border-radius:14px;overflow:hidden;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px 20px;">
+        <div style="display:flex;align-items:flex-start;gap:10px;min-width:0;flex:1;">
+          ${typeIcon}
+          <div style="min-width:0;flex:1;">
+            <div style="font-size:15px;font-weight:700;margin-bottom:4px;">${esc(inc.title)}</div>
+            <div style="font-size:12px;color:var(--muted);">${_fmtIncDate(inc.created_at)}${svcs ? ' &middot; ' + esc(svcs) : ''}${impactLabel ? ' &middot; ' + esc(impactLabel) : ''}</div>
+            ${lastUpdate ? `<div style="font-size:12px;color:var(--muted);margin-top:4px;font-style:italic;">"${esc((lastUpdate.body||'').substring(0,120))}${lastUpdate.body?.length>120?'…':''}"</div>` : ''}
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;">
+          <span class="badge ${badgeCls}" style="font-size:11px;border-radius:99px;">${esc(badgeLabel)}</span>
+          <button class="btn btn-ghost btn-sm" onclick="openIncidentUpdateModal('${inc.id}','${escAttr(inc.title)}','${inc.status}')" title="Agregar actualización">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            Actualizar
+          </button>
+          <button class="btn btn-danger btn-sm" onclick="deleteIncidentAdmin('${inc.id}','${escAttr(inc.title)}')" title="Eliminar">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+          </button>
+        </div>
+      </div>
+      ${updates.length ? `
+      <div style="border-top:1px solid rgba(255,255,255,.06);padding:12px 20px;display:flex;flex-direction:column;gap:8px;">
+        ${updates.map((u,i,arr) => `
+          <div style="display:flex;gap:10px;align-items:flex-start;">
+            <div style="display:flex;flex-direction:column;align-items:center;padding-top:4px;">
+              <div style="width:7px;height:7px;border-radius:50%;background:var(--accent2);flex-shrink:0;"></div>
+              ${i<arr.length-1?'<div style="width:1px;flex:1;background:rgba(255,255,255,.08);margin-top:3px;min-height:16px;"></div>':''}
+            </div>
+            <div style="font-size:12px;line-height:1.6;flex:1;">
+              <strong style="color:var(--accent2);font-size:10px;text-transform:uppercase;letter-spacing:.5px;margin-right:6px;">${INC_STATUS_LABELS[u.status]||u.status||''}</strong>${esc(u.body||'')}
+              <div style="font-size:11px;color:var(--muted);margin-top:2px;">${_fmtIncDate(u.created_at)}</div>
+            </div>
+          </div>`).join('')}
+      </div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function openIncidentModal(type) {
+  _incEditId = null;
+  const modal = document.getElementById('incident-modal');
+  if (!modal) return;
+  document.getElementById('inc-modal-title').textContent = type === 'maintenance' ? 'Programar Mantenimiento' : 'Nuevo Incidente';
+  document.getElementById('inc-modal-type').value = type;
+  document.getElementById('inc-modal-title-input').value = '';
+  document.getElementById('inc-modal-status').value = type === 'maintenance' ? 'scheduled' : 'investigating';
+  document.getElementById('inc-modal-impact').value = type === 'maintenance' ? 'maintenance' : 'minor';
+  document.getElementById('inc-modal-services').value = '';
+  document.getElementById('inc-modal-body').value = '';
+  document.getElementById('inc-modal-scheduled').value = '';
+  document.getElementById('inc-modal-notify').checked = true;
+  // Mostrar/ocultar campo de fecha programada
+  const schedWrap = document.getElementById('inc-modal-scheduled-wrap');
+  if (schedWrap) schedWrap.style.display = type === 'maintenance' ? 'block' : 'none';
+  _updateIncStatusOptions(type);
+  openModal('incident-modal');
+  setTimeout(() => document.getElementById('inc-modal-title-input').focus(), 100);
+}
+
+function _updateIncStatusOptions(type) {
+  const sel = document.getElementById('inc-modal-status');
+  if (!sel) return;
+  if (type === 'maintenance') {
+    sel.innerHTML = `<option value="scheduled">Programado</option><option value="in_progress">En progreso</option><option value="completed">Completado</option>`;
+  } else {
+    sel.innerHTML = `<option value="investigating">Investigando</option><option value="identified">Identificado</option><option value="monitoring">Monitoreando</option><option value="resolved">Resuelto</option>`;
+  }
+}
+
+async function saveIncidentModal() {
+  const btn = document.getElementById('inc-modal-save-btn');
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  try {
+    const type      = document.getElementById('inc-modal-type').value;
+    const title     = document.getElementById('inc-modal-title-input').value.trim();
+    const status    = document.getElementById('inc-modal-status').value;
+    const impact    = document.getElementById('inc-modal-impact').value;
+    const svcsRaw   = document.getElementById('inc-modal-services').value.trim();
+    const body      = document.getElementById('inc-modal-body').value.trim();
+    const schedRaw  = document.getElementById('inc-modal-scheduled').value;
+    const notify    = document.getElementById('inc-modal-notify').checked;
+    if (!title) { toast('El título es requerido', 'error'); return; }
+    const services = svcsRaw ? svcsRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+    const scheduled_at = schedRaw ? Math.floor(new Date(schedRaw).getTime() / 1000) : null;
+    const payload = { type, title, status, impact, services, body: body || undefined, scheduled_at, notify };
+    const r = await api('/api/health/incidents', { method: 'POST', body: JSON.stringify(payload) });
+    const d = await r.json();
+    if (!r.ok) { toast(d.error || 'Error al crear', 'error'); return; }
+    toast(`${type === 'maintenance' ? 'Mantenimiento' : 'Incidente'} creado. Notificaciones enviadas.`);
+    closeModal('incident-modal');
+    loadIncidentsAdmin();
+  } catch (e) {
+    toast('Error de conexión', 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Crear';
+  }
+}
+
+function openIncidentUpdateModal(id, title, currentStatus) {
+  const modal = document.getElementById('inc-update-modal');
+  if (!modal) return;
+  _incEditId = id;
+  document.getElementById('inc-upd-title').textContent = title;
+  document.getElementById('inc-upd-body').value = '';
+  document.getElementById('inc-upd-status').value = currentStatus || 'monitoring';
+  document.getElementById('inc-upd-resolved').checked = (currentStatus === 'resolved' || currentStatus === 'completed');
+  openModal('inc-update-modal');
+  setTimeout(() => document.getElementById('inc-upd-body').focus(), 100);
+}
+
+async function saveIncidentUpdate() {
+  if (!_incEditId) return;
+  const btn = document.getElementById('inc-upd-save-btn');
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  try {
+    const body     = document.getElementById('inc-upd-body').value.trim();
+    const status   = document.getElementById('inc-upd-status').value;
+    const resolved = document.getElementById('inc-upd-resolved').checked;
+    if (!body) { toast('El mensaje es requerido', 'error'); return; }
+    const r = await api(`/api/health/incidents/${_incEditId}/updates`, {
+      method: 'POST',
+      body: JSON.stringify({ body, status, resolved }),
+    });
+    const d = await r.json();
+    if (!r.ok) { toast(d.error || 'Error', 'error'); return; }
+    toast('Actualización agregada');
+    closeModal('inc-update-modal');
+    loadIncidentsAdmin();
+  } catch (e) {
+    toast('Error de conexión', 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Guardar';
+  }
+}
+
+async function deleteIncidentAdmin(id, title) {
+  if (!await confirmModal(`¿Eliminar "${title}"? Esta acción no se puede deshacer.`, 'Eliminar', 'Eliminar incidente', true)) return;
+  try {
+    const r = await api(`/api/health/incidents/${id}`, { method: 'DELETE' });
+    if (r.ok) { toast('Eliminado correctamente'); loadIncidentsAdmin(); }
+    else { const d = await r.json().catch(()=>({})); toast(d.error || 'Error', 'error'); }
+  } catch { toast('Error de conexión', 'error'); }
+}
+
+/* ─── REPORTS (Contact messages from /status) ───────────────── */
+let _allReports = [];
+let _rptFilter  = 'all';
+
+const RPT_TYPE_LABELS  = { contact: 'Consulta', incident: 'Incidente', feedback: 'Sugerencia' };
+const RPT_STATUS_CLS   = { pending: 'badge-amber', reviewed: 'badge-blue', resolved: 'badge-green' };
+const RPT_STATUS_LABEL = { pending: 'Pendiente', reviewed: 'Revisado', resolved: 'Resuelto' };
+
+async function loadReports() {
+  const el = document.getElementById('reports-list');
+  if (!el) return;
+  el.innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted);font-size:13px;">Cargando…</div>';
+  try {
+    const r = await api('/api/admin/reports?limit=100');
+    const d = await r.json();
+    _allReports = d.reports || [];
+    _renderReports();
+  } catch (e) {
+    el.innerHTML = '<div style="text-align:center;padding:32px;color:var(--red);font-size:13px;">Error al cargar reportes.</div>';
+  }
+}
+
+function filterReports(filter, btn) {
+  _rptFilter = filter;
+  document.querySelectorAll('#rpt-tab-all,#rpt-tab-pending,#rpt-tab-reviewed').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  _renderReports();
+}
+
+function _renderReports() {
+  const el = document.getElementById('reports-list');
+  if (!el) return;
+  const items = _rptFilter === 'all' ? _allReports : _allReports.filter(r => r.status === _rptFilter);
+
+  if (!items.length) {
+    el.innerHTML = `<div style="text-align:center;padding:48px 24px;color:var(--muted);">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:.3;margin-bottom:12px;display:block;margin-inline:auto;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      Sin ${_rptFilter === 'pending' ? 'mensajes pendientes' : _rptFilter === 'reviewed' ? 'mensajes revisados' : 'mensajes'}
+    </div>`;
+    return;
+  }
+
+  el.innerHTML = items.map(r => {
+    const typeCls  = RPT_TYPE_LABELS[r.type]  || r.type;
+    const stsCls   = RPT_STATUS_CLS[r.status]  || 'badge-user';
+    const stsLabel = RPT_STATUS_LABEL[r.status] || r.status;
+    const date = r.created_at ? new Date(r.created_at * 1000).toLocaleString('es-CO', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit', timeZone:'America/Bogota' }) : '—';
+    return `<div style="background:var(--surface);border:1px solid rgba(255,255,255,.08);border-radius:14px;overflow:hidden;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px 20px;">
+        <div style="min-width:0;flex:1;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
+            <span class="badge" style="font-size:11px;">${esc(typeCls)}</span>
+            <span class="badge ${stsCls}" style="font-size:11px;border-radius:99px;">${esc(stsLabel)}</span>
+            <span style="font-size:12px;color:var(--muted);">${date}</span>
+          </div>
+          <div style="font-size:15px;font-weight:700;margin-bottom:3px;">${esc(r.subject || r.message?.slice(0,60) || '—')}</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">
+            <a href="mailto:${esc(r.email)}" style="color:var(--accent2);text-decoration:none;">${esc(r.email)}</a>
+            ${r.name ? ` &middot; ${esc(r.name)}` : ''}
+          </div>
+          <div style="font-size:13px;line-height:1.65;color:var(--text2);background:rgba(255,255,255,.04);border-radius:8px;padding:10px 12px;white-space:pre-wrap;">${esc(r.message || '')}</div>
+          ${r.admin_note ? `<div style="margin-top:8px;font-size:12px;color:var(--muted);border-left:2px solid var(--accent2);padding-left:10px;font-style:italic;">${esc(r.admin_note)}</div>` : ''}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;">
+          <a class="btn btn-ghost btn-sm" href="mailto:${esc(r.email)}?subject=Re: ${esc(r.subject || 'Tu consulta')}" title="Responder por email">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            Responder
+          </a>
+          ${r.status === 'pending' ? `<button class="btn btn-ghost btn-sm" onclick="markReportReviewed('${r.id}')" title="Marcar como revisado">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+            Marcar revisado
+          </button>` : ''}
+          <button class="btn btn-danger btn-sm" onclick="deleteReport('${r.id}')" title="Eliminar">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function markReportReviewed(id) {
+  try {
+    const r = await api(`/api/admin/reports/${id}`, { method: 'PATCH', body: JSON.stringify({ status: 'reviewed' }) });
+    if (r.ok) {
+      const idx = _allReports.findIndex(x => x.id === id);
+      if (idx !== -1) _allReports[idx].status = 'reviewed';
+      _renderReports();
+      toast('Marcado como revisado');
+    } else toast('Error', 'error');
+  } catch { toast('Error de conexion', 'error'); }
+}
+
+async function deleteReport(id) {
+  if (!await confirmModal('Eliminar este reporte permanentemente?', 'Eliminar', 'Eliminar reporte', true)) return;
+  try {
+    const r = await api(`/api/admin/reports/${id}`, { method: 'DELETE' });
+    if (r.ok) {
+      _allReports = _allReports.filter(x => x.id !== id);
+      _renderReports();
+      toast('Reporte eliminado');
+    } else toast('Error', 'error');
+  } catch { toast('Error de conexion', 'error'); }
 }
 
 /* ─── UTILS ──────────────────────────────────────────────────── */

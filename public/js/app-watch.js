@@ -200,7 +200,7 @@ async function init(){
           <div class="sidebar-label">Relacionados</div>
           <div class="related-list">
             ${related.length?related.map((rv,_ri)=>{
-              const thumb=rv.thumbnailUrl||`${BASE}/videos/${rv.id}/thumb.jpg`;
+              const thumb=rv.thumbnailUrl||`${BASE}/api/videos/${rv.id}/thumb`;
               return `<a href="${BASE}/watch/${esc(rv.id)}" class="related-card">
                 <div class="related-thumb">
                   <img src="${esc(thumb)}" alt="${esc(rv.title)}" loading="lazy" id="rthumb-${_ri}" onload="" onerror="this.style.display='none';var p=document.createElement('div');p.className='thumb-placeholder';p.innerHTML='<svg width=24 height=24 viewBox=&quot;0 0 24 24&quot; fill=none stroke=currentColor stroke-width=1.5><polygon points=&quot;5 3 19 12 5 21 5 3&quot;/></svg>';this.parentElement.appendChild(p);">

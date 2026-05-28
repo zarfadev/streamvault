@@ -135,19 +135,15 @@ async function initSvCaptcha() {
       status.style.color     = '#22c55e';
       if (btnReg) { btnReg.disabled = false; btnReg.style.opacity = '1'; btnReg.style.cursor = ''; }
     } else {
-      // ❌ Incorrecto — volver al inicio
+      // ❌ Incorrecto — mostrar error y pedir nuevo challenge (posición diferente)
       piece.style.transition = 'left .15s ease';
       piece.style.background = 'linear-gradient(135deg,#ef4444,#dc2626)';
       piece.style.boxShadow  = '0 4px 14px rgba(239,68,68,.5)';
       status.textContent     = '✗ No coincide — inténtalo de nuevo';
       status.style.color     = '#ef4444';
-      setTimeout(() => {
-        piece.style.left       = PIECE_M + 'px';
-        piece.style.background = 'linear-gradient(135deg,#7c6cfa,#5b4fd4)';
-        piece.style.boxShadow  = '0 2px 12px rgba(124,108,250,.45)';
-        status.textContent     = 'Desliza de nuevo';
-        status.style.color     = 'var(--muted)';
-      }, 900);
+      // Reiniciar con nueva posición tras un breve delay para que el bot
+      // no pueda predecir dónde estará el target en el siguiente intento
+      setTimeout(() => initSvCaptcha(), 900);
     }
   }
 
@@ -304,7 +300,8 @@ async function doLogin() {
 
     storeTokens(data, remember);
 
-    const redirectTo = urlParams.get('redirect');
+    // Support both ?redirect= (from admin panel) and ?next= (from dashboard idle-logout)
+    const redirectTo = urlParams.get('redirect') || urlParams.get('next');
     const role = data.user?.platform_role;
     if (redirectTo && redirectTo.startsWith('/')) {
       window.location.href = redirectTo;

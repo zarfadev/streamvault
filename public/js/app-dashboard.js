@@ -42,6 +42,7 @@
     let authWorkspace = null;
     let authWorkspaces = [];
     let allVideosCache = [];
+    let _videosTotalCount = null; // real total from API pagination (all pages)
     // Billing status cache — populated by loadUpgradePlans(); used by updateUpgradePlanDetails()
     let billingStatus = null;
     let _libView = localStorage.getItem('sv_lib_view') || 'list';
@@ -2552,6 +2553,11 @@ function doLogout() {
       if (_uploadRunning) return;
       const pending = _uploadQueue.filter(i => i.status === 'pending');
       if (!pending.length) return toast('Sin archivos pendientes', 'error');
+      // Guard: user must be authenticated AND have a workspace selected.
+      // Without workspace the server rejects the upload (WORKSPACE_REQUIRED) and
+      // the video is orphaned (no user/workspace in admin panel).
+      if (!authToken) return toast('Debes iniciar sesión para subir videos', 'error');
+      if (!authWorkspace?.id) return toast('Selecciona un workspace antes de subir', 'error');
       _uploadRunning = true;
       document.getElementById('uq-upload-btn').disabled = true;
       for (const item of pending) {
@@ -2583,6 +2589,10 @@ function doLogout() {
         xhr.open('POST', '/api/upload');
         if (authToken) xhr.setRequestHeader('Authorization', 'Bearer ' + authToken);
         if (authWorkspace?.id) xhr.setRequestHeader('x-workspace-id', authWorkspace.id);
+        // Send refresh token so server can silently restore auth if the 15-min
+        // access token expires during a large-file upload (>15 min transfer time).
+        const _rt = localStorage.getItem('sv_refresh_token') || sessionStorage.getItem('sv_refresh_token') || localStorage.getItem('sv_refresh') || '';
+        if (_rt) xhr.setRequestHeader('x-refresh-token', _rt);
         xhr.upload.onprogress = e => {
           if (e.lengthComputable) {
             item.pct = Math.round((e.loaded / e.total) * 100);
@@ -2609,7 +2619,9 @@ function doLogout() {
     // ─── Library ──────────────────────────────────────────────────
     function loadStats() {
       const videos = allVideosCache;
-      document.getElementById('stat-total').textContent = videos.length;
+      // Use API-reported total when available (real count across all pages)
+      const total = _videosTotalCount !== null ? _videosTotalCount : videos.length;
+      document.getElementById('stat-total').textContent = total.toLocaleString('es');
       document.getElementById('stat-ready').textContent = videos.filter(v => v.status === 'ready').length;
       document.getElementById('stat-proc').textContent = videos.filter(v => ['queued', 'transcoding', 'processing'].includes(v.status)).length;
       document.getElementById('stat-views').textContent = videos.reduce((s, v) => s + (v.views || 0), 0).toLocaleString('es');
@@ -2877,19 +2889,19 @@ function doLogout() {
         if (!r.ok) throw new Error('failed');
         const json = await r.json();
         const list = json.videos || (Array.isArray(json) ? json : []);
-        if (page === 1) {
-          allVideosCache = list;
-        } else {
-          allVideosCache = [...allVideosCache, ...list];
-        }
+        // Each page navigation replaces the cache (not append); only poll-refresh
+        // on page 1 accumulates — all other page loads are discrete page views.
+        allVideosCache = list;
         videosPage = page;
-        videosTotalPages = json.pagination?.pages || 1;
+        videosTotalPages = json.pagination?.pages || (json.pagination?.hasMore ? page + 1 : page);
+        _videosTotalCount = json.pagination?.total ?? null;
         refreshTagFilter();
         applyLibraryFilters();
-        if (page === 1) {
+        {
           loadStats();
           const tb = document.getElementById('library-total-badge');
-          if (tb) { const n = json.pagination?.total ?? allVideosCache.length; tb.textContent = n; tb.style.display = n ? '' : 'none'; }
+          const n = _videosTotalCount ?? json.pagination?.total ?? allVideosCache.length;
+          if (tb) { tb.textContent = n; tb.style.display = n ? '' : 'none'; }
         }
         const anyProc = allVideosCache.some(v => ['queued', 'transcoding', 'processing'].includes(v.status));
         if (anyProc && !pollInterval) startPolling();
@@ -2950,6 +2962,15 @@ function doLogout() {
             return `<div style="display:flex;flex-direction:column;gap:3px;">
               <span class="vt-status processing">${label}</span>
               <div style="height:3px;border-radius:2px;background:var(--surface3);overflow:hidden;width:80px;"><div style="height:100%;width:${pct}%;background:var(--amber);border-radius:2px;transition:width .5s;"></div></div>
+            </div>`;
+          }
+          // Video listo pero calidades secundarias aún procesando en segundo plano
+          if (v.status === 'ready'
+            && typeof v.qualities_expected === 'number' && v.qualities_expected > 0
+            && (v.qualities || []).length < v.qualities_expected) {
+            return `<div style="display:flex;flex-direction:column;gap:3px;align-items:flex-start;">
+              <span class="vt-status ready">Listo</span>
+              <span style="display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;padding:1px 6px;border-radius:99px;background:rgba(251,191,36,.1);color:var(--amber);border:1px solid rgba(251,191,36,.2);white-space:nowrap;" title="Procesando calidades adicionales en segundo plano"><span class="spinner" style="width:5px;height:5px;border-width:1px;border-color:var(--amber);border-top-color:transparent;"></span>${(v.qualities||[]).length}/${v.qualities_expected} cal.</span>
             </div>`;
           }
           const map = {
@@ -3101,12 +3122,12 @@ function doLogout() {
           const prevDisabled = videosPage <= 1;
           const nextDisabled = videosPage >= videosTotalPages;
           const pageNums = buildPageNumbers(videosPage, videosTotalPages);
-          const totalItems = allVideosCache.length;
+          const totalItems = _videosTotalCount !== null ? _videosTotalCount : allVideosCache.length;
           const startItem = (videosPage - 1) * _pageLimit + 1;
           const endItem = Math.min(videosPage * _pageLimit, totalItems);
           grid.insertAdjacentHTML('beforeend', `
             <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 0;border-top:1px solid var(--border);margin-top:2px;flex-wrap:wrap;">
-              <span class="pagination-info">Mostrando ${startItem}–${endItem} de ${totalItems} video${totalItems !== 1 ? 's' : ''}</span>
+              <span class="pagination-info">Mostrando ${startItem}–${endItem} de ${totalItems.toLocaleString('es')} video${totalItems !== 1 ? 's' : ''}</span>
               <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
                 <button class="btn btn-ghost" style="padding:6px 12px;font-size:13px;" onclick="loadVideos(${videosPage-1})" ${prevDisabled?'disabled style="opacity:0.4;cursor:not-allowed;"':''}><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg></button>
                 ${pageNums.map(p => p === '…'
@@ -3178,9 +3199,9 @@ function doLogout() {
           <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0;">
             ${statusLabel}
             ${isPartialReady ? `<span style="display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;padding:1px 6px;border-radius:99px;background:rgba(251,191,36,.1);color:var(--amber);border:1px solid rgba(251,191,36,.2);white-space:nowrap;" title="Procesando calidades adicionales en segundo plano"><span class="spinner" style="width:5px;height:5px;border-width:1px;border-color:var(--amber);border-top-color:transparent;"></span>${(v.qualities||[]).length}/${v.qualities_expected} cal.</span>` : ''}
+            ${isProcessing ? `<div style="width:100%;"><div style="height:3px;border-radius:2px;background:var(--surface3);overflow:hidden;"><div style="height:100%;width:${v.progress_pct ?? 0}%;background:var(--amber);border-radius:2px;transition:width .5s ease;"></div></div></div>` : ''}
           </div>
         </div>
-        ${isProcessing ? `<div style="margin:4px 0 6px;"><div style="height:3px;border-radius:2px;background:var(--surface3);overflow:hidden;"><div style="height:100%;width:${v.progress_pct ?? 0}%;background:var(--amber);border-radius:2px;transition:width .5s ease;"></div></div><div style="font-size:10px;color:var(--amber);margin-top:3px;font-family:var(--mono);">${v.progress_pct ?? 0}% completado</div></div>` : ''}
         <div class="video-meta">
           ${v.duration ? `<span><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>${formatDuration(v.duration)}</span>` : ''}
           ${v.size ? `<span><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>${formatSize(v.size)}</span>` : ''}
@@ -7147,7 +7168,7 @@ function copyLink(id, type) {
       return `sv_ob_${authUser.id}_${authWorkspace.id}`;
     }
 
-    function initOnboarding() {
+    async function initOnboarding() {
       const key = onboardingKey();
       if (!key) return;
       if (localStorage.getItem(key)) return; // permanently done
@@ -7155,7 +7176,19 @@ function copyLink(id, type) {
       renderOnboarding();
       // Auto-open only if not dismissed this session AND has pending critical steps
       const emailVerified = !!(authUser?.email_verified);
-      const hasVideos = !!(allVideosCache && allVideosCache.length > 0);
+      // allVideosCache may be empty because loadVideos() hasn't finished yet — query
+      // the API for a quick count before deciding whether to open the overlay.
+      let hasVideos = !!(allVideosCache && allVideosCache.length > 0);
+      if (!hasVideos) {
+        try {
+          const r = await apiFetch(`${BASE}/api/videos?limit=1`);
+          if (r.ok) {
+            const d = await r.json();
+            const list = d.videos || (Array.isArray(d) ? d : []);
+            hasVideos = list.length > 0 || (d.pagination?.total || 0) > 0;
+          }
+        } catch { /* ignore — keeps hasVideos=false if network fails */ }
+      }
       if (!emailVerified || !hasVideos) {
         if (!sessionStorage.getItem(key + '_skip')) {
           document.getElementById('onboarding-overlay').style.display = 'flex';
@@ -7819,6 +7852,7 @@ function copyLink(id, type) {
       loadSecurityWidget();
       loadPlanUsage();
       initOnboarding();
+      startIdleTimeout();
       startNotifPolling();
       const bellWrap = document.getElementById('notif-bell-wrap');
       if (bellWrap) bellWrap.style.display = '';
@@ -7834,5 +7868,93 @@ function copyLink(id, type) {
           setTimeout(() => switchSettingsTab('billing'), 250);
         }, 400);
       }
+    // ─── Idle Timeout "¿Sigues aquí?" (PayPal-style) ──────────────────────────
+    // 15 min of inactivity → warning modal with 2-min countdown → auto-logout
+    function startIdleTimeout() {
+      const IDLE_WARN_MS  = 15 * 60 * 1000; // 15 min → show "¿Sigues aquí?"
+      const IDLE_GRACE_MS =  2 * 60 * 1000; // 2 more min → auto-logout
+      let idleTimer   = null;
+      let graceTimer  = null;
+      let countdownInterval = null;
+      let warningVisible = false;
+
+      // Build the modal once and append to body
+      const MODAL_ID = 'idle-timeout-modal';
+      if (!document.getElementById(MODAL_ID)) {
+        const m = document.createElement('div');
+        m.id = MODAL_ID;
+        m.style.cssText = 'display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.65);backdrop-filter:blur(4px);align-items:center;justify-content:center;';
+        m.innerHTML = `
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;padding:36px 32px;max-width:380px;width:90%;text-align:center;box-shadow:0 24px 64px rgba(0,0,0,.4);">
+            <div style="width:56px;height:56px;border-radius:50%;background:rgba(251,191,36,.15);border:2px solid rgba(251,191,36,.4);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            </div>
+            <h3 style="margin:0 0 8px;font-size:20px;font-weight:700;color:var(--text);">¿Sigues aquí?</h3>
+            <p style="margin:0 0 6px;color:var(--muted);font-size:14px;line-height:1.5;">Tu sesión está a punto de cerrarse por inactividad.</p>
+            <p style="margin:0 0 24px;color:var(--muted);font-size:13px;">Cierre automático en <strong id="idle-countdown" style="color:#fbbf24;font-size:18px;display:inline-block;min-width:28px;">2:00</strong></p>
+            <button onclick="window._idleKeepAlive()" style="width:100%;padding:13px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;margin-bottom:10px;transition:opacity .2s;" onmouseover="this.style.opacity='.88'" onmouseout="this.style.opacity='1'">Seguir conectado</button>
+            <button onclick="window._idleLogout()" style="width:100%;padding:11px;background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:10px;font-size:14px;cursor:pointer;transition:background .2s;" onmouseover="this.style.background='rgba(255,255,255,.05)'" onmouseout="this.style.background='transparent'">Cerrar sesión ahora</button>
+          </div>
+        `;
+        document.body.appendChild(m);
+      }
+
+      function getModal()      { return document.getElementById(MODAL_ID); }
+      function getCountdown()  { return document.getElementById('idle-countdown'); }
+
+      function fmtSecs(s) {
+        const m = Math.floor(s / 60), sec = s % 60;
+        return `${m}:${String(sec).padStart(2, '0')}`;
+      }
+
+      function showWarning() {
+        if (warningVisible) return;
+        warningVisible = true;
+        const modal = getModal();
+        modal.style.display = 'flex';
+        let remaining = Math.round(IDLE_GRACE_MS / 1000);
+        const el = getCountdown();
+        if (el) el.textContent = fmtSecs(remaining);
+        countdownInterval = setInterval(() => {
+          remaining--;
+          const el2 = getCountdown();
+          if (el2) el2.textContent = fmtSecs(Math.max(0, remaining));
+        }, 1000);
+        // Auto-logout after grace period
+        graceTimer = setTimeout(() => {
+          clearInterval(countdownInterval);
+          doLogout();
+        }, IDLE_GRACE_MS);
+      }
+
+      function hideWarning() {
+        warningVisible = false;
+        const modal = getModal();
+        modal.style.display = 'none';
+        clearInterval(countdownInterval);
+        clearTimeout(graceTimer);
+      }
+
+      function resetIdleTimer() {
+        clearTimeout(idleTimer);
+        // If warning is showing, activity dismisses it and resets the clock
+        if (warningVisible) hideWarning();
+        idleTimer = setTimeout(showWarning, IDLE_WARN_MS);
+      }
+
+      // Expose handlers for the inline button onclick attributes
+      window._idleKeepAlive = resetIdleTimer;
+      window._idleLogout    = doLogout;
+
+      // Track any user activity
+      ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart', 'click'].forEach(ev => {
+        document.addEventListener(ev, resetIdleTimer, { passive: true });
+      });
+
+      // Start the timer
+      resetIdleTimer();
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     });
-  
+

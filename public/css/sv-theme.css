@@ -1,9 +1,10 @@
 /**
  * StreamVault — tokens y utilidades compartidas (landing, login, dashboard)
  */
-html { background: #0a0a0f; overflow-x: clip; }
-/* No poner overflow-x:hidden en body — recortaría tablas y contenido con scroll propio.
-   overflow-x:clip en html evita scroll lateral de la página sin afectar elementos internos. */
+html { background: #0a0a0f; }
+/* overflow-x:clip en html bloqueaba el scroll vertical en iOS/Safari mobile.
+   Se eliminó — el scroll horizontal se controla a nivel de cada página con overflow-x:hidden en body. */
+body { overflow-x: hidden; }
 :root {
   --bg: #0a0a0f;
   --surface: #111118;

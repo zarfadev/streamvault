@@ -145,15 +145,23 @@ app.use((req, res, next) => {
     // cdn.jsdelivr.net for HLS.js; imasdk.googleapis.com for Chromecast
     // cloudflareinsights.com for Cloudflare beacon reporting
     // _appOrigin: custom-domain embeds must connect back to main API + CDN
+    // streamvault.link: legacy domain — existing m3u8 files on S3 reference HLS key
+    //   URLs under this domain; must remain in connect-src until all videos are
+    //   re-transcoded or the S3 playlists are rewritten.
     [
       "connect-src 'self'",
       _appOrigin,
       cdnOrigins,
+      'https://streamvault.link',
       'cdn.jsdelivr.net',
       'unpkg.com',
       'imasdk.googleapis.com',
       'cloudflareinsights.com',
       'https://cloudflareinsights.com',
+      // Necesario para detección de AdBlock via fetch().
+      // Sin esta entrada el CSP bloquea el fetch antes de que el adblocker
+      // tenga oportunidad de actuar, causando falsos positivos siempre.
+      'https://pagead2.googlesyndication.com',
     ].filter(Boolean).join(' '),
     "worker-src blob:",
     // frame-src: explicit to avoid default-src fallback triggering CSP violations
@@ -292,11 +300,15 @@ app.use(async (req, res, next) => {
     // This prevents random CNAME squatters from serving StreamVault under their domain.
     // Exception: Let's Encrypt ACME challenges must pass through for cert provisioning.
     if (req.path.startsWith('/.well-known/acme-challenge/')) return next();
-    const platformOrigin = process.env.APP_URL || 'https://streamvault.link';
+    const platformOrigin = process.env.APP_URL || 'https://streamvault.es';
     return res.redirect(302, platformOrigin);
   }
 
-  // Verified custom domain — enforce allowed routes
+  // Verified custom domain — tag request with owning workspace so downstream
+  // routes can reject videos that don't belong to this workspace.
+  req.customDomainWorkspaceId = wsId;
+
+  // Enforce allowed routes
   const p = req.path;
   const allowed =
     CD_ALLOWED_EXACT.has(p) ||
@@ -305,7 +317,7 @@ app.use(async (req, res, next) => {
   if (allowed) return next();
 
   // Not a video route on a custom domain → redirect to platform
-  const platformOrigin = process.env.APP_URL || 'https://streamvault.link';
+  const platformOrigin = process.env.APP_URL || 'https://streamvault.es';
   return res.redirect(302, platformOrigin + req.originalUrl);
 });
 
@@ -484,6 +496,74 @@ setInterval(() => {
     `DELETE FROM notifications WHERE created_at < ?`
   ).run(cutoff).catch(err => logger.warn({ err: err.message }, 'notifications cleanup failed'));
 }, 24 * 60 * 60 * 1000);
+
+// ─── Status history — cron cada 60 s ─────────────────────────────────────────
+// Registra el estado de cada servicio en status_history para mostrar barras de
+// uptime de 90 días en la status page (persistente entre reinicios/deploys).
+// Purga entradas >91 días para no crecer indefinidamente.
+async function _recordStatusHistory() {
+  if (_shuttingDown) return;
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const s3svc = require('./services/s3Storage');
+
+    // Checks rápidos sin timeout agresivo — ya corremos en background
+    const dbOk = await database.prepare('SELECT 1').get().then(() => true).catch(() => false);
+
+    let redisOk = true;
+    if (require('./config').redisUrl) {
+      try {
+        const Redis = require('ioredis');
+        const c = new Redis(require('./config').redisUrl, {
+          enableOfflineQueue: false, maxRetriesPerRequest: 0,
+          connectTimeout: 2000, commandTimeout: 2000, lazyConnect: true,
+          retryStrategy: () => null,
+        });
+        c.on('error', () => {});
+        const pong = await Promise.race([
+          c.connect().then(() => c.ping()).then(async p => { await c.quit().catch(() => {}); return p; }),
+          new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 3000)),
+        ]);
+        redisOk = pong === 'PONG';
+      } catch { redisOk = false; }
+    }
+
+    let s3Ok = true;
+    if (s3svc.isS3Enabled()) {
+      const r = await s3svc.headBucket().catch(() => ({ ok: false }));
+      s3Ok = !!r.ok;
+    }
+
+    const workerRow = await database.prepare(`SELECT healthy, checked_at FROM status_checks WHERE service = 'worker'`).get().catch(() => null);
+    const workerOk = workerRow && workerRow.healthy && (now - workerRow.checked_at) <= 300;
+
+    const entries = [
+      { service: 'api',      status: 'ok' },
+      { service: 'database', status: dbOk    ? 'ok' : 'error' },
+      { service: 'redis',    status: redisOk ? 'ok' : 'error' },
+      { service: 's3',       status: s3Ok    ? 'ok' : 'error' },
+      { service: 'worker',   status: workerOk ? 'ok' : 'degraded' },
+    ];
+    for (const e of entries) {
+      await database.prepare(
+        `INSERT INTO status_history (service, status, checked_at) VALUES (?, ?, ?)`
+      ).run(e.service, e.status, now);
+    }
+
+    // Purgar entradas >91 días
+    const purgeCutoff = now - 91 * 86400;
+    await database.prepare(`DELETE FROM status_history WHERE checked_at < ?`).run(purgeCutoff);
+  } catch (err) {
+    logger.warn({ err: err.message }, 'status history recording failed');
+  }
+}
+
+// Arrancar cron de status history (se inicia al final del init, pero registramos la función aquí)
+// El primer check corre 10s después del arranque, luego cada 60s.
+setTimeout(() => {
+  _recordStatusHistory();
+  setInterval(_recordStatusHistory, 60_000);
+}, 10_000);
 
 function extractOrigin(req) {
   const raw = req.headers.origin || req.headers.referer || '';
@@ -677,6 +757,38 @@ app.get('/api/videos/:id/credits', async (req, res) => {
 });
 
 app.use('/api/videos', require('./routes/videos'));
+
+// ─── Thumbnail proxy — serves thumb.jpg without CloudFront signed cookies ──
+// Related-video cards and OG images request thumbnails before stream-session
+// cookies are set. This endpoint serves the local file, or generates a
+// short-lived presigned S3 URL and redirects so the browser can fetch it.
+app.get('/api/videos/:id/thumb', async (req, res) => {
+  try {
+    const video = await database.prepare(
+      'SELECT id, workspace_id FROM videos WHERE id = ?'
+    ).get(req.params.id);
+    if (!video) return res.status(404).end();
+
+    const localPath = require('path').join(__dirname, 'videos', video.id, 'thumb.jpg');
+    if (require('fs').existsSync(localPath)) {
+      return res.sendFile(localPath);
+    }
+
+    const s3 = require('./services/s3Storage');
+    if (s3.isS3Enabled() && video.workspace_id) {
+      try {
+        const presigned = await s3.getPresignedUrl(video.workspace_id, video.id, 'thumb.jpg');
+        res.setHeader('Cache-Control', 'public, max-age=1500');
+        return res.redirect(302, presigned);
+      } catch {}
+    }
+
+    res.status(404).end();
+  } catch {
+    res.status(500).end();
+  }
+});
+
 // ─── Pre-upload quota check — runs BEFORE multer writes any bytes to disk ────
 // Without this, a user could fill the server's disk with a 10 GB file even if
 // their workspace quota is 100 MB. Content-Length is not 100% reliable (clients
@@ -794,9 +906,7 @@ app.get('/api/workspaces/:id/public-videos', async (req, res) => {
     const mapped = videos.map(v => {
       let q = [];
       try { q = JSON.parse(v.qualities || '[]'); } catch {}
-      const cdn = v.hls_cdn_url;
-      const base = cdn ? cdn.replace(/\/master\.m3u8$/i, '') : null;
-      return { ...v, qualities: q, thumbnailUrl: base ? `${base}/thumb.jpg` : null };
+      return { ...v, qualities: q, thumbnailUrl: `/api/videos/${v.id}/thumb` };
     });
     res.json({ videos: mapped });
   } catch { res.status(500).json({ error: 'Internal server error' }); }
@@ -992,27 +1102,59 @@ app.get('/watch/:id', async (req, res) => {
       const safeThumb = /^https?:\/\//.test(thumbUrl) ? thumbUrl : '';
       const dur = video.duration ? Math.floor(video.duration) : 0;
 
+      const canonicalUrl = `${escAttr(appUrl)}/watch/${escAttr(video.id)}`;
+      const embedUrl     = `${escAttr(appUrl)}/embed/${escAttr(video.id)}`;
+      const videoUrl     = `${escAttr(appUrl)}/videos/${escAttr(video.id)}/master.m3u8`;
+
+      // JSON-LD VideoObject — ayuda a Google a indexar el video y mostrarlo en rich results
+      const jsonLd = JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'VideoObject',
+        name: video.title || 'Video',
+        description: (video.description || `Mira este video en ${siteName}`).slice(0, 500),
+        thumbnailUrl: safeThumb || undefined,
+        uploadDate: new Date(video.created_at * 1000 || Date.now()).toISOString(),
+        duration: dur > 0 ? `PT${Math.floor(dur / 60)}M${dur % 60}S` : undefined,
+        contentUrl: `${appUrl}/videos/${video.id}/master.m3u8`,
+        embedUrl: `${appUrl}/embed/${video.id}`,
+        potentialAction: {
+          '@type': 'WatchAction',
+          target: `${appUrl}/watch/${video.id}`,
+        },
+        publisher: {
+          '@type': 'Organization',
+          name: siteName,
+          url: appUrl,
+        },
+      });
+
       const ogTags = `
   <title>${title} — ${siteName}</title>
   <meta name="description" content="${desc}">
+  <link rel="canonical" href="${canonicalUrl}">
   <meta property="og:type" content="video.other">
   <meta property="og:title" content="${titleAttr}">
   <meta property="og:description" content="${desc}">
   <meta property="og:image" content="${escAttr(safeThumb)}">
   <meta property="og:image:width" content="1280">
   <meta property="og:image:height" content="720">
-  <meta property="og:url" content="${escAttr(appUrl)}/watch/${escAttr(video.id)}">
-  <meta property="og:video" content="${escAttr(appUrl)}/videos/${escAttr(video.id)}/master.m3u8">
+  <meta property="og:url" content="${canonicalUrl}">
+  <meta property="og:video" content="${videoUrl}">
+  <meta property="og:video:secure_url" content="${videoUrl}">
   <meta property="og:video:type" content="application/x-mpegurl">
-  <meta property="og:site_name" content="${siteName}">
+  <meta property="og:video:width" content="1280">
+  <meta property="og:video:height" content="720">
+  <meta property="og:site_name" content="${escAttr(siteName)}">
   <meta name="twitter:card" content="player">
+  <meta name="twitter:site" content="${escAttr(siteName)}">
   <meta name="twitter:title" content="${titleAttr}">
   <meta name="twitter:description" content="${desc}">
   <meta name="twitter:image" content="${escAttr(safeThumb)}">
-  <meta name="twitter:player" content="${escAttr(appUrl)}/embed/${escAttr(video.id)}">
+  <meta name="twitter:player" content="${embedUrl}">
   <meta name="twitter:player:width" content="1280">
   <meta name="twitter:player:height" content="720">
-  ${dur > 0 ? `<meta name="video:duration" content="${dur}">` : ''}`;
+  ${dur > 0 ? `<meta name="video:duration" content="${dur}">` : ''}
+  <script type="application/ld+json">${jsonLd}</script>`;
       html = html.replace('<meta charset="UTF-8">', `<meta charset="UTF-8">${ogTags}`);
     }
 
@@ -1209,9 +1351,98 @@ app.get('/favicon.svg', (req, res) => {
   });
 });
 
-// Landing page (root)
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public/index.html'));
+// ─── Sitemap.xml dinámico ─────────────────────────────────────────────────────
+// Incluye la landing, páginas estáticas y todos los videos públicos.
+// Cacheado 1 hora para no sobrecargar la DB.
+let _sitemapCache = null, _sitemapCachedAt = 0;
+app.get('/sitemap.xml', async (req, res) => {
+  try {
+    const now = Date.now();
+    if (!_sitemapCache || now - _sitemapCachedAt > 3600_000) {
+      const base = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
+      const today = new Date().toISOString().slice(0, 10);
+      // Solo páginas de la plataforma — no videos individuales
+      const staticUrls = [
+        { loc: base + '/',           priority: '1.0', changefreq: 'daily',   lastmod: today },
+        { loc: base + '/login',      priority: '0.6', changefreq: 'monthly', lastmod: today },
+        { loc: base + '/status',     priority: '0.3', changefreq: 'weekly',  lastmod: today },
+        { loc: base + '/privacy',    priority: '0.3', changefreq: 'yearly',  lastmod: today },
+        { loc: base + '/terms',      priority: '0.3', changefreq: 'yearly',  lastmod: today },
+        { loc: base + '/cookies',    priority: '0.2', changefreq: 'yearly',  lastmod: today },
+        { loc: base + '/gdpr',       priority: '0.2', changefreq: 'yearly',  lastmod: today },
+      ];
+      _sitemapCache =
+        '<?xml version="1.0" encoding="UTF-8"?>\n' +
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+        staticUrls.map(u =>
+          `  <url>\n` +
+          `    <loc>${u.loc}</loc>\n` +
+          `    <lastmod>${u.lastmod}</lastmod>\n` +
+          `    <changefreq>${u.changefreq}</changefreq>\n` +
+          `    <priority>${u.priority}</priority>\n` +
+          `  </url>`
+        ).join('\n') +
+        '\n</urlset>';
+      _sitemapCachedAt = now;
+    }
+    res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.send(_sitemapCache);
+  } catch (err) {
+    logger.warn({ err: err.message }, 'sitemap generation failed');
+    res.status(500).send('<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"/>');
+  }
+});
+
+// Landing page (root) — OG/SEO tags inyectados server-side (Google no ejecuta JS)
+app.get('/', async (req, res) => {
+  try {
+    const appUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
+    const dynCfg = require('./services/dynamicConfig');
+    const platformCfg = await dynCfg.getDynSection('platform', {}).catch(() => ({}));
+    const siteName = platformCfg.siteName || 'StreamVault';
+    const desc = `Sube, transcodifica y comparte video en segundos. ${siteName} convierte cualquier archivo en streaming HLS adaptativo.`;
+    const ogImage = `${appUrl}/og.png`;
+
+    // JSON-LD: WebSite + Organization
+    const jsonLd = JSON.stringify([
+      {
+        '@context': 'https://schema.org',
+        '@type': 'WebSite',
+        name: siteName,
+        url: appUrl,
+        potentialAction: {
+          '@type': 'SearchAction',
+          target: { '@type': 'EntryPoint', urlTemplate: `${appUrl}/watch/{search_term_string}` },
+          'query-input': 'required name=search_term_string',
+        },
+      },
+      {
+        '@context': 'https://schema.org',
+        '@type': 'Organization',
+        name: siteName,
+        url: appUrl,
+        logo: ogImage,
+        sameAs: [],
+      },
+    ]);
+
+    let html = fs.readFileSync(path.join(__dirname, 'public/index.html'), 'utf8');
+
+    // Rellenar OG tags vacíos y añadir canonical + JSON-LD
+    html = html
+      .replace('<meta property="og:url" content="">', `<meta property="og:url" content="${appUrl}/">`)
+      .replace('<meta property="og:title" content="">', `<meta property="og:title" content="${siteName} — Plataforma de Video Streaming">`)
+      .replace('<meta property="og:image" content="">', `<meta property="og:image" content="${ogImage}">`)
+      .replace('<meta charset="UTF-8">',
+        `<meta charset="UTF-8">\n  <link rel="canonical" href="${appUrl}/">\n  <script type="application/ld+json">${jsonLd}</script>`);
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.send(html);
+  } catch (_) {
+    res.sendFile(path.join(__dirname, 'public/index.html'));
+  }
 });
 
 // 404 catch-all — must be last route
@@ -1304,6 +1535,51 @@ initWithRetry().then(async () => {
   dynConfig.setDb(database);
   await dynConfig.reloadDynConfig().catch(() => {});
   logger.info('Dynamic config loaded from DB');
+
+  // ─── Startup recovery: retranscode videos stuck in 'transcoding' ──────────
+  // When the container restarts mid-transcode, FFmpeg processes are killed but
+  // the DB still shows status='transcoding'. On next boot, resume them from S3.
+  setImmediate(async () => {
+    try {
+      const stuck = await database.prepare(
+        `SELECT id, title, workspace_id, source_file FROM videos WHERE status = 'transcoding'`
+      ).all();
+      if (!stuck.length) return;
+      logger.info({ count: stuck.length }, 'Startup recovery: resuming stuck transcoding jobs');
+      const { processVideo } = require('./transcoder');
+      const { addTranscodeJob } = require('./services/queue');
+      for (const video of stuck) {
+        try {
+          const s3SourceKey = video.source_file && !require('path').isAbsolute(video.source_file)
+            ? video.source_file : null;
+          const inputPath = (!s3SourceKey && video.source_file) ? video.source_file : null;
+          if (!s3SourceKey && !inputPath) {
+            logger.warn({ videoId: video.id }, 'Startup recovery: no source found, marking as error');
+            await database.prepare(`UPDATE videos SET status='error' WHERE id=?`).run(video.id);
+            continue;
+          }
+          await database.prepare(`UPDATE videos SET transcoding_pct=0 WHERE id=?`).run(video.id);
+          const result = await addTranscodeJob({
+            videoId: video.id, inputPath, s3SourceKey,
+            title: video.title, workspaceId: video.workspace_id,
+          });
+          if (result.inline) {
+            processVideo(video.id, inputPath, video.title, {
+              workspaceId: video.workspace_id, s3SourceKey,
+              onProgress: async (pct) => {
+                await database.prepare(`UPDATE videos SET transcoding_pct=? WHERE id=?`).run(pct, video.id).catch(() => {});
+              },
+            }).catch(err => logger.error({ videoId: video.id, err: err.message }, 'Startup recovery transcode failed'));
+          }
+          logger.info({ videoId: video.id, title: video.title }, 'Startup recovery: transcode resumed');
+        } catch (err) {
+          logger.warn({ videoId: video.id, err: err.message }, 'Startup recovery: failed to resume video');
+        }
+      }
+    } catch (err) {
+      logger.warn({ err: err.message }, 'Startup recovery check failed');
+    }
+  });
 
   // ─── Start SSE metrics ticker ─────────────────────────────────────────────
   // Broadcasts real-time metrics to all connected admin SSE clients every 5s.

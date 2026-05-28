@@ -476,6 +476,19 @@ async function invalidateCDN(paths) {
   }
 }
 
+/**
+ * Generate a short-lived presigned GET URL for a video file on S3.
+ * Used to serve thumbnails without requiring CloudFront signed cookies.
+ */
+async function getPresignedUrl(workspaceId, videoId, filename, ttlSeconds = 1800) {
+  if (!isS3Enabled()) return null;
+  const { GetObjectCommand } = require('@aws-sdk/client-s3');
+  const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+  const keyPrefix = [cfg.s3KeyPrefix || 'streamvault', workspaceId, videoId].filter(Boolean).join('/');
+  const key = `${keyPrefix}/${filename}`;
+  return getSignedUrl(getClient(), new GetObjectCommand({ Bucket: cfg.s3Bucket, Key: key }), { expiresIn: ttlSeconds });
+}
+
 module.exports = {
   isS3Enabled,
   headBucket,
@@ -491,4 +504,5 @@ module.exports = {
   invalidateCDN,
   pruneOrphans,
   getJsonConfig,
+  getPresignedUrl,
 };

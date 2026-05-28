@@ -52,7 +52,18 @@
   position: relative;
   width: 100%;
   height: 100%;
+  min-height: 100%;
   overflow: hidden;
+}
+/* Ensure player-wrap always has a defined height so player-inner fills it */
+.player-page .player-wrap,
+.embed-root .player-wrap {
+  display: flex;
+  flex-direction: column;
+}
+.player-page .player-inner,
+.embed-root .player-inner {
+  flex: 1;
 }
 
 .player-wrap video {
@@ -181,8 +192,9 @@ html.embed-root, html.embed-root body {
 /* ─── Center cluster ────────────────────────────────────────── */
 .controls-middle {
   position: absolute;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
+  /* Centrado entre el título (top-bar ~60px) y el dock (~80px) */
+  top: 0; bottom: 0; left: 0; right: 0;
+  display: flex; align-items: center; justify-content: center;
   z-index: 15;
   pointer-events: none;
 }
@@ -248,10 +260,10 @@ html.embed-root, html.embed-root body {
 /* Pantallas pequeñas (móvil) — mínimos táctiles cómodos */
 @media (max-width: 480px) {
   .controls-center-cluster   { gap: 20px; }
-  .center-skip-btn           { width: 60px; height: 60px; }
-  .center-skip-btn svg       { width: 30px; height: 30px; }
-  .center-main-btn           { width: 68px; height: 68px; }
-  .center-main-btn svg       { width: 28px; height: 28px; }
+  .center-skip-btn           { width: 56px; height: 56px; background: rgba(255,255,255,0.12); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  .center-skip-btn svg       { width: 28px; height: 28px; }
+  .center-main-btn           { width: 64px; height: 64px; }
+  .center-main-btn svg       { width: 26px; height: 26px; }
 }
 
 /* Pantallas grandes (≥1200px) — límite superior generoso */
@@ -424,6 +436,8 @@ html.embed-root, html.embed-root body {
 .controls-row {
   display: flex; align-items: center; gap: 4px;
   padding: 4px 0 2px;
+  overflow: hidden; /* previene overflow en pantallas pequeñas */
+  min-width: 0;
 }
 
 /* Base icon button */
@@ -446,10 +460,7 @@ html.embed-root, html.embed-root body {
 @keyframes cast-pulse { 0%,100% { opacity:1; } 50% { opacity:.6; } }
 
 .controls-row .skip-btn { display: none !important; }
-/* On touch devices, hide center skip buttons — double-tap handles seeking */
-@media (pointer: coarse) {
-  .center-skip-btn { display: none !important; }
-}
+/* Center skip buttons always visible on all devices and orientations */
 .toolbar-spacer { flex: 1 1 auto; }
 
 /* ─── Volume ────────────────────────────────────────────────── */
@@ -779,21 +790,35 @@ html.embed-root, html.embed-root body {
 /* Hide when empty */
 .sv-subtitle-display:empty { display: none; }
 
-/* Each subtitle line gets its own pill — background set dynamically by applySubStyle() */
-.sv-sub-line {
-  display: block;
+/* Netflix-style: single unified pill background for all subtitle lines */
+.sv-sub-block {
+  display: inline-block;
   width: max-content;
   max-width: 100%;
   background: rgba(0,0,0,0.78);
-  padding: clamp(2px, 0.4vw, 4px) clamp(8px, 1.2vw, 14px) clamp(3px, 0.5vw, 5px);
-  border-radius: 4px;
+  padding: clamp(4px, 0.6vw, 8px) clamp(12px, 1.6vw, 20px);
+  border-radius: 6px;
   text-align: center;
   text-shadow: none;
   white-space: pre-wrap;
   word-break: break-word;
   overflow-wrap: break-word;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
+  line-height: 1.5;
+}
+
+/* Legacy .sv-sub-line kept for backwards compat but now no background */
+.sv-sub-line {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  text-align: center;
+  text-shadow: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 /* ─── Loading spinner ───────────────────────────────────────── */
@@ -875,7 +900,7 @@ html.embed-root, html.embed-root body {
   font-weight: 700; font-size: 14px; font-family: var(--pv-sans);
   transition: all 0.18s;
 }
-.resume-confirm { background: var(--pv-accent); color: #fff; }
+.resume-confirm { background: var(--pv-accent); color: var(--pv-accent-text, #fff); }
 .resume-confirm:hover { filter: brightness(1.12); transform: translateY(-1px); }
 .resume-cancel { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.85); border: 1px solid rgba(255,255,255,0.1); }
 .resume-cancel:hover { background: rgba(255,255,255,0.17); }
@@ -1636,7 +1661,7 @@ video::cue {
   }
   .player-wrap.show-controls .sv-subtitle-display,
   .player-wrap.paused .sv-subtitle-display { bottom: 88px; }
-  .sv-sub-line { padding: 2px 8px 3px; border-radius: 3px; }
+  .sv-sub-block { padding: 4px 10px 5px; border-radius: 4px; }
 
   /* Info debajo del player */
   .player-page .video-info { flex-direction: column; padding: 16px 16px 32px; }
@@ -1685,7 +1710,7 @@ video::cue {
   }
   .player-wrap.show-controls .sv-subtitle-display,
   .player-wrap.paused .sv-subtitle-display { bottom: 80px; }
-  .sv-sub-line { padding: 2px 6px 2px; margin: 1px 2px; }
+  .sv-sub-block { padding: 3px 8px 4px; border-radius: 3px; }
 }
 
 /* ── Pantallas ≤ 360 px (móvil muy pequeño) ─────────────────── */

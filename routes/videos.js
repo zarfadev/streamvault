@@ -50,10 +50,10 @@ function playbackUrls(video) {
   const cfSigned = require('../services/cfSigned');
   const cdn = video.hls_cdn_url;
   const base = cdn ? cdn.replace(/\/master\.m3u8$/i, '') : null;
-  // Prefer the early-uploaded thumbnail_url (set right after thumb generation)
-  // over the hls_cdn_url-derived URL so thumbnails appear even during transcoding.
-  const thumbnailUrl = video.thumbnail_url
-    || (base ? `${base}/thumb.jpg` : `/videos/${video.id}/thumb.jpg`);
+
+  // Thumbnail is always served through the server proxy so it works without
+  // CloudFront signed cookies (related-video cards, OG tags, dashboard, etc.).
+  const thumbnailUrl = `/api/videos/${video.id}/thumb`;
 
   // When CloudFront signing is enabled, we use Signed Cookies (not Signed URLs)
   // so all sub-resources (.ts segments, sub-playlists) under the video prefix

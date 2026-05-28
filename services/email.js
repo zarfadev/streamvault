@@ -529,7 +529,25 @@ async function sendCryptoRenewalPending(email, name, opts = {}) {
   });
 }
 
+/**
+ * sendRaw — envia un email con contenido arbitrario (HTML/texto).
+ * Util para formularios de contacto, reportes y otras notificaciones ad-hoc.
+ */
+async function sendRaw({ to, from, replyTo, subject, html, text }) {
+  const platform = await _platform();
+  const fromAddr = from || (config.smtp?.from ? config.smtp.from : `"${platform.name}" <${config.smtp?.user || 'noreply@example.com'}>`);
+  return _send({
+    from:    fromAddr,
+    to,
+    replyTo: replyTo || undefined,
+    subject,
+    html:    html || undefined,
+    text:    text || undefined,
+  });
+}
+
 module.exports = {
+  sendRaw,
   sendPasswordReset,
   sendWelcome,
   sendWorkspaceInvitation,

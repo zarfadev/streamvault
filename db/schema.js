@@ -526,6 +526,47 @@ async function createSchema(pool) {
   // A JWT whose iat < password_changed_at is rejected immediately (no need to wait for expiry).
   await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_changed_at BIGINT DEFAULT NULL`);
 
+  // ── Status history — uptime persistente entre reinicios ────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS status_history (
+      id         BIGSERIAL PRIMARY KEY,
+      service    TEXT NOT NULL,
+      status     TEXT NOT NULL DEFAULT 'ok',
+      latency_ms INTEGER,
+      checked_at BIGINT DEFAULT ${NOW}
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_status_history_service_time ON status_history(service, checked_at DESC)`);
+
+  // ── Status incidents & maintenance ─────────────────────────────
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS status_incidents (
+      id           TEXT PRIMARY KEY,
+      type         TEXT NOT NULL DEFAULT 'incident',
+      title        TEXT NOT NULL,
+      status       TEXT NOT NULL DEFAULT 'investigating',
+      impact       TEXT NOT NULL DEFAULT 'minor',
+      services     TEXT DEFAULT '[]',
+      scheduled_at BIGINT,
+      resolved_at  BIGINT,
+      created_by   TEXT,
+      created_at   BIGINT DEFAULT ${NOW},
+      updated_at   BIGINT DEFAULT ${NOW}
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS status_updates (
+      id          TEXT PRIMARY KEY,
+      incident_id TEXT NOT NULL REFERENCES status_incidents(id) ON DELETE CASCADE,
+      body        TEXT NOT NULL,
+      status      TEXT,
+      created_by  TEXT,
+      created_at  BIGINT DEFAULT ${NOW}
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_status_incidents_type ON status_incidents(type, created_at DESC)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_status_updates_incident ON status_updates(incident_id, created_at ASC)`);
+
   // ── Ad Creatives Library ────────────────────────────────────────
   // Biblioteca de creativos de anuncios gestionada por el super admin.
   // Los creativos tipo 'vast_video' tienen un endpoint VAST propio en /api/ads/vast/:id

@@ -4,9 +4,10 @@
 <head>
   <meta charset="UTF-8">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Admin</title>
-  <link rel="stylesheet" href="/css/sv-theme.css?v=2026.05.24">
+  <link rel="stylesheet" href="/css/sv-theme.css?v=2026.05.27e">
   <link
     href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap"
     rel="stylesheet">
@@ -724,6 +725,14 @@
           <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
           <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
         </svg>Referidos</button>
+      <button class="nav-item" data-s="incidents" onclick="go('incidents',this)"><svg class="nav-icon" viewBox="0 0 24 24"
+          fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>Incidentes &amp; Mantenimiento</button>
+      <button class="nav-item" data-s="reports" onclick="go('reports',this)"><svg class="nav-icon" viewBox="0 0 24 24"
+          fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>Reportes de Usuarios</button>
       <button class="nav-item" data-s="ads" onclick="go('ads',this)"><svg class="nav-icon" viewBox="0 0 24 24"
           fill="none" stroke="currentColor" stroke-width="2">
           <rect x="2" y="7" width="20" height="14" rx="2"/>
@@ -2128,12 +2137,20 @@
           </p>
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;">
             <div class="form-group" style="margin:0;">
-              <label>URL del logo de la plataforma</label>
-              <input type="url" id="cfg-platform-logo" placeholder="https://tudominio.com/logo.png"
-                style="width:100%;" oninput="previewPlatformLogo()">
-              <div style="font-size:11px;color:var(--muted);margin-top:4px;">
-                PNG/SVG con fondo transparente recomendado. Aparece en la esquina del player.
+              <label>Logo de la plataforma</label>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <input type="url" id="cfg-platform-logo" placeholder="https://tudominio.com/logo.png"
+                  style="flex:1;min-width:0;" oninput="previewPlatformLogo()">
+                <label style="display:inline-flex;align-items:center;gap:6px;padding:8px 13px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;white-space:nowrap;transition:all .15s;" onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor='var(--border2)'">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  Subir
+                  <input type="file" id="cfg-platform-logo-file" accept="image/png,image/jpeg,image/svg+xml,image/webp" style="display:none;" onchange="uploadPlatformLogo(this)">
+                </label>
               </div>
+              <div style="font-size:11px;color:var(--muted);margin-top:4px;">
+                PNG/SVG con fondo transparente recomendado. Aparece en la esquina del player. Máx 2 MB.
+              </div>
+              <div id="cfg-platform-logo-upload-status" style="font-size:11px;margin-top:3px;display:none;"></div>
             </div>
             <div class="form-group" style="margin:0;">
               <label>Posición del logo</label>
@@ -2637,6 +2654,67 @@
       </div>
     </div>
 
+    <!-- ═══ INCIDENTES & MANTENIMIENTO ═══════════════════════════ -->
+    <div id="s-incidents" style="display:none;">
+      <div class="page-header">
+        <div class="page-title-row">
+          <h1 class="page-title">Incidentes &amp; Mantenimiento</h1>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-ghost btn-sm" onclick="loadIncidentsAdmin()">Actualizar</button>
+            <button class="btn btn-primary btn-sm" onclick="openIncidentModal('incident')">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Nuevo Incidente
+            </button>
+            <button class="btn btn-ghost btn-sm" onclick="openIncidentModal('maintenance')" style="border-color:rgba(124,108,250,.35);color:var(--accent2);">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Programar Mantenimiento
+            </button>
+          </div>
+        </div>
+        <p class="page-sub">Crea incidentes y mantenimientos. Las notificaciones in-app se envían automáticamente a todos los owners de workspace.</p>
+      </div>
+
+      <div class="info-box" style="margin-bottom:20px;display:flex;align-items:flex-start;gap:12px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent2)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <div style="font-size:13px;line-height:1.6;">
+          Al crear un incidente o mantenimiento, se envía automáticamente una <strong>notificación in-app</strong> a todos los owners y admins de workspace.
+          Los usuarios la verán en el centro de notificaciones del dashboard. Los incidentes aparecen en <a href="/status" target="_blank" style="color:var(--accent2);">/status</a> en las tabs Mantenimiento e Incidentes.
+        </div>
+      </div>
+
+      <!-- Tab filter -->
+      <div class="tab-bar" style="margin-bottom:20px;">
+        <button class="tab-btn active" id="inc-tab-all" onclick="filterIncidentsAdmin('all',this)">Todos</button>
+        <button class="tab-btn" id="inc-tab-incident" onclick="filterIncidentsAdmin('incident',this)">Incidentes</button>
+        <button class="tab-btn" id="inc-tab-maintenance" onclick="filterIncidentsAdmin('maintenance',this)">Mantenimiento</button>
+      </div>
+
+      <div id="incidents-admin-list" style="display:flex;flex-direction:column;gap:12px;">
+        <div style="text-align:center;padding:32px;color:var(--muted);">Cargando…</div>
+      </div>
+    </div>
+
+    <!-- ═══ REPORTES DE USUARIOS ═══════════════════════════════ -->
+    <div id="s-reports" style="display:none;">
+      <div class="page-header">
+        <div class="page-title-row">
+          <h1 class="page-title">Reportes de Usuarios</h1>
+          <button class="btn btn-ghost btn-sm" onclick="loadReports()">Actualizar</button>
+        </div>
+        <p class="page-sub">Mensajes enviados por usuarios desde el formulario de contacto en <a href="/status" target="_blank" style="color:var(--accent2);">/status</a>. Responde directamente por email.</p>
+      </div>
+
+      <div class="tab-bar" style="margin-bottom:20px;">
+        <button class="tab-btn active" id="rpt-tab-all" onclick="filterReports('all',this)">Todos</button>
+        <button class="tab-btn" id="rpt-tab-pending" onclick="filterReports('pending',this)">Pendientes</button>
+        <button class="tab-btn" id="rpt-tab-reviewed" onclick="filterReports('reviewed',this)">Revisados</button>
+      </div>
+
+      <div id="reports-list" style="display:flex;flex-direction:column;gap:12px;">
+        <div style="text-align:center;padding:32px;color:var(--muted);">Cargando…</div>
+      </div>
+    </div>
+
     <!-- REFERRALS SECTION -->
     <div id="s-referrals" style="display:none;">
       <div class="page-header">
@@ -3014,7 +3092,103 @@
   </div>
 
   <script src="/js/toast.js" integrity="sha384-NOlrAhsJK/ux0DquI1zmOgS8Cs9AZPo8L+h9cRBWrHtqgd++igVHeJh8U7MwFSS4" crossorigin="anonymous" defer></script>
-  <script src="/js/app-admin.js?v=2026.05.26a" defer></script>
+  <!-- ═══ INCIDENT CREATE MODAL ══════════════════════════════════ -->
+  <div class="modal-overlay" id="incident-modal" onclick="if(event.target===this)closeModal('incident-modal')">
+    <div class="modal-card" style="max-width:540px;">
+      <div class="modal-head">
+        <span class="modal-title" id="inc-modal-title">Nuevo Incidente</span>
+        <button class="modal-close" onclick="closeModal('incident-modal')">&times;</button>
+      </div>
+      <div class="modal-body" style="display:flex;flex-direction:column;gap:14px;">
+        <input type="hidden" id="inc-modal-type" value="incident">
+        <div class="form-group">
+          <label>Titulo <span style="color:var(--red)">*</span></label>
+          <input class="input" id="inc-modal-title-input" placeholder="Ej: Degradacion del servicio de API" style="width:100%;">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="form-group">
+            <label>Estado</label>
+            <select class="input" id="inc-modal-status" style="width:100%;">
+              <option value="investigating">Investigando</option>
+              <option value="identified">Identificado</option>
+              <option value="monitoring">Monitoreando</option>
+              <option value="resolved">Resuelto</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Impacto</label>
+            <select class="input" id="inc-modal-impact" style="width:100%;">
+              <option value="minor">Menor</option>
+              <option value="major">Mayor</option>
+              <option value="critical">Critico</option>
+              <option value="maintenance">Mantenimiento</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Servicios afectados <span style="color:var(--muted);font-weight:400;">(separados por coma)</span></label>
+          <input class="input" id="inc-modal-services" placeholder="api, database, worker" style="width:100%;">
+        </div>
+        <div class="form-group" id="inc-modal-scheduled-wrap" style="display:none;">
+          <label>Fecha programada</label>
+          <input type="datetime-local" class="input" id="inc-modal-scheduled" style="width:100%;">
+        </div>
+        <div class="form-group">
+          <label>Mensaje inicial <span style="color:var(--muted);font-weight:400;">(opcional)</span></label>
+          <textarea class="input" id="inc-modal-body" rows="3" placeholder="Describe el problema o ventana de mantenimiento..." style="width:100%;resize:vertical;font-family:var(--sans);"></textarea>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;user-select:none;">
+          <input type="checkbox" id="inc-modal-notify" checked style="accent-color:var(--accent);width:15px;height:15px;">
+          <span>Enviar notificacion in-app a todos los owners &amp; admins</span>
+        </label>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" onclick="closeModal('incident-modal')">Cancelar</button>
+        <button class="btn btn-primary" id="inc-modal-save-btn" onclick="saveIncidentModal()">Crear</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ INCIDENT UPDATE MODAL ══════════════════════════════════ -->
+  <div class="modal-overlay" id="inc-update-modal" onclick="if(event.target===this)closeModal('inc-update-modal')">
+    <div class="modal-card" style="max-width:480px;">
+      <div class="modal-head">
+        <span class="modal-title">Agregar Actualizacion</span>
+        <button class="modal-close" onclick="closeModal('inc-update-modal')">&times;</button>
+      </div>
+      <div class="modal-body" style="display:flex;flex-direction:column;gap:14px;">
+        <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;">
+          <div style="font-size:11px;color:var(--muted);margin-bottom:3px;">Incidente</div>
+          <div style="font-size:13px;font-weight:600;" id="inc-upd-title">—</div>
+        </div>
+        <div class="form-group">
+          <label>Nuevo estado</label>
+          <select class="input" id="inc-upd-status" style="width:100%;">
+            <option value="investigating">Investigando</option>
+            <option value="identified">Identificado</option>
+            <option value="monitoring">Monitoreando</option>
+            <option value="in_progress">En progreso</option>
+            <option value="resolved">Resuelto</option>
+            <option value="completed">Completado</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Mensaje de actualizacion <span style="color:var(--red)">*</span></label>
+          <textarea class="input" id="inc-upd-body" rows="4" placeholder="Describe el progreso de la resolucion..." style="width:100%;resize:vertical;font-family:var(--sans);"></textarea>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;user-select:none;">
+          <input type="checkbox" id="inc-upd-resolved" style="accent-color:var(--green);width:15px;height:15px;">
+          <span>Marcar como resuelto / completado</span>
+        </label>
+      </div>
+      <div class="modal-foot">
+        <button class="btn btn-ghost" onclick="closeModal('inc-update-modal')">Cancelar</button>
+        <button class="btn btn-primary" id="inc-upd-save-btn" onclick="saveIncidentUpdate()">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/app-admin.js?v=2026.05.27e" defer></script>
 </body>
 
 </html>

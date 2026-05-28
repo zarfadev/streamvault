@@ -112,10 +112,19 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   // Drag & drop
+  // NOTA: Solo aplicamos preventDefault() en la dropzone, NO en document.body.
+  // El listener en body con preventDefault() bloqueaba el scroll táctil en móvil
+  // porque en algunos browsers touch-drag dispara dragover y preventDefault() en body
+  // cancela el comportamiento de scroll nativo.
+  // Para evitar que el browser abra el archivo si se suelta fuera del dropzone,
+  // capturamos drop en body pero SIN preventDefault() (solo stopPropagation).
   ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(evt => {
     dropzone.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); });
-    document.body.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); });
   });
+  // Prevenir que el browser abra el archivo si se suelta fuera del dropzone (desktop)
+  // pero sin bloquear scroll en touch.
+  document.body.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); });
+  document.body.addEventListener('dragover', e => { e.preventDefault(); }); // solo en desktop real
   ['dragenter', 'dragover'].forEach(evt => {
     dropzone.addEventListener(evt, () => dropzone.classList.add('dragover'));
   });

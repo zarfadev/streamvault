@@ -693,6 +693,7 @@ document.addEventListener('mouseup',  () => { seeking = false; });
 function doSeek(e) {
   const rect = progressTrack.getBoundingClientRect();
   const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  document.getElementById('progress-fill').style.width = (pct * 100) + '%';
   if (_castSession) { _castSendSeek(pct * _castDuration()); } else { video.currentTime = pct * (video.duration || 0); }
 }
 
@@ -1205,13 +1206,11 @@ function _startVttLoop() {
     if (key !== _vttLastRendered) {
       _vttLastRendered = key;
       _subDisplay.innerHTML = '';
-      for (const c of active) {
-        for (const line of c.lines) {
-          const span = document.createElement('span');
-          span.className = 'sv-sub-line';
-          span.textContent = line;
-          _subDisplay.appendChild(span);
-        }
+      if (active.length > 0) {
+        const block = document.createElement('span');
+        block.className = 'sv-sub-block';
+        block.textContent = active.map(c => c.lines.join('\n')).join('\n');
+        _subDisplay.appendChild(block);
       }
     }
     rafId = requestAnimationFrame(tick);
@@ -1309,14 +1308,13 @@ function _onCueChange() {
     text = text.replace(/<[^>]+>/g, '').replace(/\n/g, ' ').trim();
     if (text) lines.push(text);
   }
-  // SECURITY: Use textContent per span — never inject subtitle text via innerHTML.
-  // Subtitle cue text from VTT files must be treated as untrusted user content.
+  // SECURITY: Use textContent — never inject subtitle text via innerHTML.
   _subDisplay.innerHTML = '';
-  for (const l of lines) {
-    const span = document.createElement('span');
-    span.className = 'sv-sub-line';
-    span.textContent = l; // Safe: textContent never interprets HTML
-    _subDisplay.appendChild(span);
+  if (lines.length > 0) {
+    const block = document.createElement('span');
+    block.className = 'sv-sub-block';
+    block.textContent = lines.join('\n');
+    _subDisplay.appendChild(block);
   }
 }
 
@@ -1440,12 +1438,11 @@ function applySubStyle() {
   const bg   = Math.max(0, Math.min(1, subPrefs.bg));
   const style = document.createElement('style');
   style.id = 'sv-sub-style';
-  // background applied to .sv-sub-line pills only (NOT the container) to avoid double-background.
-  // video::cue uses transparent background since our custom display handles rendering.
+  // video::cue uses transparent background since our custom overlay handles rendering.
   style.textContent =
     `video::cue{font-size:${fs};color:${col};background-color:transparent;font-family:var(--pv-sans,'DM Sans',sans-serif);font-weight:600;line-height:1.4;}` +
     `#sv-subtitle-display{font-size:${fs};color:${col};}` +
-    `#sv-subtitle-display .sv-sub-line{background:rgba(0,0,0,${bg});}`;
+    `#sv-subtitle-display .sv-sub-block{background:rgba(0,0,0,${bg});}`;
   document.head.appendChild(style);
 }
 
@@ -1742,6 +1739,8 @@ function _updateDurationDisplay() {
 video.addEventListener('ratechange', () => { currentSpeed = video.playbackRate; updateSettingsBadge(); });
 video.addEventListener('progress',   () => updateBuffer());
 video.addEventListener('timeupdate', () => {
+  // Don't update fill/time while user is dragging the seekbar (prevents jumping)
+  if (seeking || touchScrub) return;
   const pct = video.duration ? (video.currentTime / video.duration) * 100 : 0;
   document.getElementById('progress-fill').style.width = pct + '%';
   tcEl.textContent = fmtTime(video.currentTime);

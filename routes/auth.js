@@ -62,11 +62,27 @@ async function verifyCaptcha(captchaToken, svFields = {}, opts = {}) {
   }
 }
 
+const MAX_SESSIONS = 4; // max concurrent sessions per user — evict oldest when exceeded
+
 async function generateTokens(userId) {
   // Add jti (JWT ID) to enable per-token revocation on logout/compromise
   const jti = uuidv4();
   const accessToken = jwt.sign({ userId, jti }, config.jwtSecret, { expiresIn: config.jwtAccessExpiry });
   const refreshToken = jwt.sign({ userId, type: 'refresh' }, config.jwtRefreshSecret, { expiresIn: config.jwtRefreshExpiry });
+
+  // ── Session limit: keep at most MAX_SESSIONS active sessions per user ─────
+  // Fetch all existing sessions ordered oldest-first, delete excess before insert
+  const existing = await db.prepare(
+    `SELECT id FROM refresh_tokens WHERE user_id = ? ORDER BY created_at ASC`
+  ).all(userId);
+  if (existing.length >= MAX_SESSIONS) {
+    // delete oldest ones so that after the INSERT we have exactly MAX_SESSIONS
+    const toDelete = existing.slice(0, existing.length - MAX_SESSIONS + 1);
+    for (const s of toDelete) {
+      await db.prepare(`DELETE FROM refresh_tokens WHERE id = ?`).run(s.id);
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   const tokenId = uuidv4();
   const expiresAt = Math.floor(Date.now() / 1000) + (7 * 24 * 60 * 60);

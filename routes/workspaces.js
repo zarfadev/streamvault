@@ -279,7 +279,7 @@ router.post('/:workspaceId/verify-domain', rateLimit(10, 60_000), resolveWorkspa
   }
 
   const { promises: dns } = require('dns');
-  const appHost = (process.env.APP_URL || 'streamvault.link')
+  const appHost = (process.env.APP_URL || 'streamvault.es')
     .replace(/^https?:\/\//, '').split('/')[0];
 
   // ── Step 1: CNAME check ─────────────────────────────────────────

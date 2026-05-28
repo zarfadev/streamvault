@@ -101,7 +101,27 @@ async function getGuestConfig() {
   }
 }
 
-router.post('/', optionalAuth, (req, res, next) => {
+// ── Silent token refresh for long-running uploads ────────────────────────────
+// Large file uploads (>15 min) cause the access token to expire while the file
+// is still being transferred. The client sends x-refresh-token so the server
+// can silently obtain a new access token and continue as an authenticated user.
+async function _refreshUserForUpload(req) {
+  const rt = req.headers['x-refresh-token'];
+  if (!rt) return null;
+  try {
+    const stored = await db.prepare(
+      `SELECT rt.user_id, rt.expires_at, u.id, u.email, u.platform_role,
+              u.email_verified, u.two_factor_enabled
+       FROM refresh_tokens rt JOIN users u ON u.id = rt.user_id
+       WHERE rt.token = ?`
+    ).get(rt);
+    if (!stored) return null;
+    if (stored.expires_at < Math.floor(Date.now() / 1000)) return null;
+    return { id: stored.user_id, email: stored.email, platform_role: stored.platform_role };
+  } catch { return null; }
+}
+
+router.post('/', optionalAuth, async (req, res, next) => {
   // ── Cleanup partial file if client disconnects mid-upload ─────────────────
   // When multer is writing a large file and the connection drops (e.g. server
   // restart, browser cancel), it throws "Request aborted" but leaves the
@@ -120,6 +140,17 @@ router.post('/', optionalAuth, (req, res, next) => {
   // This prevents bypassing plan limits by uploading without a workspace context.
   // Unauthenticated uploads (public API without token) are still allowed without
   // a workspace — they create orphan videos with no quota enforcement.
+
+  // If access token expired mid-upload but client sent x-refresh-token, silently
+  // restore the user so the video is linked to their workspace (not saved as guest).
+  // IMPORTANT: we await here so the code falls through to the workspace checks
+  // below (instead of the old .then(next) which bypassed resolveWorkspace).
+  if (!req.user && req.headers['x-refresh-token']) {
+    const user = await _refreshUserForUpload(req).catch(() => null);
+    if (user) req.user = user;
+    // fall through — do NOT call next() here
+  }
+
   if (req.user && !req.headers['x-workspace-id']) {
     return res.status(400).json({
       error: 'X-Workspace-Id header is required for authenticated uploads.',

@@ -1841,6 +1841,62 @@ router.get('/referrals', superAdminAuth, async (req, res) => {
 
 // POST /api/admin/retranscode-bulk — Re-queue all ready/error videos for a workspace (or all)
 // Admin use: after changing global transcoding quality settings, re-encode existing videos.
+// ─── Upload asset (logo de plataforma) ───────────────────────────────────────
+// Acepta PNG/SVG/JPG/WEBP hasta 2MB. Sube a S3 si está configurado,
+// o guarda en /public/uploads/ como fallback.
+const _multerAsset = require('multer')({
+  storage: require('multer').memoryStorage(),
+  limits: { fileSize: 2 * 1024 * 1024 }, // 2 MB
+  fileFilter(req, file, cb) {
+    const allowed = ['image/png','image/jpeg','image/svg+xml','image/webp','image/gif'];
+    if (allowed.includes(file.mimetype)) return cb(null, true);
+    cb(new Error('Tipo de archivo no permitido. Usa PNG, JPG, SVG o WEBP.'));
+  },
+});
+router.post('/upload-asset', superAdminAuth, _multerAsset.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No se recibió ningún archivo' });
+
+    const ext = path.extname(req.file.originalname).toLowerCase() || '.png';
+    const filename = `platform-logo-${Date.now()}${ext}`;
+
+    // Intenta S3 primero
+    if (s3svc.isS3Enabled()) {
+      const { Upload } = require('@aws-sdk/lib-storage');
+      const s3cfg = require('../config');
+      const { PutObjectCommand } = require('@aws-sdk/client-s3');
+      // Usar método interno de s3svc para subir buffer
+      const keyPrefix = ['streamvault', 'platform-assets'].join('/');
+      const key = `${keyPrefix}/${filename}`;
+      const client = s3svc._getClient ? s3svc._getClient() : null;
+      if (client) {
+        const cfg = require('../config');
+        const { s3Bucket, cdnBaseUrl, awsRegion } = cfg;
+        await client.send(new PutObjectCommand({
+          Bucket: s3Bucket,
+          Key: key,
+          Body: req.file.buffer,
+          ContentType: req.file.mimetype,
+        }));
+        const cdnBase = cdnBaseUrl
+          ? cdnBaseUrl.replace(/\/$/, '')
+          : `https://${s3Bucket}.s3.${awsRegion}.amazonaws.com`;
+        return res.json({ url: `${cdnBase}/${key}` });
+      }
+    }
+
+    // Fallback: guardar en public/uploads/assets/
+    const uploadsDir = path.join(__dirname, '../public/uploads/assets');
+    fs.mkdirSync(uploadsDir, { recursive: true });
+    fs.writeFileSync(path.join(uploadsDir, filename), req.file.buffer);
+    const appUrl = process.env.APP_URL || '';
+    return res.json({ url: `${appUrl}/uploads/assets/${filename}` });
+  } catch (err) {
+    logger.error({ err }, 'upload-asset failed');
+    res.status(500).json({ error: err.message || 'Error al subir el archivo' });
+  }
+});
+
 router.post('/retranscode-bulk', superAdminAuth, async (req, res) => {
   try {
     const { workspaceId } = req.body; // optional: limit to one workspace
@@ -1891,6 +1947,56 @@ router.post('/retranscode-bulk', superAdminAuth, async (req, res) => {
   } catch (e) {
     logger.error({ err: e.message }, 'Admin bulk retranscode error');
     res.status(500).json({ error: e.message });
+  }
+});
+
+// ─── User Reports (contact messages from /status) ────────────────────────────
+
+// GET /api/admin/reports — list contact messages stored in DB
+router.get('/reports', superAdminAuth, async (req, res) => {
+  try {
+    const limit  = Math.min(100, parseInt(req.query.limit  || '50', 10));
+    const offset = Math.max(0,   parseInt(req.query.offset || '0',  10));
+    const status = req.query.status || null; // 'pending' | 'reviewed' | null = all
+    const rows = await db.prepare(`
+      SELECT * FROM user_reports
+      ${status ? 'WHERE status = ?' : ''}
+      ORDER BY created_at DESC
+      LIMIT ? OFFSET ?
+    `).all(...(status ? [status, limit, offset] : [limit, offset]));
+    const total = await db.prepare(`SELECT COUNT(*) AS n FROM user_reports${status ? ' WHERE status = ?' : ''}`).get(...(status ? [status] : []));
+    res.json({ reports: rows, total: Number(total?.n || 0) });
+  } catch (err) {
+    // Table may not exist yet — return empty
+    if (err.message?.includes('user_reports') || err.code === '42P01') {
+      return res.json({ reports: [], total: 0 });
+    }
+    logger.error({ err }, 'GET /admin/reports error');
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PATCH /api/admin/reports/:id — mark as reviewed / add note
+router.patch('/reports/:id', superAdminAuth, async (req, res) => {
+  try {
+    const { status, note } = req.body;
+    const now = Math.floor(Date.now() / 1000);
+    await db.prepare(`
+      UPDATE user_reports SET status = ?, admin_note = ?, reviewed_at = ?, updated_at = ? WHERE id = ?
+    `).run(status || 'reviewed', note || null, now, now, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/admin/reports/:id
+router.delete('/reports/:id', superAdminAuth, async (req, res) => {
+  try {
+    await db.prepare(`DELETE FROM user_reports WHERE id = ?`).run(req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
