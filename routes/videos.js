@@ -1439,7 +1439,7 @@ router.get('/:id/download-file', optionalAuth, async (req, res) => {
       '-allowed_extensions', 'ALL',
       '-i', inputSpec,
       '-map', '0:v:0',
-      '-map', '0:a:0?',
+      '-map', '0:a?',   // cualquier stream de audio (incluyendo renditions separados)
       '-c:v', 'copy',
       '-c:a', 'copy',
       '-bsf:a', 'aac_adtstoasc',
@@ -1457,14 +1457,15 @@ router.get('/:id/download-file', optionalAuth, async (req, res) => {
 
     const ff = spawn('ffmpeg', ffmpegArgs, opts);
     ff.stdout.pipe(res);
-    ff.stderr.on('data', () => {}); // suppress FFmpeg progress output
+    let ffStderr = '';
+    ff.stderr.on('data', d => { ffStderr += d.toString().slice(-500); }); // keep last 500 chars for logging
     ff.on('error', err => {
       logger.warn({ err: err.message, videoId }, 'FFmpeg stream download failed');
       if (!res.headersSent) res.status(500).json({ error: 'Download failed' });
       else if (!res.writableEnded) res.end();
     });
     ff.on('exit', (code) => {
-      if (code !== 0) logger.warn({ code, videoId }, 'FFmpeg exited with non-zero code');
+      if (code !== 0) logger.warn({ code, videoId, stderr: ffStderr.slice(-300) }, 'FFmpeg exited non-zero');
       if (!res.writableEnded) res.end();
     });
     // If the client disconnects mid-download, kill FFmpeg immediately
@@ -1514,34 +1515,92 @@ router.get('/:id/download-file', optionalAuth, async (req, res) => {
     return;
   }
 
-  // Strategy 2: CDN/S3 — stream-remux HLS segments fetched from CDN.
-  // FFmpeg reads the m3u8 + segments over HTTPS. When CloudFront signing is enabled,
-  // we generate signed cookies for the video prefix and pass them via FFmpeg -headers
-  // so ALL requests (m3u8 + every .ts segment) are authenticated.
+  // Strategy 2: CDN/S3 — fetch m3u8 server-side, rewrite HLS key URI to a local
+  // temp file (FFmpeg can't authenticate against the streamvault.es key endpoint),
+  // make segment URLs absolute so FFmpeg can fetch them, then pipe MP4 to client.
   if (video.hls_cdn_url) {
     const cfSigned = require('../services/cfSigned');
-    const cdnBase = video.hls_cdn_url.replace(/\/master\.m3u8$/i, '');
-    const cdnM3u8 = quality
-      ? `${cdnBase}/${quality.replace(/p$/i, '')}p/index.m3u8`
-      : video.hls_cdn_url;
+    const cdnBase  = video.hls_cdn_url.replace(/\/master\.m3u8$/i, '');
 
-    let extraHeaders = [];
+    // Pick quality: requested → highest available → master
+    let qualityDir = null;
+    const allQualities = safeJsonParse(video.qualities, []);
+    if (quality) {
+      const q = quality.replace(/p$/i, '');
+      if (allQualities.some(qv => qv.toString().replace(/p$/i, '') === q)) qualityDir = `${q}p`;
+    }
+    if (!qualityDir && allQualities.length > 0) {
+      // Pick highest (sort numeric descending, strip 'p')
+      const sorted = allQualities.map(q => parseInt(q)).filter(Boolean).sort((a, b) => b - a);
+      if (sorted[0]) { qualityDir = `${sorted[0]}p`; qualityLabel = `_${sorted[0]}p`; }
+    }
+    const cdnM3u8Url = qualityDir ? `${cdnBase}/${qualityDir}/index.m3u8` : video.hls_cdn_url;
+    const cdnM3u8Dir = cdnM3u8Url.replace(/\/[^/]+\.m3u8(\?.*)?$/, ''); // base dir for relative URLs
+
+    // Build cookie string for CDN (signed cookies cover all resources under prefix)
+    let cookieStr = '';
     if (cfSigned.isSigningEnabled()) {
       const signed = cfSigned.generateSignedCookies(
         video.workspace_id, video.id,
         { expiryHours: 2, s3ObjectPrefix: video.s3_object_prefix || undefined }
       );
       if (signed?.cookies) {
-        const cookieStr = Object.entries(signed.cookies).map(([k, v]) => `${k}=${v}`).join('; ');
-        // FFmpeg requires \r\n to terminate each custom header
-        extraHeaders = ['-headers', `Cookie: ${cookieStr}\r\n`];
+        cookieStr = Object.entries(signed.cookies).map(([k, v]) => `${k}=${v}`).join('; ');
       }
     }
 
-    _streamFfmpegToResponse(
-      cdnM3u8,
-      [...extraHeaders, '-protocol_whitelist', 'file,http,https,tcp,tls,crypto']
-    );
+    try {
+      // 1. Fetch the quality playlist from CDN
+      const fetchHeaders = cookieStr ? { Cookie: cookieStr } : {};
+      const m3u8Res = await fetch(cdnM3u8Url, { headers: fetchHeaders });
+      if (!m3u8Res.ok) throw new Error(`CDN m3u8 fetch failed: ${m3u8Res.status} ${cdnM3u8Url}`);
+      let m3u8Content = await m3u8Res.text();
+
+      const tempFiles = [];
+      const ts = `${videoId}_${Date.now()}`;
+
+      // 2. Rewrite AES-128 key URI → local temp file (our key endpoint needs auth token that FFmpeg can't provide)
+      if (m3u8Content.includes('#EXT-X-KEY:METHOD=AES-128')) {
+        const vRow = await db.prepare(`SELECT hls_key FROM videos WHERE id=?`).get(videoId);
+        if (vRow?.hls_key) {
+          const keyBytes     = Buffer.from(vRow.hls_key, 'base64');
+          const tempKeyFile  = path.join(os.tmpdir(), `.sv_dlkey_${ts}.bin`);
+          fs.writeFileSync(tempKeyFile, keyBytes);
+          tempFiles.push(tempKeyFile);
+          m3u8Content = m3u8Content.replace(
+            /#EXT-X-KEY:METHOD=AES-128,URI="[^"]+"/g,
+            `#EXT-X-KEY:METHOD=AES-128,URI="${tempKeyFile}"`
+          );
+        }
+      }
+
+      // 3. Make all segment / sub-playlist lines absolute so FFmpeg can fetch them
+      //    Lines not starting with '#' are segment paths or sub-playlist paths
+      m3u8Content = m3u8Content.replace(/^(?!#)(\S.*)$/gm, (line) => {
+        if (/^https?:\/\//.test(line)) return line;
+        return `${cdnM3u8Dir}/${line.trim()}`;
+      });
+
+      // 4. Write modified m3u8 to temp file
+      const tempM3u8 = path.join(os.tmpdir(), `.sv_dlpl_${ts}.m3u8`);
+      fs.writeFileSync(tempM3u8, m3u8Content);
+      tempFiles.push(tempM3u8);
+
+      res.on('finish', () => { tempFiles.forEach(f => { try { fs.unlinkSync(f); } catch {} }); });
+      res.on('close',  () => { tempFiles.forEach(f => { try { fs.unlinkSync(f); } catch {} }); });
+
+      // 5. FFmpeg reads temp m3u8 (local key + absolute CDN segment URLs)
+      //    Cookies still needed for each segment HTTPS request
+      const ffHeaders = cookieStr ? ['-headers', `Cookie: ${cookieStr}\r\n`] : [];
+      _streamFfmpegToResponse(
+        tempM3u8,
+        [...ffHeaders, '-protocol_whitelist', 'file,http,https,tcp,tls,crypto,data'],
+        null
+      );
+    } catch (err) {
+      logger.error({ err: err.message, videoId, cdnM3u8Url }, 'CDN download preparation failed');
+      if (!res.headersSent) res.status(500).json({ error: 'Download preparation failed' });
+    }
     return;
   }
 
