@@ -106,10 +106,15 @@ document.addEventListener('DOMContentLoaded', () => {
   // Expuesto globalmente para que el botón del modal pueda llamarlo
   window._svContinueAsGuest = () => {
     if (_pendingFile) {
+      // Drag&drop: ya hay archivo seleccionado, procesar como invitado
       const f = _pendingFile;
       _pendingFile = null;
       window._svForceGuestUpload = true;
       handleFile(f);
+    } else {
+      // Click: aún no hay archivo, abrir el file picker como invitado
+      window._svForceGuestUpload = true;
+      if (fileInput) fileInput.click();
     }
   };
 
@@ -122,25 +127,42 @@ document.addEventListener('DOMContentLoaded', () => {
   // Callback para procesar el archivo soltado después de elegir "invitado"
   window._handleGuestDrop = (f) => { handleFile(f); };
 
-  // Interceptar click del dropzone para mostrar el modal de elección a usuarios no logueados
+  // Helper: determinar destino del dashboard según rol
+  function _dashboardDest() {
+    try {
+      const u = localStorage.getItem('sv_user') || sessionStorage.getItem('sv_user');
+      if (u && JSON.parse(u)?.platform_role === 'super_admin') return '/admin';
+    } catch {}
+    return '/dashboard/upload';
+  }
+
+  // Interceptar click del dropzone — siempre mostramos un modal antes de abrir el file picker
   window._svHandleDropzoneClick = () => {
     if (!isLoggedIn()) {
-      _svPendingGuestDrop = null; // este es click, no drag&drop
-      // Actualizar etiqueta de expiración con la config actual
+      // ── Usuario NO logueado: modal "login / registrarse / subir como invitado" ──
+      _svPendingGuestDrop = null;
       const expEl = document.getElementById('sv-choice-expiry');
       if (expEl) expEl.textContent = guestConfig.expiryHours === 1 ? '1h' : `${guestConfig.expiryHours}h`;
       const guestBtn = document.getElementById('sv-choice-guest-btn');
       if (guestBtn) guestBtn.textContent = `Subir como invitado (expira en ${guestConfig.expiryHours}h)`;
-      // Actualizar links de login/registro con guest_id para recuperar sesión
       const loginBtn = document.getElementById('sv-choice-login-btn');
       const regBtn   = document.getElementById('sv-choice-register-btn');
       if (loginBtn) { const u = new URL('/login', location.origin); u.searchParams.set('guest_id', guestSessionId); loginBtn.href = u.toString(); }
       if (regBtn)   { const u = new URL('/login', location.origin); u.searchParams.set('tab','register'); u.searchParams.set('guest_id', guestSessionId); regBtn.href = u.toString(); }
       const modal = document.getElementById('sv-guest-choice-modal');
       if (modal) modal.style.display = 'flex';
-      return true; // devuelve true para que el onclick del dropzone no llame al file picker
+    } else {
+      // ── Usuario logueado: modal "ir al dashboard / subir como invitado" ──
+      // Mostrar ANTES de abrir el file picker para no confundir al usuario
+      _pendingFile = null; // sin archivo aún (click, no drag&drop)
+      const fnEl  = document.getElementById('sv-auth-modal-filename');
+      if (fnEl) fnEl.textContent = 'Selecciona dónde quieres subir tu video:';
+      const goBtn = document.getElementById('sv-auth-modal-go-btn');
+      if (goBtn) goBtn.href = _dashboardDest();
+      const modal = document.getElementById('sv-auth-upload-modal');
+      if (modal) modal.style.display = 'flex';
     }
-    return false; // logueado — el onclick original abre el file picker
+    return true; // siempre interceptamos — nunca abrir el file picker directamente
   };
 
   // Drag & drop
@@ -176,7 +198,14 @@ document.addEventListener('DOMContentLoaded', () => {
       const modal = document.getElementById('sv-guest-choice-modal');
       if (modal) modal.style.display = 'flex';
     } else {
-      handleFile(f);
+      // Logueado + drag&drop: mostrar modal con info del archivo y dejar elegir
+      _pendingFile = f;
+      const fnEl = document.getElementById('sv-auth-modal-filename');
+      if (fnEl) fnEl.textContent = `Archivo listo: ${f.name} (${f.size >= 1073741824 ? (f.size/1073741824).toFixed(1)+' GB' : (f.size/1048576).toFixed(0)+' MB'})`;
+      const goBtn = document.getElementById('sv-auth-modal-go-btn');
+      if (goBtn) goBtn.href = _dashboardDest();
+      const modal = document.getElementById('sv-auth-upload-modal');
+      if (modal) modal.style.display = 'flex';
     }
   });
   fileInput.addEventListener('change', e => {
@@ -200,27 +229,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // ── Bloquear upload guest si hay sesión activa ────────────────────────
-    // Los usuarios logueados deben subir desde el dashboard para que el video
-    // quede en su workspace, use las calidades de su plan y no expire.
-    if (isLoggedIn() && !window._svForceGuestUpload) {
-      _pendingFile = file; // guardar referencia — "Continuar como invitado" la usará
-      const modal = document.getElementById('sv-auth-upload-modal');
-      const fnEl  = document.getElementById('sv-auth-modal-filename');
-      if (fnEl) fnEl.textContent = `Archivo: ${file.name} (${file.size >= 1073741824 ? (file.size/1073741824).toFixed(1)+' GB' : (file.size/1048576).toFixed(0)+' MB'})`;
-      // Determinar destino (admin vs dashboard)
-      let dest = '/dashboard/upload';
-      try {
-        const u = localStorage.getItem('sv_user') || sessionStorage.getItem('sv_user');
-        if (u && JSON.parse(u)?.platform_role === 'super_admin') dest = '/admin';
-      } catch {}
-      const goBtn = document.getElementById('sv-auth-modal-go-btn');
-      if (goBtn) goBtn.href = dest;
-      if (modal) modal.style.display = 'flex';
-      if (fileInput) fileInput.value = '';
-      return;
-    }
-    // Si llegó aquí con _svForceGuestUpload, reset flag para próxima vez
+    // Si llegó aquí con _svForceGuestUpload (usuario logueado que eligió "subir como invitado"), reset flag
     window._svForceGuestUpload = false;
 
     const maxBytes = guestConfig.maxFileSizeMB * 1024 * 1024;
