@@ -314,32 +314,53 @@ video.addEventListener('webkitbeginfullscreen', () => {
   // Activate the track matching the user's selected language so
   // the iOS player can display it in its built-in subtitle HUD.
   if (ccLang && video.textTracks.length > 0) {
+    // Normalize language code: "es-ES" → "es", compare case-insensitively
+    const normLang = ccLang.split('-')[0].toLowerCase();
     let applied = false;
     for (let i = 0; i < video.textTracks.length; i++) {
-      const match = video.textTracks[i].language === ccLang ||
-                    video.textTracks[i].label === ccLang;
-      video.textTracks[i].mode = (match && !applied) ? 'showing' : 'hidden';
+      const t = video.textTracks[i];
+      const tLang = (t.language || '').split('-')[0].toLowerCase();
+      const match = tLang === normLang ||
+                    tLang === ccLang.toLowerCase() ||
+                    (t.label || '').toLowerCase() === ccLang.toLowerCase();
+      t.mode = (match && !applied) ? 'showing' : 'hidden';
       if (match) applied = true;
     }
+    // Fallback: if no track matched by lang, try to match any track with srclang
+    if (!applied) {
+      for (let i = 0; i < video.textTracks.length; i++) {
+        const t = video.textTracks[i];
+        if (t.kind === 'subtitles' || t.kind === 'captions') {
+          t.mode = 'showing';
+          break;
+        }
+      }
+    }
   } else {
-    // No subtitle selected — ensure all tracks are hidden in iOS player
     for (let i = 0; i < video.textTracks.length; i++) {
       video.textTracks[i].mode = 'hidden';
     }
   }
 
   // ── Audio for iOS native player ───────────────────────────────
-  // Safari/iOS native player reads video.audioTracks directly.
-  // Restore the user's saved audio preference so the iOS player
-  // starts on the correct track.
-  if (video.audioTracks && video.audioTracks.length > 1) {
+  // iOS exposes audioTracks asynchronously — try immediately and after a short delay
+  function _applyIosAudioTrack() {
+    if (!video.audioTracks || video.audioTracks.length < 1) return false;
     const savedLang = audioTracks[currentAudioTrack >= 0 ? currentAudioTrack : 0]?.lang || null;
-    if (savedLang) {
-      for (let i = 0; i < video.audioTracks.length; i++) {
-        video.audioTracks[i].enabled = (video.audioTracks[i].language === savedLang ||
-                                        video.audioTracks[i].label === savedLang);
-      }
+    if (!savedLang) return true;
+    let found = false;
+    for (let i = 0; i < video.audioTracks.length; i++) {
+      const tLang = (video.audioTracks[i].language || '').split('-')[0].toLowerCase();
+      const match = tLang === savedLang.split('-')[0].toLowerCase() ||
+                    (video.audioTracks[i].label || '') === savedLang;
+      video.audioTracks[i].enabled = match;
+      if (match) found = true;
     }
+    return found;
+  }
+  if (!_applyIosAudioTrack()) {
+    // Retry after iOS populates audioTracks post-fullscreen
+    setTimeout(_applyIosAudioTrack, 500);
   }
 
   // Hide our custom HTML overlay — it's not visible inside the iOS native player
@@ -2522,7 +2543,8 @@ function _showAdBlockOverlay(hasAds) {
     position:absolute;inset:0;z-index:100;
     background:rgba(10,10,20,0.96);
     display:flex;flex-direction:column;align-items:center;justify-content:center;
-    padding:24px;text-align:center;
+    padding:max(16px,env(safe-area-inset-top,16px)) max(16px,env(safe-area-inset-right,16px)) max(16px,env(safe-area-inset-bottom,16px)) max(16px,env(safe-area-inset-left,16px));
+    text-align:center;overflow-y:auto;
     backdrop-filter:blur(4px);
   `;
 
@@ -2545,10 +2567,9 @@ function _showAdBlockOverlay(hasAds) {
 
   overlay.innerHTML = `
     ${icon}
-    <div style="font-size:18px;font-weight:700;color:#fff;margin-bottom:10px;">${title}</div>
-    <div style="font-size:13px;color:rgba(255,255,255,0.6);max-width:320px;line-height:1.6;margin-bottom:20px;">${msg}</div>
-    <button id="sv-adblock-dismiss" style="${btnStyle}">${btnText}</button>
-    ${hasAds ? '' : ''}
+    <div style="font-size:clamp(15px,4.5vw,18px);font-weight:700;color:#fff;margin-bottom:10px;max-width:90vw;">${title}</div>
+    <div style="font-size:clamp(12px,3.2vw,13px);color:rgba(255,255,255,0.6);max-width:min(320px,90vw);line-height:1.6;margin-bottom:18px;word-wrap:break-word;">${msg}</div>
+    <button id="sv-adblock-dismiss" style="${btnStyle}max-width:90vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${btnText}</button>
   `;
 
   document.getElementById('player-inner')?.appendChild(overlay);
@@ -2598,19 +2619,20 @@ function _initDevToolsBlocker() {
       position:fixed;inset:0;z-index:99999;
       background:rgba(10,10,20,0.97);
       display:flex;flex-direction:column;align-items:center;justify-content:center;
-      padding:24px;text-align:center;
+      padding:max(16px,env(safe-area-inset-top,16px)) max(16px,env(safe-area-inset-right,16px)) max(16px,env(safe-area-inset-bottom,16px)) max(16px,env(safe-area-inset-left,16px));
+      text-align:center;overflow-y:auto;
       backdrop-filter:blur(8px);
     `;
     overlay.innerHTML = `
-      <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="1.4" style="margin-bottom:16px;flex-shrink:0;">
+      <svg width="clamp(36px,10vw,56px)" height="clamp(36px,10vw,56px)" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="1.4" style="margin-bottom:clamp(12px,3vh,16px);flex-shrink:0;">
         <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
       </svg>
-      <div style="font-size:19px;font-weight:700;color:#fff;margin-bottom:10px;">Acceso restringido</div>
-      <div style="font-size:13px;color:rgba(255,255,255,0.55);max-width:300px;line-height:1.65;margin-bottom:22px;">
+      <div style="font-size:clamp(15px,4.5vw,19px);font-weight:700;color:#fff;margin-bottom:clamp(8px,2vh,10px);max-width:90vw;padding:0 12px;">Acceso restringido</div>
+      <div style="font-size:clamp(12px,3.2vw,13px);color:rgba(255,255,255,0.55);max-width:min(300px,88vw);line-height:1.65;margin-bottom:clamp(14px,4vh,22px);padding:0 8px;word-wrap:break-word;">
         Las herramientas de desarrollador están deshabilitadas en este reproductor.
         Ciérralas para continuar viendo el video.
       </div>
-      <button id="sv-devtools-dismiss" style="background:#7c6cfa;color:#fff;border:none;border-radius:8px;padding:10px 22px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;">
+      <button id="sv-devtools-dismiss" style="background:#7c6cfa;color:#fff;border:none;border-radius:8px;padding:clamp(8px,2vh,10px) clamp(16px,4vw,22px);font-size:clamp(12px,3vw,14px);font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap;">
         Continuar
       </button>
     `;

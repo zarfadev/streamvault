@@ -2568,7 +2568,13 @@ function doLogout() {
       const allDone = _uploadQueue.every(i => i.status === 'done');
       if (allDone) {
         toast('¡Todos los videos subidos! Transcodificando en segundo plano…');
-        setTimeout(() => { cancelUpload(); showSection('videos'); loadVideos(); startPolling(); }, 1800);
+        setTimeout(async () => {
+          cancelUpload();
+          showSection('videos');
+          // Cargar la lista primero para que el video aparezca inmediatamente
+          await loadVideos();
+          startPolling();
+        }, 1800);
       } else {
         loadVideos(); startPolling();
       }
@@ -2605,6 +2611,13 @@ function doLogout() {
         xhr.onload = () => {
           item.pct = 100;
           item.status = xhr.status >= 200 && xhr.status < 300 ? 'done' : 'error';
+          if (item.status === 'done') {
+            try {
+              const resp = JSON.parse(xhr.responseText);
+              if (resp.id) item.videoId = resp.id;
+              if (resp.watchUrl) item.watchUrl = resp.watchUrl;
+            } catch {}
+          }
           _queueRender();
           resolve();
         };

@@ -561,25 +561,34 @@ html.embed-root, html.embed-root body {
 }
 
 /* ─── Shared glass menu base ────────────────────────────────── */
+/* position:fixed escapa el overflow:hidden de player-inner en todas las pantallas */
 .quality-menu, .cc-menu, .speed-menu, .settings-menu {
-  position: absolute;
-  bottom: calc(100% + 20px);
-  right: 0;
+  position: fixed;
+  bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  right: auto;
+  top: auto;
+  transform: translateX(-50%) translateY(14px);
   background: rgba(8, 8, 14, 0.96);
   border: 1px solid rgba(255,255,255,0.1);
   border-radius: 14px;
   padding: 8px;
   min-width: 220px;
-  opacity: 0; transform: translateY(10px);
+  max-width: min(340px, 92vw);
+  max-height: min(70vh, calc(100dvh - 110px));
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.12) transparent;
+  opacity: 0;
   display: block; pointer-events: none;
   backdrop-filter: blur(32px);
   -webkit-backdrop-filter: blur(32px);
-  z-index: 9999;
+  z-index: 10000;
   box-shadow: 0 24px 70px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.04);
   transition: opacity 0.2s var(--pv-ease-std), transform 0.2s var(--pv-ease-std);
 }
 .quality-menu.open, .cc-menu.open, .speed-menu.open, .settings-menu.open {
-  opacity: 1; transform: translateY(0); pointer-events: auto;
+  opacity: 1; transform: translateX(-50%) translateY(0); pointer-events: auto;
 }
 .settings-menu { overflow: hidden; }
 .settings-wrap .settings-menu { min-width: 280px; max-height: 80vh; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.12) transparent; }
@@ -882,23 +891,23 @@ html.embed-root, html.embed-root body {
 
 .resume-card {
   background: rgba(12,12,18,0.96);
-  padding: 36px;
+  padding: clamp(20px, 5vw, 36px);
   border-radius: 20px;
   border: 1px solid rgba(255,255,255,0.1);
   box-shadow: 0 24px 70px rgba(0,0,0,0.75);
-  text-align: center; max-width: 380px; width: 90%;
+  text-align: center; max-width: 380px; width: min(90%, calc(100vw - 32px));
   transform: translateY(18px);
   transition: transform 0.38s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 .resume-overlay.visible .resume-card { transform: translateY(0); }
-.resume-card h3 { font-size: 22px; color: #fff; margin-bottom: 12px; font-weight: 700; }
-.resume-card p  { color: rgba(255,255,255,0.55); margin-bottom: 22px; font-size: 15px; line-height: 1.5; }
+.resume-card h3 { font-size: clamp(17px, 5vw, 22px); color: #fff; margin-bottom: 10px; font-weight: 700; }
+.resume-card p  { color: rgba(255,255,255,0.55); margin-bottom: 18px; font-size: clamp(13px, 3.5vw, 15px); line-height: 1.5; }
 .resume-card p span { color: var(--pv-accent); font-weight: 700; }
-.resume-btns { display: flex; gap: 10px; }
+.resume-btns { display: flex; gap: 8px; }
 .resume-btn {
-  flex: 1; padding: 13px; border-radius: 10px; border: none; cursor: pointer;
-  font-weight: 700; font-size: 14px; font-family: var(--pv-sans);
-  transition: all 0.18s;
+  flex: 1; padding: clamp(10px, 3vw, 13px); border-radius: 10px; border: none; cursor: pointer;
+  font-weight: 700; font-size: clamp(12px, 3.5vw, 14px); font-family: var(--pv-sans);
+  transition: all 0.18s; white-space: nowrap;
 }
 .resume-confirm { background: var(--pv-accent); color: var(--pv-accent-text, #fff); }
 .resume-confirm:hover { filter: brightness(1.12); transform: translateY(-1px); }
@@ -1610,26 +1619,10 @@ video::cue {
   /* Desactivar tooltips en touch */
   [data-tooltip]::after { display: none !important; }
 
-  /* Settings / quality / CC menus en touch:
-     Usar position:fixed anclado sobre el dock para no quedar recortado
-     por el overflow:hidden del player-inner. */
+  /* Settings / quality / CC menus en touch: overrides para pantalla pequeña */
   .quality-menu, .cc-menu, .speed-menu, .settings-menu {
-    position: fixed !important;
-    bottom: calc(90px + env(safe-area-inset-bottom, 0px)) !important; /* por encima del dock (~80 px) + safe area */
-    top: auto !important;
-    left: 50% !important;
-    right: auto !important;
-    transform: translateX(-50%) translateY(14px) !important;
-    min-width: min(320px, 92vw) !important;
-    max-width: 92vw !important;
-    max-height: min(60vh, calc(100dvh - 110px)) !important;
-    overflow-y: auto !important;
-    border-radius: 16px !important;
-    /* Asegurar que se muestre sobre cualquier overlay del player */
-    z-index: 10000 !important;
-  }
-  .quality-menu.open, .cc-menu.open, .speed-menu.open, .settings-menu.open {
-    transform: translateX(-50%) translateY(0) !important;
+    min-width: min(320px, 92vw);
+    max-width: 92vw;
   }
 
   /* Thumb preview más pequeña */
