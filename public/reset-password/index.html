@@ -6,6 +6,7 @@
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Nueva contraseña</title>
+<script>fetch('/api/settings').then(r=>r.json()).then(s=>{if(s.siteName){document.title=s.siteName+' — Nueva contraseña';document.querySelectorAll('[data-brand-name]').forEach(el=>el.textContent=s.siteName);}}).catch(()=>{});</script>
 <link rel="stylesheet" href="/css/sv-theme.css?v=2026.05.27e">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -103,7 +104,7 @@ body {
 
 <div class="card" id="card-form">
   <div class="card-logo">
-    <a href="/" class="logo-text">Stream<span>Vault</span></a>
+    <a href="/" class="logo-text" data-brand-name>Stream<span>Vault</span></a>
     <span class="logo-sub">Plataforma de Video Streaming</span>
   </div>
   <div class="card-title">Nueva contraseña</div>

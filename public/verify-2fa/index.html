@@ -6,6 +6,7 @@
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Verificación de Dos Factores</title>
+<script>fetch('/api/settings').then(r=>r.json()).then(s=>{if(s.siteName){document.title=s.siteName+' — Verificación 2FA';document.querySelectorAll('[data-brand-name]').forEach(el=>el.textContent=s.siteName);}}).catch(()=>{});</script>
 <meta name="description" content="Verifica tu identidad con autenticación de dos factores.">
 <!-- Biblioteca de sanitización para prevenir XSS -->
 <script src="/js/sanitize.js"
@@ -282,7 +283,7 @@ body {
 
 <div class="card">
   <div class="card-logo">
-    <a href="/" class="logo-text">Stream<span>Vault</span></a>
+    <a href="/" class="logo-text" data-brand-name>Stream<span>Vault</span></a>
     <span class="logo-sub">Plataforma de Video Streaming</span>
   </div>
 

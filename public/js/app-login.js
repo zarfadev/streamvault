@@ -60,6 +60,8 @@ async function initSvCaptcha() {
   piece.style.boxShadow  = '0 2px 12px rgba(124,108,250,.45)';
   piece.style.cursor     = 'grab';
   slot.style.borderColor = '';
+  slot.style.opacity     = '';
+  slot.style.transition  = '';
   status.textContent     = '';
   status.style.color     = 'var(--muted)';
   if (btnReg) { btnReg.disabled = true; btnReg.style.opacity = '.5'; btnReg.style.cursor = 'not-allowed'; }
@@ -148,15 +150,16 @@ async function initSvCaptcha() {
       status.style.color     = '#22c55e';
       if (btnReg) { btnReg.disabled = false; btnReg.style.opacity = '1'; btnReg.style.cursor = ''; }
     } else {
-      // ❌ Incorrecto — mostrar error y pedir nuevo challenge (posición diferente)
+      // ❌ Incorrecto — ocultar slot INMEDIATAMENTE para que el bot no pueda
+      // observar la posición objetivo durante el delay de reinicio
+      slot.style.opacity = '0';
+      slot.style.transition = 'opacity .15s ease';
       piece.style.transition = 'left .15s ease';
       piece.style.background = 'linear-gradient(135deg,#ef4444,#dc2626)';
       piece.style.boxShadow  = '0 4px 14px rgba(239,68,68,.5)';
       status.textContent     = '✗ No coincide — inténtalo de nuevo';
       status.style.color     = '#ef4444';
-      // Reiniciar con nueva posición tras un breve delay para que el bot
-      // no pueda predecir dónde estará el target en el siguiente intento
-      setTimeout(() => initSvCaptcha(), 900);
+      setTimeout(() => initSvCaptcha(), 800);
     }
   }
 

@@ -106,7 +106,7 @@ html.embed-root, html.embed-root body {
   top: 16px; right: 16px; left: auto; bottom: auto;
   max-height: 32px; max-width: 120px;
   object-fit: contain; pointer-events: none;
-  opacity: 0; z-index: 30;
+  opacity: 0; z-index: 15;
   display: block;
   transition: opacity 0.4s ease;
   filter: drop-shadow(0 1px 6px rgba(0,0,0,0.7));
@@ -1728,27 +1728,57 @@ video::cue {
   .ctrl-btn { width: 42px; height: 42px; }
 }
 
-/* ── Móvil portrait: el player debe llenar toda la pantalla ──────
-   En portrait el aspect-ratio 16/9 produce un rectángulo pequeño
-   con mucho espacio negro. En páginas /watch y /player, cuando
-   el ancho es ≤ 600px y orientación portrait, ocupamos el 100dvh.
+/* ── Móvil portrait ──────────────────────────────────────────────
+   En la página /watch: mantener el aspect-ratio 16/9 igual que PC
+   para que el player se vea igual independientemente de la orientación.
+   La info del video (título, meta) se muestra debajo del player.
+   Para embed siempre se usa fullscreen (height:100%).
    ──────────────────────────────────────────────────────────────── */
 @media (orientation: portrait) and (max-width: 600px) {
-  /* En la página /watch (player-page): player llena toda la altura */
+  /* Watch page — mantiene ratio 16:9 como en PC */
   .player-page .player-wrap {
-    aspect-ratio: unset !important;
-    height: 100dvh !important;
-    height: 100vh !important;
-    max-height: 100dvh !important;
+    aspect-ratio: 16 / 9;
+    height: auto !important;
+    max-height: none !important;
+    border-radius: 0;
+    box-shadow: none;
   }
   .player-page .player-container {
     padding: 0 !important;
     max-width: 100% !important;
   }
-  /* Ocultar info debajo en portrait mobile — no hay espacio */
-  .player-page .video-info { display: none !important; }
+  /* Mostrar info debajo del player en portrait mobile */
+  .player-page .video-info {
+    display: flex !important;
+    padding: 14px 16px 24px;
+  }
+  .player-page .video-title-main { font-size: 16px; }
 
-  /* Embed root también */
+  /* En portrait 16:9 el player es ~220px en un iPhone estándar.
+     El centro cluster quedaría cerca del dock — subirlo para que no choquen */
+  .controls-middle {
+    bottom: 72px;
+  }
+  /* Center buttons más pequeños para que quepan en el espacio disponible */
+  .center-skip-btn {
+    width: clamp(44px, 11vw, 64px) !important;
+    height: clamp(44px, 11vw, 64px) !important;
+  }
+  .center-skip-btn svg {
+    width: clamp(22px, 5.5vw, 30px) !important;
+    height: clamp(22px, 5.5vw, 30px) !important;
+  }
+  .center-main-btn {
+    width: clamp(50px, 13vw, 72px) !important;
+    height: clamp(50px, 13vw, 72px) !important;
+  }
+  .center-main-btn svg {
+    width: clamp(22px, 5.5vw, 28px) !important;
+    height: clamp(22px, 5.5vw, 28px) !important;
+  }
+  .controls-center-cluster { gap: clamp(14px, 4vw, 28px) !important; }
+
+  /* Embed: fullscreen como siempre */
   .embed-root .player-wrap {
     height: 100dvh !important;
     height: 100vh !important;
@@ -1756,16 +1786,16 @@ video::cue {
 
   /* Dock: safe-area para notch/home-bar de iPhone */
   .player-progress-dock {
-    padding: 0 16px calc(20px + env(safe-area-inset-bottom, 0px)) !important;
+    padding: 0 16px calc(14px + env(safe-area-inset-bottom, 0px)) !important;
   }
 
   /* Subtítulos: posición correcta en portrait */
   .sv-subtitle-display {
-    bottom: 80px !important;
+    bottom: 72px !important;
   }
   .player-wrap.show-controls .sv-subtitle-display,
   .player-wrap.paused .sv-subtitle-display {
-    bottom: 96px !important;
+    bottom: 88px !important;
   }
 }
 

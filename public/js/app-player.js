@@ -2583,19 +2583,22 @@ async function init() {
     if (cfg.watermarkEnabled && cfg.watermarkText) {
       let wText = cfg.watermarkText
         .replace('{date}', new Date().toLocaleDateString());
+      // bottom positions: 88px clears the player dock (progress bar + toolbar ~80px)
       const posMap = {
-        'top-left':     'top:12px;left:12px;',
-        'top-right':    'top:12px;right:12px;',
-        'bottom-left':  'bottom:48px;left:12px;',
-        'bottom-right': 'bottom:48px;right:12px;',
+        'top-left':     'top:14px;left:14px;',
+        'top-right':    'top:14px;right:14px;',
+        'bottom-left':  'bottom:88px;left:14px;',
+        'bottom-right': 'bottom:88px;right:14px;',
         'center':       'top:50%;left:50%;transform:translate(-50%,-50%);',
       };
       const posStyle = posMap[cfg.watermarkPosition] || posMap['bottom-right'];
       const opacity  = Math.max(0.05, Math.min(0.95, cfg.watermarkOpacity || 0.3));
+      const fontSize = Math.max(10, Math.min(24, cfg.watermarkSize || 13));
       const wEl = document.createElement('div');
       wEl.id = 'sv-watermark';
       wEl.textContent = wText;
-      wEl.style.cssText = `position:absolute;${posStyle}z-index:10;pointer-events:none;color:#fff;font-size:13px;font-weight:600;font-family:var(--pv-sans,'DM Sans',sans-serif);opacity:${opacity};text-shadow:0 1px 3px rgba(0,0,0,.75);user-select:none;white-space:nowrap;`;
+      // z-index 18: above video and logo (15), below all overlays (20+)
+      wEl.style.cssText = `position:absolute;${posStyle}z-index:18;pointer-events:none;color:#fff;font-size:${fontSize}px;font-weight:600;font-family:var(--pv-sans,'DM Sans',sans-serif);opacity:${opacity};text-shadow:0 1px 4px rgba(0,0,0,.8);user-select:none;white-space:nowrap;max-width:calc(100% - 28px);overflow:hidden;text-overflow:ellipsis;`;
       document.getElementById('player-inner')?.appendChild(wEl);
     }
 
