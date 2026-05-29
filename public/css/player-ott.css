@@ -260,13 +260,30 @@ html.embed-root, html.embed-root body {
 }
 .center-main-btn .ctrl-svg { color: #fff; }
 
-/* Pantallas pequeñas (móvil) — mínimos táctiles cómodos */
+/* Pantallas pequeñas (móvil) — idéntico a desktop, sin fondos extra */
 @media (max-width: 480px) {
-  .controls-center-cluster   { gap: 20px; }
-  .center-skip-btn           { width: 56px; height: 56px; background: transparent; }
-  .center-skip-btn svg       { width: 32px; height: 32px; }
-  .center-main-btn           { width: 64px; height: 64px; }
-  .center-main-btn svg       { width: 28px; height: 28px; }
+  .controls-center-cluster { gap: clamp(20px, 5vw, 40px); }
+  /* Skip buttons: misma apariencia que desktop — sin fondo, sin borde */
+  .center-skip-btn {
+    width: clamp(52px, 13vw, 72px);
+    height: clamp(52px, 13vw, 72px);
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+  .center-skip-btn svg {
+    width: clamp(28px, 7vw, 38px);
+    height: clamp(28px, 7vw, 38px);
+  }
+  /* Main play button: misma apariencia que desktop */
+  .center-main-btn {
+    width: clamp(58px, 15vw, 80px);
+    height: clamp(58px, 15vw, 80px);
+  }
+  .center-main-btn svg {
+    width: clamp(24px, 6vw, 32px);
+    height: clamp(24px, 6vw, 32px);
+  }
 }
 
 /* Pantallas grandes (≥1200px) — límite superior generoso */
