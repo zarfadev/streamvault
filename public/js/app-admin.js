@@ -757,15 +757,34 @@ async function unlockUser2FA(userId, email, stayInModal = false) {
 /* ─── VIDEOS ─────────────────────────────────────────────────── */
 let _selectedVideos = new Set();
 let _videosCache = [];
+let _videosTotal  = 0;
+let _videosOffset = 0;
+const _VIDEOS_LIMIT = 50;
 
-async function loadAdminVideos(){
-  const r=await api('/api/admin/videos');
+async function loadAdminVideos(offset = 0, search = ''){
+  const params = new URLSearchParams({ limit: _VIDEOS_LIMIT, offset, ...(search ? { search } : {}) });
+  const r = await api(`/api/admin/videos?${params}`);
   if (!r.ok) { toast('Error al cargar videos', 'error'); return; }
-  _videosCache = await r.json();
+  const data = await r.json();
+  _videosCache  = Array.isArray(data) ? data : (data.videos || []);
+  _videosTotal  = data.total || _videosCache.length;
+  _videosOffset = offset;
   _selectedVideos.clear();
   document.getElementById('select-all-videos').checked = false;
   updateBulkBar();
   renderVideos();
+  // Render pagination controls if present in DOM
+  const pgEl = document.getElementById('vid-pagination');
+  if (pgEl) {
+    const pages = Math.ceil(_videosTotal / _VIDEOS_LIMIT);
+    const cur   = Math.floor(offset / _VIDEOS_LIMIT) + 1;
+    pgEl.innerHTML = pages <= 1 ? '' : `
+      <div style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13px;color:var(--muted);">
+        <button class="btn btn-sm" onclick="loadAdminVideos(${Math.max(0, offset - _VIDEOS_LIMIT)}, '${search}')" ${cur <= 1 ? 'disabled' : ''}>‹ Anterior</button>
+        <span>Página ${cur} de ${pages} · ${_videosTotal} videos</span>
+        <button class="btn btn-sm" onclick="loadAdminVideos(${offset + _VIDEOS_LIMIT}, '${search}')" ${cur >= pages ? 'disabled' : ''}>Siguiente ›</button>
+      </div>`;
+  }
 }
 
 function renderVideos() {

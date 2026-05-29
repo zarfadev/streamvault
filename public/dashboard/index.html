@@ -4238,6 +4238,16 @@
           <input type="text" id="apikey-create-name" class="modal-input" placeholder='p. ej. "Mi App iOS"' maxlength="80" onkeydown="if(event.key==='Enter')submitCreateApiKey()">
           <div style="font-size:11px;color:var(--muted);margin-top:5px;">Un nombre descriptivo para identificar esta clave.</div>
         </div>
+        <div class="form-group" style="margin-top:14px;">
+          <label class="form-label" style="display:flex;align-items:center;gap:6px;">
+            Expiración
+            <span style="font-size:10px;color:var(--muted);font-weight:400;">(opcional)</span>
+          </label>
+          <input type="date" id="apikey-create-expiry" class="modal-input"
+            style="color-scheme:dark;"
+            min="">
+          <div style="font-size:11px;color:var(--muted);margin-top:5px;">Deja vacío para que la clave no expire nunca.</div>
+        </div>
       </div>
       <div class="modal-foot">
         <button class="btn btn-ghost" onclick="closeModal('create-apikey-modal-overlay')">Cancelar</button>
@@ -4809,6 +4819,10 @@
           <div style="display:flex;gap:8px;align-items:center;">
             <input id="preview-m3u8-input" readonly type="text" onclick="this.select()" style="flex:1;min-width:0;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;color:var(--text2);font-family:var(--mono);font-size:11px;padding:9px 12px;outline:none;cursor:text;">
             <button onclick="navigator.clipboard.writeText(document.getElementById('preview-m3u8-input').value).then(()=>toast('M3U8 copiado'))" style="flex-shrink:0;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;color:var(--text2);font-size:12px;font-weight:600;padding:9px 16px;cursor:pointer;font-family:var(--sans);transition:all .14s;white-space:nowrap;" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--text2)'">Copiar</button>
+          </div>
+          <div id="preview-m3u8-note" style="font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5;display:none;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;flex-shrink:0;"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Para usar en un player externo necesitas también llamar a <code style="background:var(--surface3);padding:1px 5px;border-radius:4px;">/api/videos/ID/stream-session</code> con <code style="background:var(--surface3);padding:1px 5px;border-radius:4px;">credentials:include</code> para obtener acceso al CDN. O usa el <strong>iframe embed</strong> que lo hace automáticamente.
           </div>
         </div>
       </div>

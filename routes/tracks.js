@@ -364,15 +364,12 @@ router.post('/rebuild-playlist', async (req, res) => {
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-function convertSrtToVtt(srcPath, destPath) {
-  return new Promise((resolve, reject) => {
-    const src  = fs.readFileSync(srcPath, 'utf8');
-    const vtt  = 'WEBVTT\n\n' + src
-      .replace(/\r\n/g, '\n')
-      .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
-    fs.writeFileSync(destPath, vtt, 'utf8');
-    resolve();
-  });
+async function convertSrtToVtt(srcPath, destPath) {
+  const src = await fs.promises.readFile(srcPath, 'utf8');
+  const vtt = 'WEBVTT\n\n' + src
+    .replace(/\r\n/g, '\n')
+    .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
+  await fs.promises.writeFile(destPath, vtt, 'utf8');
 }
 
 function transcodeAudioTrack(inputPath, outputDir, language) {
@@ -404,7 +401,8 @@ async function rebuildMasterPlaylist(videoId) {
   const video = await db.prepare(`SELECT qualities, workspace_id, hls_cdn_url, s3_object_prefix FROM videos WHERE id = ?`).get(videoId);
   if (!video) return;
 
-  const qualities       = JSON.parse(video.qualities || '[]');
+  let qualities;
+  try { qualities = JSON.parse(video.qualities || '[]'); } catch { qualities = []; }
   const audioTracks     = await db.prepare(
     `SELECT * FROM video_tracks WHERE video_id = ? AND kind = 'audio' ORDER BY created_at ASC`
   ).all(videoId);

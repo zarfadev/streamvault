@@ -1045,7 +1045,14 @@
           <h1 class="page-title">Videos</h1>
           <button class="btn btn-ghost btn-sm" onclick="loadAdminVideos()">Actualizar</button>
         </div>
-        <p class="page-sub">Últimos 200 videos de la plataforma. Ver, reproducir o eliminar.</p>
+        <p class="page-sub">Videos de la plataforma. Busca por título, email o workspace.</p>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;">
+        <input type="search" id="vid-search" placeholder="Buscar por título, email o workspace…"
+          style="flex:1;max-width:400px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius);color:var(--text);padding:7px 12px;font-size:13px;font-family:var(--sans);outline:none;"
+          oninput="clearTimeout(window._vidSearchT);window._vidSearchT=setTimeout(()=>loadAdminVideos(0,this.value.trim()),350)">
+        <button class="btn btn-ghost btn-sm" onclick="loadAdminVideos(0,document.getElementById('vid-search').value.trim())">Buscar</button>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('vid-search').value='';loadAdminVideos()">Actualizar</button>
       </div>
       <!-- Bulk Actions Bar -->
       <div class="bulk-actions-bar" id="bulk-bar" style="display:none;">
@@ -1091,6 +1098,7 @@
           </thead>
           <tbody id="vid-tbody"></tbody>
         </table>
+        <div id="vid-pagination"></div>
       </div>
     </div>
     <!-- ═══ BILLING ═══════════════════════════════════════════════ -->

@@ -530,6 +530,33 @@ async function sendCryptoRenewalPending(email, name, opts = {}) {
 }
 
 /**
+ * sendCustomEmail — admin → user plain-text/HTML email.
+ * Used by the admin panel "Send email to user" feature.
+ */
+async function sendCustomEmail(to, subject, body) {
+  const platform = await _platform();
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${escHtml(subject)}</title></head>
+<body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 20px;">
+  <tr><td align="center">
+    <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.06);">
+      <tr><td style="background:#1a1a2e;padding:24px 32px;">
+        <p style="margin:0;color:#fff;font-size:20px;font-weight:700;">${escHtml(platform.name)}</p>
+      </td></tr>
+      <tr><td style="padding:32px;">
+        <div style="font-size:15px;line-height:1.7;color:#333;white-space:pre-wrap;">${escHtml(body)}</div>
+        ${_footer(platform.name)}
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>`;
+  return sendRaw({ to, subject, html, text: body });
+}
+
+/**
  * sendRaw — envia un email con contenido arbitrario (HTML/texto).
  * Util para formularios de contacto, reportes y otras notificaciones ad-hoc.
  */
@@ -548,6 +575,7 @@ async function sendRaw({ to, from, replyTo, subject, html, text }) {
 
 module.exports = {
   sendRaw,
+  sendCustomEmail,
   sendPasswordReset,
   sendWelcome,
   sendWorkspaceInvitation,

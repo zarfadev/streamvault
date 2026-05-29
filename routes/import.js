@@ -352,7 +352,7 @@ router.get('/:id/status', authenticate, async (req, res) => {
       id:        video.id,
       status:    video.status,
       title:     video.title,
-      qualities: JSON.parse(video.qualities || '[]'),
+      qualities: (() => { try { return JSON.parse(video.qualities || '[]'); } catch { return []; } })(),
       watchUrl:  `/watch/${video.id}`,
       pct,
     });

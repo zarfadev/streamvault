@@ -107,6 +107,17 @@ process.on('unhandledRejection', (reason) => {
   logger.error({ err: { message: err.message, stack: err.stack } }, 'Unhandled promise rejection in worker');
 });
 
+// ─── Jittered scheduler ───────────────────────────────────────────────────────
+// Adds ±10% random jitter so multiple worker instances started simultaneously
+// don't all fire the same maintenance queries at the same instant.
+function _workerTask(fn, intervalMs) {
+  const jitter = Math.floor(Math.random() * intervalMs * 0.1);
+  setTimeout(function tick() {
+    fn();
+    setTimeout(tick, intervalMs + Math.floor((Math.random() * 0.2 - 0.1) * intervalMs));
+  }, jitter);
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 async function main() {
   logger.info({
@@ -207,7 +218,7 @@ async function main() {
   }, 60_000);
 
   // ── F4.2: Analytics retention — runs weekly (every 7 days) ───────────────
-  setInterval(async () => {
+  _workerTask(async () => {
     if (_shuttingDown) return;
     try {
       const workspaces = await db.prepare(
@@ -229,7 +240,7 @@ async function main() {
   }, 7 * 24 * 60 * 60 * 1000);
 
   // ── Anonymous uploads cleanup — runs every hour ─────────────────────────
-  setInterval(async () => {
+  _workerTask(async () => {
     if (_shuttingDown) return;
     try {
       const fs = require('fs');
@@ -260,40 +271,8 @@ async function main() {
     }
   }, 60 * 60 * 1000); // every hour
 
-  // ── Cleanup expired revoked tokens — runs hourly ──────────────────────────
-  // Access tokens live max 15m; remove from revocation list after 30m to keep table small.
-  async function cleanupRevokedTokens() {
-    if (_shuttingDown) return;
-    try {
-      const cutoff = Math.floor(Date.now() / 1000) - 30 * 60;
-      const result = await db.prepare(
-        `DELETE FROM revoked_tokens WHERE expires_at < ?`
-      ).run(cutoff);
-      if (result?.changes > 0) {
-        logger.info({ deleted: result.changes }, 'Cleaned up expired revoked tokens');
-      }
-    } catch (e) {
-      logger.error({ err: e.message }, 'Revoked tokens cleanup failed');
-    }
-  }
-  cleanupRevokedTokens();
-  setInterval(cleanupRevokedTokens, 60 * 60 * 1000); // every hour
-
-  // ── Audit log retention — runs daily, keeps 90 days ──────────────────────
-  async function cleanupAuditLog() {
-    if (_shuttingDown) return;
-    try {
-      const cutoff = Math.floor(Date.now() / 1000) - 90 * 24 * 60 * 60;
-      const result = await db.prepare(`DELETE FROM audit_log WHERE created_at < ?`).run(cutoff);
-      if (result?.changes > 0) {
-        logger.info({ deleted: result.changes }, 'Cleaned up old audit log entries');
-      }
-    } catch (e) {
-      logger.error({ err: e.message }, 'Audit log cleanup failed');
-    }
-  }
-  cleanupAuditLog();
-  setInterval(cleanupAuditLog, 24 * 60 * 60 * 1000); // every 24 hours
+  // revoked_tokens and audit_log cleanup are owned by server.js to avoid
+  // duplicate DB deletes when both containers run simultaneously.
 
   // ── Video expiry enforcement — runs every 5 min ──────────────────────────
   // Marks videos as 'expired' when their expires_at timestamp has passed.
@@ -343,7 +322,7 @@ async function main() {
       logger.error({ err: e.message }, 'Storage reconciliation failed');
     }
   }
-  setInterval(reconcileStorage, 6 * 60 * 60 * 1000); // every 6 hours
+  _workerTask(reconcileStorage, 6 * 60 * 60 * 1000); // every 6 hours
 
   // ── Subscription expiry enforcement — runs every hour ────────────────────
   // Downgrades workspaces whose current_period_end has passed and no renewal
@@ -422,7 +401,7 @@ async function main() {
     }
   }
   enforceSubscriptionExpiry();
-  setInterval(enforceSubscriptionExpiry, 60 * 60 * 1000); // every hour
+  _workerTask(enforceSubscriptionExpiry, 60 * 60 * 1000); // every hour
 
   // ── Stuck video watchdog — runs every 30 min ──────────────────────────────
   // If a video stays in 'transcoding' or 'downloading' for > 2 hours the
@@ -475,7 +454,7 @@ async function main() {
     }
   }
   rescueStuckVideos();
-  setInterval(rescueStuckVideos, 30 * 60 * 1000);
+  _workerTask(rescueStuckVideos, 30 * 60 * 1000);
 
   // ── F4.3: Worker heartbeat to status_checks ───────────────────────────────
   // Alert threshold: warn when more than N jobs are waiting (signals need for more workers)

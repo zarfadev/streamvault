@@ -186,10 +186,31 @@ function getCookieOptions(expiresAt) {
   };
 }
 
+/**
+ * Generate signed query params (Policy/Signature/Key-Pair-Id) for a wildcard
+ * URL pattern covering all files under a video's CDN prefix.
+ * One set of params grants access to every segment, playlist, and key under
+ * the prefix — so any HLS player can play without needing browser cookies.
+ *
+ * @param {string} resourcePattern - e.g. "https://cdn.example.com/prefix/*"
+ * @param {number} [expiryHours]
+ * @returns {string|null} query string "Policy=...&Signature=...&Key-Pair-Id=..." or null
+ */
+function generateWildcardQuery(resourcePattern, expiryHours) {
+  if (!isSigningEnabled()) return null;
+  const hours = expiryHours || EXPIRY_HOURS;
+  const expiresAt = Math.floor(Date.now() / 1000) + (hours * 3600);
+  const policy = createPolicy(resourcePattern, expiresAt);
+  const signature = signPolicy(policy);
+  const encodedPolicy = base64urlEncode(policy);
+  return `Policy=${encodedPolicy}&Signature=${signature}&Key-Pair-Id=${KEY_PAIR_ID}`;
+}
+
 module.exports = {
   isSigningEnabled,
   generateSignedCookies,
   generateSignedUrl,
+  generateWildcardQuery,
   getCookieOptions,
   COOKIE_DOMAIN,
 };

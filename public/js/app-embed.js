@@ -91,7 +91,9 @@ async function fetchVideoToken() {
 
 function hlsXhrSetup(xhr, url) {
   if (_videoToken && (url.includes('/videos/') || url.includes('/api/videos/'))) {
-    xhr.open('GET', url + (url.includes('?') ? '&' : '?') + 'token=' + _videoToken, true);
+    if (!url.includes('token=')) {
+      xhr.open('GET', url + (url.includes('?') ? '&' : '?') + 'token=' + _videoToken, true);
+    }
   }
 }
 

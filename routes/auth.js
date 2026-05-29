@@ -357,7 +357,8 @@ router.post('/verify-2fa-login', rateLimit(5, 300_000), async (req, res) => {
     if (!authenticated) {
       // Try backup codes — supports both hashed (new) and plain (legacy) formats
       if (user.two_factor_backup_codes) {
-        const backupCodes = JSON.parse(user.two_factor_backup_codes);
+        let backupCodes;
+        try { backupCodes = JSON.parse(user.two_factor_backup_codes); } catch { backupCodes = []; }
         const normalised = code.toUpperCase();
         
         // Detect format: hashed codes are 64-char hex strings (SHA-256)
@@ -841,12 +842,14 @@ router.delete('/me', deleteRateLimit, authenticate, async (req, res) => {
 
     const fileCleanupTasks = []; // { localPath?, s3Prefix? }
     const cdnPaths = [];
-    const wsIds = [];
+    const wsIds = ownedWorkspaces.map(w => w.id);
 
-    for (const ws of ownedWorkspaces) {
-      wsIds.push(ws.id);
-      const videos = await db.prepare(`SELECT id, s3_object_prefix FROM videos WHERE workspace_id = ?`).all(ws.id);
-      for (const v of videos) {
+    if (wsIds.length) {
+      const videoRows = await db.pool.query(
+        `SELECT id, s3_object_prefix FROM videos WHERE workspace_id = ANY($1::text[])`,
+        [wsIds]
+      ).then(r => r.rows);
+      for (const v of videoRows) {
         fileCleanupTasks.push({ localId: v.id, s3Prefix: v.s3_object_prefix || null });
         if (s3.isS3Enabled() && v.s3_object_prefix) {
           cdnPaths.push(`/${v.s3_object_prefix}/*`);
@@ -874,11 +877,11 @@ router.delete('/me', deleteRateLimit, authenticate, async (req, res) => {
     const client = await db.pool.connect();
     try {
       await client.query('BEGIN');
-      for (const wsId of wsIds) {
-        await client.query('DELETE FROM workspace_invitations WHERE workspace_id = $1', [wsId]);
-        await client.query('DELETE FROM workspace_members    WHERE workspace_id = $1', [wsId]);
-        await client.query('DELETE FROM videos               WHERE workspace_id = $1', [wsId]);
-        await client.query('DELETE FROM workspaces           WHERE id = $1',           [wsId]);
+      if (wsIds.length) {
+        await client.query('DELETE FROM workspace_invitations WHERE workspace_id = ANY($1::text[])', [wsIds]);
+        await client.query('DELETE FROM workspace_members    WHERE workspace_id = ANY($1::text[])', [wsIds]);
+        await client.query('DELETE FROM videos               WHERE workspace_id = ANY($1::text[])', [wsIds]);
+        await client.query('DELETE FROM workspaces           WHERE id = ANY($1::text[])',           [wsIds]);
       }
       // Remove memberships in workspaces the user doesn't own
       await client.query('DELETE FROM workspace_members WHERE user_id = $1', [req.user.id]);
@@ -953,9 +956,8 @@ router.get('/2fa/status', authenticate, async (req, res) => {
     const user = await db.prepare(
       `SELECT two_factor_enabled, two_factor_backup_codes FROM users WHERE id = ?`
     ).get(req.user.id);
-    const backupCodesRemaining = user?.two_factor_backup_codes
-      ? JSON.parse(user.two_factor_backup_codes).length
-      : 0;
+    let backupCodesRemaining = 0;
+    try { backupCodesRemaining = user?.two_factor_backup_codes ? JSON.parse(user.two_factor_backup_codes).length : 0; } catch {}
     res.json({
       twoFactorEnabled: !!(user?.two_factor_enabled),
       backupCodesRemaining,
@@ -1064,7 +1066,8 @@ router.get('/2fa/backup-codes', authenticate, async (req, res) => {
     }
     // [CRIT-10] Nunca devolver los hashes de backup codes al cliente.
     // Solo informar cuántos códigos quedan disponibles.
-    const codes = user.two_factor_backup_codes ? JSON.parse(user.two_factor_backup_codes) : [];
+    let codes = [];
+    try { codes = user.two_factor_backup_codes ? JSON.parse(user.two_factor_backup_codes) : []; } catch {}
     res.json({ remainingCodes: codes.length });
   } catch (err) {
     logger.error({ err }, 'Backup codes fetch error');

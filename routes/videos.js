@@ -11,7 +11,7 @@ const { optionalAuth, authenticate, requireScope } = require('../middleware/auth
 const { resolveWorkspace } = require('../middleware/workspace');
 const rateLimit = require('../middleware/rateLimit');
 const s3 = require('../services/s3Storage');
-const { signVideoToken, verifyVideoToken, signUnlockToken, verifyUnlockToken, RENEW_HINT, signDownloadToken, verifyDownloadToken, signCastToken, verifyCastToken } = require('../services/tokenSigning');
+const { signVideoToken, verifyVideoToken, tokensRequired, signUnlockToken, verifyUnlockToken, RENEW_HINT, signDownloadToken, verifyDownloadToken, signCastToken, verifyCastToken } = require('../services/tokenSigning');
 const logger = require('../services/logger').child({ module: 'videos' });
 const { deliverWebhook } = require('../services/webhooks');
 const cache = require('../services/cache');
@@ -47,20 +47,15 @@ const thumbUpload = multer({
 });
 
 function playbackUrls(video) {
-  const cfSigned = require('../services/cfSigned');
   const cdn = video.hls_cdn_url;
   const base = cdn ? cdn.replace(/\/master\.m3u8$/i, '') : null;
 
-  // Thumbnail is always served through the server proxy so it works without
-  // CloudFront signed cookies (related-video cards, OG tags, dashboard, etc.).
+  // Always route the manifest through the API so the server can enforce the
+  // HLS token before exposing the playlist. CDN segments are AES-128 encrypted,
+  // so even if someone downloads them they are useless without the key, which
+  // is also protected by the token via the /hlskey endpoint.
+  const m3u8Url = `/api/videos/${video.id}/manifest`;
   const thumbnailUrl = `/api/videos/${video.id}/thumb`;
-
-  // When CloudFront signing is enabled, we use Signed Cookies (not Signed URLs)
-  // so all sub-resources (.ts segments, sub-playlists) under the video prefix
-  // are automatically covered by the wildcard cookie policy.
-  // The player fetches /stream-session first, which sets the cookies,
-  // then loads HLS with withCredentials:true → browser sends cookies to CDN.
-  let m3u8Url = cdn || `/videos/${video.id}/master.m3u8`;
 
   return {
     m3u8Url,
@@ -85,6 +80,170 @@ setInterval(() => {
 }, 120_000).unref();
 
 const VALID_EVENT_TYPES = new Set(['play', 'pause', 'seek', 'progress', 'end', 'quality_change']);
+
+// ── Helper: resolve origin string from request headers ──────────────────────
+function _extractOrigin(req) {
+  const raw = req.headers.origin || req.headers.referer || '';
+  try { return new URL(raw).hostname; } catch { return ''; }
+}
+
+// ── Helper: check whether token enforcement is active for a video ────────────
+// CDN videos: CloudFront Signed Cookies (set by /stream-session) are the primary
+// CDN gate. Token enforcement here is per-workspace via the dashboard toggle.
+// Local videos: token enforcement is also per-workspace.
+async function _shouldEnforceToken(workspaceId) {
+  if (tokensRequired()) return true; // global override via REQUIRE_VIDEO_TOKENS=true
+  if (!workspaceId) return false;
+  try {
+    const ws = await db.prepare(`SELECT settings FROM workspaces WHERE id=?`).get(workspaceId);
+    const s = safeJsonParse(ws?.settings, {});
+    return (Array.isArray(s.embedAllowedDomains) && s.embedAllowedDomains.length > 0) ||
+           s.requireTokensAlways === true;
+  } catch { return false; }
+}
+
+// ─── Manifest proxy — GET /api/videos/:id/manifest ───────────────────────────
+// Routes the HLS master playlist through the API so the server can enforce the
+// video token before exposing the playlist URL to the client.  CDN segments are
+// AES-128 encrypted; the AES key endpoint (/hlskey) also requires a token, so
+// even if segments leak the video is unplayable without a valid token.
+router.get('/:id/manifest', rateLimit(30, 60_000), async (req, res) => {
+  try {
+    const video = await db.prepare(
+      `SELECT id, workspace_id, hls_cdn_url, s3_object_prefix, dmca_suspended FROM videos WHERE id=?`
+    ).get(req.params.id);
+    if (!video) return res.status(404).end();
+    if (video.dmca_suspended) return res.status(451).end();
+
+    if (req.customDomainWorkspaceId && video.workspace_id !== req.customDomainWorkspaceId) {
+      return res.status(404).end();
+    }
+
+    const enforce = await _shouldEnforceToken(video.workspace_id);
+    if (enforce) {
+      const rawToken = req.query.token;
+      const token    = Array.isArray(rawToken) ? rawToken[0] : (rawToken || req.headers['x-video-token']);
+      const origin   = _extractOrigin(req);
+      const isLocal  = !origin || origin === 'localhost' || origin.startsWith('127.');
+      if (!token || !verifyVideoToken(token, req.params.id, isLocal ? '' : origin)) {
+        return res.status(401).json({ error: 'Invalid or expired video token' });
+      }
+    }
+
+    res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+    res.setHeader('Cache-Control', 'private, no-store, no-cache');
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    if (req.headers.origin) res.setHeader('Vary', 'Origin');
+
+    const cdn = video.hls_cdn_url;
+    if (cdn) {
+      const cfSigned = require('../services/cfSigned');
+      const cdnBase  = cdn.replace(/\/master\.m3u8(\?.*)?$/i, '');
+      // Server-side fetch uses a signed URL (no browser cookies available here)
+      const fetchUrl = cfSigned.isSigningEnabled() ? cfSigned.generateSignedUrl(cdn, 1) : cdn;
+      const r = await fetch(fetchUrl);
+      if (!r.ok) return res.status(502).end();
+      const body = await r.text();
+
+      // Route sub-playlists through our manifest-sub proxy, which signs
+      // segment URLs so any HLS player (no cookies needed) can play directly.
+      const subBase   = `/api/videos/${req.params.id}/manifest-sub`;
+      const tokenPart = req.query.token ? `?token=${req.query.token}` : '';
+
+      let rewritten = body.replace(/^((?!#)(?!https?:\/\/)(?!\/\/).+\.m3u8)$/gm,
+        match => `${subBase}/${match.trim()}${tokenPart}`);
+      rewritten = rewritten.replace(
+        /URI="((?!https?:\/\/)(?!\/)[^"]+\.m3u8)"/g,
+        (_, relPath) => `URI="${subBase}/${relPath.trim()}${tokenPart}"`
+      );
+      return res.send(rewritten);
+    }
+
+    // Local storage — read master.m3u8 from disk
+    const masterPath = path.join(__dirname, '..', 'videos', req.params.id, 'master.m3u8');
+    try {
+      const content = await fs.promises.readFile(masterPath, 'utf8');
+      return res.send(content);
+    } catch {
+      return res.status(404).end();
+    }
+  } catch (err) {
+    logger.error({ err }, 'Manifest proxy error');
+    res.status(500).end();
+  }
+});
+
+// ─── Sub-playlist proxy — GET /api/videos/:id/manifest-sub/* ─────────────────
+// Fetches a quality or audio-track sub-playlist from CDN (server-side, signed URL),
+// rewrites relative segment paths to absolute CDN signed URLs, then returns the
+// modified playlist. This lets any HLS player play CDN videos without browser cookies.
+router.get('/:id/manifest-sub/*', rateLimit(60, 60_000), async (req, res) => {
+  try {
+    const qualityPath = req.params[0]; // e.g. "720p/index.m3u8" or "tracks/audio_0/index.m3u8"
+    if (!qualityPath || !/^[\w/_.-]+\.m3u8$/.test(qualityPath)) return res.status(400).end();
+
+    const video = await db.prepare(
+      `SELECT workspace_id, hls_cdn_url, s3_object_prefix, dmca_suspended FROM videos WHERE id=?`
+    ).get(req.params.id);
+    if (!video?.hls_cdn_url) return res.status(404).end();
+    if (video.dmca_suspended) return res.status(451).end();
+
+    if (req.customDomainWorkspaceId && video.workspace_id !== req.customDomainWorkspaceId) {
+      return res.status(404).end();
+    }
+
+    const enforce = await _shouldEnforceToken(video.workspace_id);
+    if (enforce) {
+      // req.query.token may be an array if the URL has ?token=X&token=X — take first value
+      const rawToken = req.query.token;
+      const token    = Array.isArray(rawToken) ? rawToken[0] : (rawToken || req.headers['x-video-token']);
+      const origin   = _extractOrigin(req);
+      const isLocal  = !origin || origin === 'localhost' || origin.startsWith('127.');
+      if (!token || !verifyVideoToken(token, req.params.id, isLocal ? '' : origin)) {
+        return res.status(401).end();
+      }
+    }
+
+    const cfSigned = require('../services/cfSigned');
+    const cdnBase  = video.hls_cdn_url.replace(/\/master\.m3u8(\?.*)?$/i, '');
+
+    // Generate wildcard signed query for all files under this video's CDN prefix.
+    // One set of params signs every segment URL — CloudFront validates the same
+    // Policy/Signature/Key-Pair-Id for any matching resource.
+    let cfQuery = null;
+    if (cfSigned.isSigningEnabled() && video.s3_object_prefix) {
+      const wildcardPattern = `${require('../config').cdnBaseUrl}/${video.s3_object_prefix}/*`;
+      cfQuery = cfSigned.generateWildcardQuery(wildcardPattern, 4);
+    }
+
+    // Fetch sub-playlist from CDN using a signed URL
+    const subCdnUrl  = `${cdnBase}/${qualityPath}`;
+    const fetchUrl   = cfQuery ? `${subCdnUrl}?${cfQuery}` : subCdnUrl;
+    const r = await fetch(fetchUrl);
+    if (!r.ok) return res.status(r.status).end();
+    const body = await r.text();
+
+    // Rewrite relative segment paths (.ts, .aac, .mp4, .m4s) to absolute signed CDN URLs.
+    // Relative paths in the sub-playlist are relative to the quality directory.
+    const qualityDir = qualityPath.split('/').slice(0, -1).join('/'); // "720p" or "tracks/audio_0"
+    const rewritten = body.replace(
+      /^((?!#)(?!https?:\/\/)(?!\/\/)[^\s]+\.(ts|aac|mp4|m4s|vtt))$/gm,
+      match => {
+        const segUrl = `${cdnBase}/${qualityDir}/${match.trim()}`;
+        return cfQuery ? `${segUrl}?${cfQuery}` : segUrl;
+      }
+    );
+
+    res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+    res.setHeader('Cache-Control', 'private, max-age=30');
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    if (req.headers.origin) res.setHeader('Vary', 'Origin');
+    res.send(rewritten);
+  } catch (err) {
+    logger.error({ err }, 'Manifest-sub proxy error');
+    res.status(500).end();
+  }
+});
 
 function parseUA(ua = '') {
   let device = 'desktop';
@@ -584,7 +743,7 @@ router.post('/:id/unlock', rateLimit(5, 60_000), async (req, res) => {
   }
 });
 
-router.get('/:id/token', rateLimit(60, 60_000), async (req, res) => {
+router.get('/:id/token', rateLimit(12, 60_000), async (req, res) => {
   try {
     const video = await db.prepare(`SELECT id, workspace_id, dmca_suspended FROM videos WHERE id=?`).get(req.params.id);
     if (!video) return res.status(404).json({ error: 'Not found' });
@@ -721,7 +880,7 @@ router.get('/:id/stream-session', rateLimit(30, 60_000), async (req, res) => {
 
 router.get('/:id/hlskey/:keyId', async (req, res) => {
   try {
-    const video = await db.prepare(`SELECT hls_key, hls_key_id, workspace_id FROM videos WHERE id=?`).get(req.params.id);
+    const video = await db.prepare(`SELECT hls_key, hls_key_id, workspace_id, hls_cdn_url FROM videos WHERE id=?`).get(req.params.id);
     if (!video) return res.status(404).end();
 
     // Custom domain: el video debe pertenecer al workspace dueño del dominio
@@ -733,8 +892,8 @@ router.get('/:id/hlskey/:keyId', async (req, res) => {
     // where the final DB UPDATE failed mid-transcoding but the file survived).
     if (!video.hls_key) {
       const diskPath = path.join(__dirname, '..', 'videos', req.params.id, 'hls.key');
-      if (!fs.existsSync(diskPath)) return res.status(404).end();
-      const keyBytes = fs.readFileSync(diskPath);
+      let keyBytes;
+      try { keyBytes = await fs.promises.readFile(diskPath); } catch { return res.status(404).end(); }
       // SECURITY FIX: Store the ACTUAL keyId from the DB-recorded value, NOT req.params.keyId.
       // If the DB has no keyId yet (first-time backfill after failed transcode), use req.params.keyId
       // only as a one-time seed — but validate it matches what's in the m3u8 via keyId length check.
@@ -758,8 +917,9 @@ router.get('/:id/hlskey/:keyId', async (req, res) => {
       // Priority 1: disk key file exists (re-transcode wrote a NEW key) — use it, but only
       // update the DB keyId after verifying the disk file is actually a 16-byte AES key.
       const diskPath = path.join(__dirname, '..', 'videos', req.params.id, 'hls.key');
-      if (fs.existsSync(diskPath)) {
-        const diskKeyBytes = fs.readFileSync(diskPath);
+      let diskKeyBytes;
+      try { diskKeyBytes = await fs.promises.readFile(diskPath); } catch { diskKeyBytes = null; }
+      if (diskKeyBytes) {
         if (diskKeyBytes.length !== 16) return res.status(500).end(); // corrupt key file
         // Use req.params.keyId as the new keyId only when disk has a fresh key —
         // this handles post-retranscode where transcoder wrote new hls.key before DB updated.
@@ -792,6 +952,23 @@ router.get('/:id/hlskey/:keyId', async (req, res) => {
       return res.status(403).end();
     }
 
+    // ── HLS token enforcement ───────────────────────────────────
+    // The player's xhrSetup already sends ?token= on every /api/videos/ request.
+    // For CDN videos the AES key is the ONLY cryptographic gate (segments are on
+    // public CDN), so token enforcement is always active for CDN videos.
+    const isCastRequest = verifyCastToken(req.query.cast_token, req.params.id);
+    if (!isCastRequest) {
+      const hlsEnforce = await _shouldEnforceToken(video.workspace_id);
+      if (hlsEnforce) {
+        const token = req.query.token || req.headers['x-video-token'];
+        const origin = _extractOrigin(req);
+        const isLocal = !origin || origin === 'localhost' || origin.startsWith('127.');
+        if (!token || !verifyVideoToken(token, req.params.id, isLocal ? '' : origin)) {
+          return res.status(401).end();
+        }
+      }
+    }
+
     // ── Origin enforcement ──────────────────────────────────────
     // The keyId (32-char random) is already a shared secret — anyone who can
     // read the .m3u8 knows the keyId. So origin-based blocking is an optional
@@ -803,7 +980,6 @@ router.get('/:id/hlskey/:keyId', async (req, res) => {
     // Bypass conditions (any one is sufficient to skip the check):
     //   • valid cast_token — Chromecast receiver, no browser Origin header
     //   • embedAllowedDomains is empty — no explicit restriction configured
-    const isCastRequest = verifyCastToken(req.query.cast_token, req.params.id);
 
     // Only load embedAllowedDomains from workspace settings — never APP_URL.
     let embedDomains = [];
@@ -1196,7 +1372,7 @@ router.post('/:id/retry', authenticate, async (req, res) => {
       const uploadsDir = path.join(__dirname, '..', 'uploads');
       if (video.original_filename) {
         try {
-          const files = fs.readdirSync(uploadsDir);
+          const files = await fs.promises.readdir(uploadsDir);
           const match = files.find(f => f.endsWith('-' + video.original_filename) || f === video.original_filename);
           if (match) inputPath = path.join(uploadsDir, match);
         } catch {}
@@ -1236,6 +1412,9 @@ router.post('/:id/retry', authenticate, async (req, res) => {
           db.prepare(`UPDATE videos SET transcoding_pct=NULL WHERE id=?`).run(video.id).catch(() => {});
         }).catch(err => {
           logger.error({ err }, 'Retry inline transcoding error');
+          db.prepare(
+            `UPDATE videos SET status='error', transcoding_pct=NULL, updated_at=FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT WHERE id=?`
+          ).run(video.id).catch(() => {});
         });
       }
 
@@ -1320,7 +1499,12 @@ router.post('/:id/retranscode', authenticate, async (req, res) => {
           },
         }).then(() => {
           db.prepare(`UPDATE videos SET transcoding_pct=NULL WHERE id=?`).run(video.id).catch(() => {});
-        }).catch(err => logger.error({ err }, 'Retranscode inline error'));
+        }).catch(err => {
+          logger.error({ err }, 'Retranscode inline error');
+          db.prepare(
+            `UPDATE videos SET status='error', transcoding_pct=NULL, updated_at=FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT WHERE id=?`
+          ).run(video.id).catch(() => {});
+        });
       }
 
       logger.info({ videoId: video.id, workspaceId: video.workspace_id }, 'Video retranscode started');
@@ -1503,21 +1687,21 @@ router.get('/:id/download-file', optionalAuth, async (req, res) => {
 
     // AES-128 encrypted HLS: rewrite m3u8 to point to local key file
     try {
-      const m3u8Content = fs.readFileSync(localM3u8, 'utf8');
+      const m3u8Content = await fs.promises.readFile(localM3u8, 'utf8');
       if (m3u8Content.includes('#EXT-X-KEY:METHOD=AES-128')) {
         const videoRow = await db.prepare(`SELECT hls_key FROM videos WHERE id=?`).get(videoId);
         if (videoRow?.hls_key) {
           const keyBytes = Buffer.from(videoRow.hls_key, 'base64');
           const ts = `${videoId}_${Date.now()}`;
           const tempKeyFile = path.join(os.tmpdir(), `.sv_dlkey_${ts}.bin`);
-          fs.writeFileSync(tempKeyFile, keyBytes);
+          await fs.promises.writeFile(tempKeyFile, keyBytes);
           tempFiles.push(tempKeyFile);
           const rewrittenM3u8 = m3u8Content.replace(
             /#EXT-X-KEY:METHOD=AES-128,URI="[^"]+"/g,
             `#EXT-X-KEY:METHOD=AES-128,URI="${tempKeyFile}"`
           );
           const tempM3u8 = path.join(os.tmpdir(), `.sv_dlpl_${ts}.m3u8`);
-          fs.writeFileSync(tempM3u8, rewrittenM3u8);
+          await fs.promises.writeFile(tempM3u8, rewrittenM3u8);
           tempFiles.push(tempM3u8);
           inputM3u8 = tempM3u8;
         }
@@ -1728,15 +1912,19 @@ router.get('/:id/cast-manifest', async (req, res) => {
     // Load master.m3u8 — try local first, fall back to CDN for S3-hosted videos
     let content;
     const masterPath = path.join(__dirname, '..', 'videos', videoId, 'master.m3u8');
-    if (fs.existsSync(masterPath)) {
-      content = fs.readFileSync(masterPath, 'utf8');
-    } else if (video.hls_cdn_url) {
-      const cdnUrl = video.hls_cdn_url.startsWith('//') ? `https:${video.hls_cdn_url}` : video.hls_cdn_url;
-      const cdnRes = await fetch(cdnUrl);
+    try {
+      content = await fs.promises.readFile(masterPath, 'utf8');
+    } catch {
+      content = null;
+    }
+    if (!content) {
+      if (!video.hls_cdn_url) return res.status(404).end();
+      const cfSigned = require('../services/cfSigned');
+      const rawCdnUrl = video.hls_cdn_url.startsWith('//') ? `https:${video.hls_cdn_url}` : video.hls_cdn_url;
+      const cdnFetchUrl = cfSigned.isSigningEnabled() ? cfSigned.generateSignedUrl(rawCdnUrl, 1) : rawCdnUrl;
+      const cdnRes = await fetch(cdnFetchUrl);
       if (!cdnRes.ok) return res.status(404).end();
       content = await cdnRes.text();
-    } else {
-      return res.status(404).end();
     }
 
     // Rewrite AES-128 key URIs (relative OR absolute) → absolute with cast token.
@@ -1804,14 +1992,15 @@ router.get('/:id/cast-manifest-sub/:qualityDir/:file', async (req, res) => {
     let content;
     let cdnSegmentBase = null; // if set, rewrite segments to CDN URLs instead of local
 
-    if (fs.existsSync(subPath)) {
-      content = fs.readFileSync(subPath, 'utf8');
-    } else {
+    try { content = await fs.promises.readFile(subPath, 'utf8'); } catch { content = null; }
+    if (!content) {
       // Local file not found — try CDN (S3 mode with local cleanup)
-      const videoRow = await db.prepare(`SELECT hls_cdn_url FROM videos WHERE id=?`).get(videoId);
+      const videoRow = await db.prepare(`SELECT hls_cdn_url, s3_object_prefix FROM videos WHERE id=?`).get(videoId);
       if (!videoRow?.hls_cdn_url) return res.status(404).end();
-      const cdnBase = videoRow.hls_cdn_url.replace(/\/master\.m3u8(\?.*)?$/i, '');
-      const cdnUrl  = `${cdnBase}/${quality}`;
+      const cfSigned = require('../services/cfSigned');
+      const cdnBase  = videoRow.hls_cdn_url.replace(/\/master\.m3u8(\?.*)?$/i, '');
+      const rawSubUrl = `${cdnBase}/${quality}`;
+      const cdnUrl  = cfSigned.isSigningEnabled() ? cfSigned.generateSignedUrl(rawSubUrl, 1) : rawSubUrl;
       const cdnRes  = await fetch(cdnUrl);
       if (!cdnRes.ok) return res.status(404).end();
       content = await cdnRes.text();
@@ -1898,7 +2087,9 @@ router.post('/:id/thumbnail', authenticate, thumbUpload.single('thumbnail'), asy
       `UPDATE videos SET thumbnail_url = ?, updated_at = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT WHERE id = ?`
     ).run(thumbCdnUrl || null, video.id);
 
-    const thumbnailUrl = thumbCdnUrl || `/videos/${video.id}/thumb.jpg`;
+    // Always return the proxy URL so the dashboard never loads thumbnails
+    // directly from CloudFront (which requires signed cookies not available in dashboard context)
+    const thumbnailUrl = `/api/videos/${video.id}/thumb`;
     res.json({ success: true, thumbnailUrl });
   } catch (err) {
     logger.error({ err }, 'Thumbnail upload error');
@@ -1945,7 +2136,7 @@ router.delete('/:id/thumbnail', authenticate, async (req, res) => {
       // Clear any stale thumbnail_url so it falls back to local
       await db.prepare(`UPDATE videos SET thumbnail_url = NULL WHERE id = ?`).run(video.id);
     }
-    const thumbnailUrl = regenCdnUrl || `/videos/${video.id}/thumb.jpg`;
+    const thumbnailUrl = `/api/videos/${video.id}/thumb`;
     res.json({ success: true, thumbnailUrl });
   } catch (err) {
     logger.error({ err }, 'Thumbnail delete error');
@@ -1989,7 +2180,7 @@ router.post('/:id/thumbnail/tmdb', authenticate, async (req, res) => {
     if (!fs.existsSync(videoDir)) fs.mkdirSync(videoDir, { recursive: true });
     const thumbPath = path.join(videoDir, 'thumb.jpg');
     const buf = Buffer.from(await imgRes.arrayBuffer());
-    fs.writeFileSync(thumbPath, buf);
+    await fs.promises.writeFile(thumbPath, buf);
     let thumbCdnUrl = null;
     if (s3.isS3Enabled()) {
       try {
@@ -2001,7 +2192,7 @@ router.post('/:id/thumbnail/tmdb', authenticate, async (req, res) => {
       }
     }
     await db.prepare(`UPDATE videos SET thumbnail_url = ?, updated_at = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT WHERE id = ?`).run(thumbCdnUrl || null, video.id);
-    const thumbnailUrl = thumbCdnUrl || `/videos/${video.id}/thumb.jpg`;
+    const thumbnailUrl = `/api/videos/${video.id}/thumb`;
     res.json({ success: true, thumbnailUrl });
   } catch (err) {
     logger.error({ err }, 'TMDB thumbnail error');

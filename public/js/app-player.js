@@ -23,6 +23,11 @@ async function fetchVideoToken() {
     if (!r.ok) return;
     const d = await r.json();
     _videoToken = d.token;
+    // Keep AirPlay URL in sync — iOS native player uses _hlsSourceUrl directly
+    if (_hlsSourceUrl) {
+      const base = _hlsSourceUrl.split('?')[0];
+      _hlsSourceUrl = base + '?token=' + _videoToken;
+    }
     const renewIn = (d.renewAfter || (d.ttl - 120)) * 1000;
     clearTimeout(_tokenTimer);
     _tokenTimer = setTimeout(fetchVideoToken, Math.max(30000, renewIn));
@@ -54,10 +59,12 @@ async function fetchStreamSession() {
 }
 function hlsXhrSetup(xhr, url) {
   if (_videoToken && (url.includes('/videos/') || url.includes('/api/videos/'))) {
-    xhr.open('GET', url + (url.includes('?') ? '&' : '?') + 'token=' + _videoToken, true);
+    // Skip if token already in URL — manifest-sub URLs embed the token to support
+    // external players; adding it again produces ?token=X&token=X → 401
+    if (!url.includes('token=')) {
+      xhr.open('GET', url + (url.includes('?') ? '&' : '?') + 'token=' + _videoToken, true);
+    }
   }
-  // When CloudFront Signed Cookies are active, send cookies with every CDN request
-  // so .ts segments and sub-manifests are authorized by the edge (TrustedKeyGroups).
   if (_cfSessionActive) {
     xhr.withCredentials = true;
   }
@@ -1531,7 +1538,11 @@ function _syncNativeAudioTracks() {
 
 // ─── HLS init ────────────────────────────────────────────────
 function initHls(m3u8Url) {
-  _hlsSourceUrl = m3u8Url; // guardar para AirPlay (necesita URL real, no blob://)
+  // AirPlay (iOS native HLS) loads _hlsSourceUrl directly without the xhrSetup
+  // interceptor, so we must embed the video token in the URL explicitly.
+  _hlsSourceUrl = _videoToken
+    ? m3u8Url + (m3u8Url.includes('?') ? '&' : '?') + 'token=' + _videoToken
+    : m3u8Url;
 
   if (Hls.isSupported()) {
     hls = new Hls({

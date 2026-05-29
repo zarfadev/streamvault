@@ -542,21 +542,23 @@ router.delete('/users/:id', superAdminAuth, async (req, res) => {
 
     // Collect all owned workspaces and their videos BEFORE touching the DB
     const ownedWorkspaces = await db.prepare('SELECT id FROM workspaces WHERE owner_id = ?').all(req.params.id);
-    const workspaceVideos = [];
-    for (const ws of ownedWorkspaces) {
-      const videos = await db.prepare('SELECT id, s3_object_prefix FROM videos WHERE workspace_id = ?').all(ws.id);
-      workspaceVideos.push(...videos);
-    }
+    const wsIds = ownedWorkspaces.map(w => w.id);
+    const workspaceVideos = wsIds.length
+      ? await db.pool.query(
+          `SELECT id, s3_object_prefix FROM videos WHERE workspace_id = ANY($1::text[])`,
+          [wsIds]
+        ).then(r => r.rows)
+      : [];
 
     // Delete all DB records atomically before touching the filesystem
     const client = await db.pool.connect();
     try {
       await client.query('BEGIN');
-      for (const ws of ownedWorkspaces) {
-        await client.query('DELETE FROM workspace_members    WHERE workspace_id = $1', [ws.id]);
-        await client.query('DELETE FROM workspace_invitations WHERE workspace_id = $1', [ws.id]);
-        await client.query('DELETE FROM videos               WHERE workspace_id = $1', [ws.id]);
-        await client.query('DELETE FROM workspaces           WHERE id = $1',           [ws.id]);
+      if (wsIds.length) {
+        await client.query('DELETE FROM workspace_members    WHERE workspace_id = ANY($1::text[])', [wsIds]);
+        await client.query('DELETE FROM workspace_invitations WHERE workspace_id = ANY($1::text[])', [wsIds]);
+        await client.query('DELETE FROM videos               WHERE workspace_id = ANY($1::text[])', [wsIds]);
+        await client.query('DELETE FROM workspaces           WHERE id = ANY($1::text[])',           [wsIds]);
       }
       await client.query('DELETE FROM workspace_members WHERE user_id = $1', [req.params.id]);
       await client.query('DELETE FROM users             WHERE id = $1',       [req.params.id]);
@@ -614,18 +616,46 @@ router.post('/impersonate/:id', superAdminAuth, async (req, res) => {
 
 router.get('/videos', superAdminAuth, async (req, res) => {
   try {
-    const videos = await db.prepare(`
-      SELECT v.id, v.title, v.status, v.views, v.size as file_size, v.created_at,
-             v.qualities, v.short_code, v.visibility, v.dmca_suspended, v.dmca_reason,
-             v.workspace_id,
-             w.name as workspace_name, u.email as owner_email
-      FROM videos v
-      LEFT JOIN workspaces w ON v.workspace_id = w.id
-      LEFT JOIN users u ON w.owner_id = u.id
-      ORDER BY v.created_at DESC
-      LIMIT 200
-    `).all();
-    res.json(videos);
+    const limit  = Math.min(parseInt(req.query.limit)  || 50, 200);
+    const offset = Math.max(parseInt(req.query.offset) || 0, 0);
+    const search = (req.query.search || '').trim();
+
+    let whereClause = '';
+    const params = [];
+    if (search) {
+      params.push(`%${search}%`);
+      whereClause = `WHERE v.title ILIKE ? OR u.email ILIKE ? OR w.name ILIKE ?`;
+      params.push(`%${search}%`, `%${search}%`);
+    }
+
+    const [videos, totalRow] = await Promise.all([
+      db.pool.query(`
+        SELECT v.id, v.title, v.status, v.views, v.size as file_size, v.created_at,
+               v.qualities, v.short_code, v.visibility, v.dmca_suspended, v.dmca_reason,
+               v.workspace_id,
+               w.name as workspace_name, u.email as owner_email
+        FROM videos v
+        LEFT JOIN workspaces w ON v.workspace_id = w.id
+        LEFT JOIN users u ON w.owner_id = u.id
+        ${search ? `WHERE v.title ILIKE $3 OR u.email ILIKE $3 OR w.name ILIKE $3` : ''}
+        ORDER BY v.created_at DESC
+        LIMIT $1 OFFSET $2
+      `, search ? [limit, offset, `%${search}%`] : [limit, offset]),
+      db.pool.query(`
+        SELECT COUNT(*) AS total
+        FROM videos v
+        LEFT JOIN workspaces w ON v.workspace_id = w.id
+        LEFT JOIN users u ON w.owner_id = u.id
+        ${search ? `WHERE v.title ILIKE $1 OR u.email ILIKE $1 OR w.name ILIKE $1` : ''}
+      `, search ? [`%${search}%`] : []),
+    ]);
+
+    res.json({
+      videos: videos.rows,
+      total: parseInt(totalRow.rows[0]?.total || 0),
+      limit,
+      offset,
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1027,7 +1057,7 @@ router.get('/activity', superAdminAuth, async (req, res) => {
       .slice(0, 10);
     res.json(activity);
   } catch (e) {
-    res.json([]);
+    res.status(500).json({ error: e.message });
   }
 });
 
@@ -1067,23 +1097,39 @@ router.delete('/queue/clean', superAdminAuth, async (req, res) => {
 
 router.get('/growth', superAdminAuth, async (req, res) => {
   try {
-    const days = 14;
+    const days = parseInt(req.query.days) || 14;
+    const cutoff = Math.floor(Date.now() / 1000) - days * 86400;
+
+    const [usersRes, videosRes] = await Promise.all([
+      db.pool.query(`
+        SELECT to_char(to_timestamp(created_at), 'MM/DD') AS day,
+               COUNT(*)::int AS cnt
+        FROM users
+        WHERE created_at >= $1
+        GROUP BY day
+      `, [cutoff]),
+      db.pool.query(`
+        SELECT to_char(to_timestamp(created_at), 'MM/DD') AS day,
+               COUNT(*)::int AS cnt
+        FROM videos
+        WHERE created_at >= $1
+        GROUP BY day
+      `, [cutoff]),
+    ]);
+
+    const userMap  = Object.fromEntries(usersRes.rows.map(r => [r.day, r.cnt]));
+    const videoMap = Object.fromEntries(videosRes.rows.map(r => [r.day, r.cnt]));
+
     const result = [];
     for (let i = days - 1; i >= 0; i--) {
-      const dayStart = Math.floor(Date.now() / 1000) - i * 86400;
-      const dayEnd   = dayStart + 86400;
-      const users  = await db.prepare(`SELECT COUNT(*) as c FROM users  WHERE created_at >= ? AND created_at < ?`).get(dayStart, dayEnd);
-      const videos = await db.prepare(`SELECT COUNT(*) as c FROM videos WHERE created_at >= ? AND created_at < ?`).get(dayStart, dayEnd);
-      const date = new Date(dayStart * 1000);
-      result.push({
-        date: `${date.getMonth()+1}/${date.getDate()}`,
-        users:  Number(users?.c)  || 0,
-        videos: Number(videos?.c) || 0,
-      });
+      const ts   = Math.floor(Date.now() / 1000) - i * 86400;
+      const d    = new Date(ts * 1000);
+      const key  = `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+      result.push({ date: key, users: userMap[key] || 0, videos: videoMap[key] || 0 });
     }
     res.json(result);
   } catch (e) {
-    res.json([]);
+    res.status(500).json({ error: e.message });
   }
 });
 
@@ -1899,19 +1945,23 @@ router.post('/upload-asset', superAdminAuth, _multerAsset.single('file'), async 
 
 router.post('/retranscode-bulk', superAdminAuth, async (req, res) => {
   try {
-    const { workspaceId } = req.body; // optional: limit to one workspace
+    const { workspaceId, limit: rawLimit, offset: rawOffset } = req.body;
+    const limit  = Math.min(parseInt(rawLimit)  || 200, 1000);
+    const offset = Math.max(parseInt(rawOffset) || 0, 0);
     const { addTranscodeJob } = require('../services/queue');
     const s3svc = require('../services/s3Storage');
     const fs    = require('fs');
 
-    const where = workspaceId
-      ? `WHERE status IN ('ready','error','scheduled') AND workspace_id = $1`
-      : `WHERE status IN ('ready','error','scheduled')`;
-    const params = workspaceId ? [workspaceId] : [];
+    const [where, params] = workspaceId
+      ? [`WHERE status IN ('ready','error','scheduled') AND workspace_id = $1`, [workspaceId]]
+      : [`WHERE status IN ('ready','error','scheduled')`, []];
 
-    const videos = await db.prepare(
-      `SELECT id, title, source_file, workspace_id FROM videos ${where} ORDER BY created_at DESC LIMIT 200`
-    ).all(...params);
+    const limitIdx  = params.length + 1;
+    const offsetIdx = params.length + 2;
+    const videos = await db.pool.query(
+      `SELECT id, title, source_file, workspace_id FROM videos ${where} ORDER BY created_at DESC LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+      [...params, limit, offset]
+    ).then(r => r.rows);
 
     let queued = 0;
     let skipped = 0;

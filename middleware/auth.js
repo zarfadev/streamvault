@@ -37,12 +37,14 @@ async function resolveApiKey(rawKey) {
   if (!rawKey || !rawKey.startsWith('sv_live_')) return null;
   const prefix = rawKey.slice(0, 12);
   const rows = await db.prepare(
-    `SELECT ak.id, ak.key_hash, ak.workspace_id, ak.scopes, w.owner_id
+    `SELECT ak.id, ak.key_hash, ak.workspace_id, ak.scopes, ak.expires_at, ak.disabled, w.owner_id
      FROM api_keys ak JOIN workspaces w ON w.id = ak.workspace_id
      WHERE ak.prefix = ?`
   ).all(prefix);
   for (const row of rows) {
     if (await bcrypt.compare(rawKey, row.key_hash)) {
+      if (row.disabled) return null;
+      if (row.expires_at && row.expires_at < Math.floor(Date.now() / 1000)) return null;
       // Async update last_used_at — fire and forget
       db.prepare(`UPDATE api_keys SET last_used_at = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT WHERE id = ?`)
         .run(row.id).catch(() => {});

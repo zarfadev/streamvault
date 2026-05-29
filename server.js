@@ -258,7 +258,7 @@ app.get('/robots.txt', (req, res) => {
 // Everything else → 302 redirect to the equivalent URL on the platform origin.
 
 const _cdCache = new Map(); // host → { wsId: string|null, at: number }
-const CD_CACHE_TTL = 5 * 60 * 1000; // 5 min
+const CD_CACHE_TTL = 30 * 1000; // 30 s — short so domain revocations propagate quickly
 
 async function lookupCustomDomain(host) {
   const now = Date.now();
@@ -377,16 +377,27 @@ setInterval(() => {
   flushBandwidth();
 }, 30_000);
 
+// Adds ±10% random jitter to daily cleanup intervals so multiple instances
+// started at the same time don't all fire cleanup queries simultaneously.
+function _dailyTask(fn) {
+  const BASE = 24 * 60 * 60 * 1000;
+  const initialDelay = Math.floor(Math.random() * BASE * 0.1);
+  setTimeout(function tick() {
+    fn();
+    setTimeout(tick, BASE + Math.floor((Math.random() * 0.2 - 0.1) * BASE));
+  }, initialDelay);
+}
+
 // Purge old webhook delivery records daily — keep last 90 days per webhook.
 // webhook_deliveries has no TTL by design (admin needs to debug failures),
 // but without a cap it grows unboundedly in high-traffic workspaces.
-setInterval(() => {
+_dailyTask(() => {
   if (_shuttingDown) return;
   const cutoff = Math.floor(Date.now() / 1000) - 90 * 24 * 60 * 60;
   database.prepare(
     `DELETE FROM webhook_deliveries WHERE created_at < ?`
   ).run(cutoff).catch(err => logger.warn({ err: err.message }, 'webhook_deliveries cleanup failed'));
-}, 24 * 60 * 60 * 1000);
+});
 
 // Purge expired revoked JWT tokens every hour.
 // Access tokens expire in 15m; we keep entries until expires_at to be safe.
@@ -400,33 +411,33 @@ setInterval(() => {
 
 // Purge expired refresh tokens daily — only deleted on logout/password-change normally,
 // so abandoned sessions accumulate over months.
-setInterval(() => {
+_dailyTask(() => {
   if (_shuttingDown) return;
   database.prepare(
     `DELETE FROM refresh_tokens WHERE expires_at < FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT`
   ).run().catch(err => logger.warn({ err: err.message }, 'refresh_tokens cleanup failed'));
-}, 24 * 60 * 60 * 1000);
+});
 
 // Purge expired workspace invitations daily — they cannot be accepted but accumulate.
-setInterval(() => {
+_dailyTask(() => {
   if (_shuttingDown) return;
   database.prepare(
     `DELETE FROM workspace_invitations WHERE accepted_at IS NULL AND expires_at < FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT`
   ).run().catch(err => logger.warn({ err: err.message }, 'workspace_invitations cleanup failed'));
-}, 24 * 60 * 60 * 1000);
+});
 
 // Purge old audit log entries daily — keep 365 days.
-setInterval(() => {
+_dailyTask(() => {
   if (_shuttingDown) return;
   const cutoff = Math.floor(Date.now() / 1000) - 365 * 24 * 60 * 60;
   database.prepare(
     `DELETE FROM audit_log WHERE created_at < ?`
   ).run(cutoff).catch(err => logger.warn({ err: err.message }, 'audit_log cleanup failed'));
-}, 24 * 60 * 60 * 1000);
+});
 
 // Purge old analytics events daily — respects per-workspace analytics_retention_days (default 90).
 // Runs two queries: one for workspace events (uses per-ws retention), one for orphan videos (90d default).
-setInterval(() => {
+_dailyTask(() => {
   if (_shuttingDown) return;
   database.prepare(`
     DELETE FROM events e USING workspaces w
@@ -437,11 +448,11 @@ setInterval(() => {
   database.prepare(
     `DELETE FROM events WHERE workspace_id IS NULL AND created_at < ?`
   ).run(orphanCutoff).catch(err => logger.warn({ err: err.message }, 'events (orphan) cleanup failed'));
-}, 24 * 60 * 60 * 1000);
+});
 
 // Purge expired guest videos daily — respects expiryHours from system_config guest_config (default 24h).
-// Deletes DB row, local files, and S3 objects so storage is reclaimed.
-setInterval(async () => {
+// Marks status='expired' first so token renewals fail cleanly, then deletes files and DB row.
+_dailyTask(async () => {
   if (_shuttingDown) return;
   try {
     let expiryHours = 24;
@@ -451,23 +462,27 @@ setInterval(async () => {
     } catch {}
     const cutoff = Math.floor(Date.now() / 1000) - expiryHours * 3600;
     const expired = await database.prepare(
-      `SELECT id, s3_object_prefix FROM videos WHERE guest_session_id IS NOT NULL AND workspace_id IS NULL AND created_at < ?`
+      `SELECT id, s3_object_prefix FROM videos WHERE guest_session_id IS NOT NULL AND workspace_id IS NULL AND created_at < ? AND status != 'expired'`
     ).all(cutoff);
+    if (!expired.length) return;
+    // Mark expired first — subsequent HLS token requests will be rejected before files vanish
+    const ids = expired.map(v => v.id);
+    await database.pool.query(
+      `UPDATE videos SET status = 'expired', updated_at = FLOOR(EXTRACT(EPOCH FROM NOW()))::BIGINT WHERE id = ANY($1::text[])`,
+      [ids]
+    );
     for (const v of expired) {
       try { require('fs').rmSync(path.join(__dirname, 'videos', v.id), { recursive: true, force: true }); } catch {}
       if (s3.isS3Enabled() && v.s3_object_prefix) {
         s3.deleteObjectsWithPrefix(v.s3_object_prefix).catch(() => {});
       }
     }
-    if (expired.length) {
-      const ids = expired.map(v => v.id);
-      await database.pool.query(`DELETE FROM videos WHERE id = ANY($1::text[])`, [ids]);
-      logger.info({ count: expired.length }, 'Purged expired guest videos');
-    }
+    await database.pool.query(`DELETE FROM videos WHERE id = ANY($1::text[])`, [ids]);
+    logger.info({ count: expired.length }, 'Purged expired guest videos');
   } catch (err) {
     logger.warn({ err: err.message }, 'guest video cleanup failed');
   }
-}, 24 * 60 * 60 * 1000);
+});
 
 // Mark videos as expired hourly — sets status='expired' so players block playback.
 // Actual file deletion is left to the user (or a separate admin purge).
@@ -489,13 +504,13 @@ setInterval(async () => {
 }, 60 * 60 * 1000);
 
 // Purge old notifications (>90 days) to keep the table tidy.
-setInterval(() => {
+_dailyTask(() => {
   if (_shuttingDown) return;
   const cutoff = Math.floor(Date.now() / 1000) - 90 * 86400;
   database.prepare(
     `DELETE FROM notifications WHERE created_at < ?`
   ).run(cutoff).catch(err => logger.warn({ err: err.message }, 'notifications cleanup failed'));
-}, 24 * 60 * 60 * 1000);
+});
 
 // ─── Status history — cron cada 60 s ─────────────────────────────────────────
 // Registra el estado de cada servicio en status_history para mostrar barras de
@@ -765,9 +780,20 @@ app.use('/api/videos', require('./routes/videos'));
 app.get('/api/videos/:id/thumb', async (req, res) => {
   try {
     const video = await database.prepare(
-      'SELECT id, workspace_id FROM videos WHERE id = ?'
+      'SELECT id, workspace_id, thumbnail_url FROM videos WHERE id = ?'
     ).get(req.params.id);
     if (!video) return res.status(404).end();
+
+    // If a custom/TMDB thumbnail is stored, serve it via CF signed URL
+    // (bypasses the CloudFront "Restrict Viewer Access" requirement for thumbnails)
+    if (video.thumbnail_url) {
+      const cfSigned = require('./services/cfSigned');
+      const thumbUrl = cfSigned.isSigningEnabled()
+        ? cfSigned.generateSignedUrl(video.thumbnail_url, 1)
+        : video.thumbnail_url;
+      res.setHeader('Cache-Control', 'public, max-age=1500');
+      return res.redirect(302, thumbUrl);
+    }
 
     const localPath = require('path').join(__dirname, 'videos', video.id, 'thumb.jpg');
     if (require('fs').existsSync(localPath)) {

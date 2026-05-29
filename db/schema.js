@@ -383,6 +383,9 @@ async function createSchema(pool) {
 
   // ── API Key Scopes (Fase 2) ────────────────────────────────────
   await pool.query(`ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS scopes TEXT DEFAULT '["videos:read"]'`);
+  // ── API Key expiry + soft-disable ────────────────────────────
+  await pool.query(`ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS expires_at BIGINT`);
+  await pool.query(`ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS disabled   INTEGER DEFAULT 0`);
 
   // ── JWT Revocation (jti) ──────────────────────────────────────
   // Stores revoked access token IDs so that compromised tokens can be invalidated
@@ -435,6 +438,10 @@ async function createSchema(pool) {
     `CREATE INDEX IF NOT EXISTS idx_videos_title_search ON videos USING gin(to_tsvector('simple', coalesce(title, '')))`,
     `CREATE INDEX IF NOT EXISTS idx_videos_ws_status    ON videos(workspace_id, status, created_at DESC)`,
     `CREATE INDEX IF NOT EXISTS idx_videos_publish_at   ON videos(publish_at) WHERE publish_at IS NOT NULL`,
+    // Password reset token lookup (full table scan without this on every reset request)
+    `CREATE INDEX IF NOT EXISTS idx_users_reset_token   ON users(reset_token) WHERE reset_token IS NOT NULL`,
+    // Analytics queries that filter workspace + type then sort by time
+    `CREATE INDEX IF NOT EXISTS idx_events_ws_type_ts   ON events(workspace_id, event_type, created_at DESC)`,
   ];
   for (const idx of indexes) await pool.query(idx);
 

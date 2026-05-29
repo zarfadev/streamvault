@@ -322,7 +322,7 @@ function generateSpriteSheet(inputPath, outputDir, duration) {
       .output(path.join(outputDir, 'thumbs_sprite.jpg'))
       .on('end', () => {
         const meta = { interval: INTERVAL, columns: COLUMNS, rows, totalFrames, thumbW: THUMB_W, thumbH: THUMB_H };
-        fs.writeFileSync(path.join(outputDir, 'thumbs_meta.json'), JSON.stringify(meta));
+        fs.promises.writeFile(path.join(outputDir, 'thumbs_meta.json'), JSON.stringify(meta)).catch(() => {});
         resolve(meta);
       })
       .on('error', reject)
@@ -722,9 +722,9 @@ async function processVideo(videoId, inputPath, title, options = {}) {
     const hlsKeyId = crypto.randomBytes(24).toString('base64url');
     const keyBinPath  = path.join(outputDir, 'hls.key');
     const keyInfoPath = path.join(outputDir, 'hls.keyinfo');
-    fs.writeFileSync(keyBinPath, hlsKey);
+    await fs.promises.writeFile(keyBinPath, hlsKey);
     const keyUrl = `${config.appUrl}/api/videos/${videoId}/hlskey/${hlsKeyId}`;
-    fs.writeFileSync(keyInfoPath, `${keyUrl}\n${keyBinPath}\n`);
+    await fs.promises.writeFile(keyInfoPath, `${keyUrl}\n${keyBinPath}\n`);
 
     const presets = await resolvePresetsForSource(info, workspaceId);
     const totalCpus = os.cpus().length;
@@ -1115,7 +1115,7 @@ async function rebuildMasterPlaylist(videoId, qualitiesOverride = null) {
   const outputDir  = path.join(__dirname, 'videos', videoId);
   const masterPath = path.join(outputDir, 'master.m3u8');
   fs.mkdirSync(outputDir, { recursive: true });
-  fs.writeFileSync(masterPath, lines.join('\n'));
+  await fs.promises.writeFile(masterPath, lines.join('\n'));
   logger.info({ videoId, qualities, audioTracks: audioTracks.length, subtitleTracks: subtitleTracks.length }, '[transcoder] master.m3u8 rebuilt');
 }
 

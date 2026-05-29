@@ -62,10 +62,11 @@ router.use(checkFeature('apiKeys'));
 router.get('/', async (req, res) => {
   try {
     const keys = await db.prepare(
-      `SELECT id, name, prefix, scopes, last_used_at, created_at FROM api_keys WHERE workspace_id = ? ORDER BY created_at DESC`
+      `SELECT id, name, prefix, scopes, last_used_at, created_at, expires_at, disabled FROM api_keys WHERE workspace_id = ? ORDER BY created_at DESC`
     ).all(req.workspace.id);
     res.json(keys.map(k => ({
       ...k,
+      disabled: !!k.disabled,
       scopes: (() => { try { return JSON.parse(k.scopes || '[]'); } catch { return DEFAULT_SCOPES; } })(),
     })));
   } catch (err) {
@@ -76,7 +77,7 @@ router.get('/', async (req, res) => {
 
 router.post('/', requireRole('owner', 'admin'), async (req, res) => {
   try {
-    const { name, scopes } = req.body;
+    const { name, scopes, expires_at } = req.body;
     if (!name || typeof name !== 'string' || !name.trim()) {
       return res.status(400).json({ error: 'name is required' });
     }
@@ -109,11 +110,21 @@ router.post('/', requireRole('owner', 'admin'), async (req, res) => {
     const prefix    = fullKey.slice(0, 12);
     const keyHash   = await bcrypt.hash(fullKey, config.bcryptRounds);
 
+    let expiresAtTs = null;
+    if (expires_at != null && expires_at !== '') {
+      expiresAtTs = typeof expires_at === 'number'
+        ? Math.floor(expires_at)
+        : Math.floor(new Date(expires_at).getTime() / 1000);
+      if (isNaN(expiresAtTs) || expiresAtTs <= Math.floor(Date.now() / 1000)) {
+        return res.status(400).json({ error: 'expires_at must be a future date' });
+      }
+    }
+
     const id = uuidv4();
     await db.prepare(`
-      INSERT INTO api_keys (id, workspace_id, name, key_hash, prefix, scopes)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(id, req.workspace.id, name.trim(), keyHash, prefix, JSON.stringify(finalScopes));
+      INSERT INTO api_keys (id, workspace_id, name, key_hash, prefix, scopes, expires_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(id, req.workspace.id, name.trim(), keyHash, prefix, JSON.stringify(finalScopes), expiresAtTs);
 
     const { logAudit } = require('../services/auditLog');
     logAudit(req, 'apikey.created', 'api_key', id, { workspaceId: req.workspace.id, name: name.trim(), scopes: finalScopes }).catch(() => {});
@@ -124,11 +135,34 @@ router.post('/', requireRole('owner', 'admin'), async (req, res) => {
       name: name.trim(),
       prefix,
       scopes: finalScopes,
+      expires_at: expiresAtTs,
+      disabled: false,
       key: fullKey,
       created_at: Math.floor(Date.now() / 1000),
     });
   } catch (err) {
     logger.error({ err }, 'create api key failed');
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+router.patch('/:id', requireRole('owner', 'admin'), async (req, res) => {
+  try {
+    const key = await db.prepare(
+      `SELECT id FROM api_keys WHERE id = ? AND workspace_id = ?`
+    ).get(req.params.id, req.workspace.id);
+    if (!key) return res.status(404).json({ error: 'Not found' });
+
+    const { disabled } = req.body;
+    if (typeof disabled !== 'boolean') {
+      return res.status(400).json({ error: 'disabled must be a boolean' });
+    }
+    await db.prepare(`UPDATE api_keys SET disabled = ? WHERE id = ?`).run(disabled ? 1 : 0, key.id);
+    const { logAudit } = require('../services/auditLog');
+    logAudit(req, disabled ? 'apikey.disabled' : 'apikey.enabled', 'api_key', key.id, { workspaceId: req.workspace.id }).catch(() => {});
+    res.json({ success: true, disabled });
+  } catch (err) {
+    logger.error({ err }, 'patch api key failed');
     res.status(500).json({ error: 'Internal server error' });
   }
 });

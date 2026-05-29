@@ -581,8 +581,13 @@ function doLogout() {
           body: JSON.stringify({ settings }),
         });
         if (!r.ok) return toast('Error al guardar', 'error');
+        // Clear API key fields after save so user sees "Configurada" placeholder
+        const tmdbEl2 = document.getElementById('cfg-tmdb-key');
+        if (tmdbEl2?.value.trim()) { tmdbEl2.value = ''; tmdbEl2.placeholder = 'Configurada — escribe para cambiar'; }
+        const openaiEl2 = document.getElementById('cfg-openai-key');
+        if (openaiEl2?.value.trim()) { openaiEl2.value = ''; openaiEl2.placeholder = 'Configurada — escribe para cambiar'; }
         const el = document.getElementById('save-status');
-        el.classList.add('visible'); setTimeout(() => el.classList.remove('visible'), 2500);
+        if (el) { el.classList.add('visible'); setTimeout(() => el.classList.remove('visible'), 2500); }
         toast('Configuración guardada');
       } catch { toast('Error de conexión', 'error'); }
     }
@@ -3556,7 +3561,7 @@ function doLogout() {
     // ─── Video Preview Modal ──────────────────────────────────────
     let _previewVideoId = null;
 
-    function openVideoPreview(videoId) {
+    async function openVideoPreview(videoId) {
       _previewVideoId = videoId;
       const v = allVideosCache.find(x => x.id === videoId);
       const title = v?.title || '';
@@ -3566,10 +3571,24 @@ function doLogout() {
       document.getElementById('preview-iframe').src = `${BASE}/player/${videoId}?preview=1`;
       document.getElementById('preview-iframe-code').value = iframeCode;
       document.getElementById('preview-link-input').value = watchUrl;
-      const m3u8Url = v?.m3u8Url || (v?.hls_cdn_url) || `${BASE}/videos/${videoId}/master.m3u8`;
-      document.getElementById('preview-m3u8-input').value = m3u8Url;
       const openLink = document.getElementById('preview-open-link');
       if (openLink) openLink.href = watchUrl;
+
+      // Fetch a fresh HLS token so the m3u8 URL is immediately usable in a player
+      const origin = location.origin; // e.g. https://streamvault.es
+      let m3u8Url = `${origin}/api/videos/${videoId}/manifest`;
+      const noteEl = document.getElementById('preview-m3u8-note');
+      try {
+        const tr = await fetch(`/api/videos/${videoId}/token`);
+        if (tr.ok) {
+          const td = await tr.json();
+          if (td.token) m3u8Url = `${origin}/api/videos/${videoId}/manifest?token=${td.token}`;
+        }
+      } catch {}
+      document.getElementById('preview-m3u8-input').value = m3u8Url;
+      // Show note for CDN videos (need stream-session for full playback)
+      if (noteEl) noteEl.style.display = v?.hls_cdn_url ? 'block' : 'none';
+
       document.getElementById('preview-modal-overlay').classList.add('visible');
       document.addEventListener('keydown', _previewKeyHandler);
     }
@@ -3810,10 +3829,9 @@ function copyLink(id, type) {
       const cur = document.getElementById('edit-thumb-current');
       if (cur) {
         const ts = Date.now();
-        // Prefer the explicitly passed URL (from API response), then cached, then local fallback
-        const cached = allVideosCache.find(x => x.id === videoId);
-        const src = thumbUrl || cached?.thumbnailUrl || `/videos/${videoId}/thumb.jpg`;
-        cur.src = `${src}${src.includes('?') ? '&' : '?'}_=${ts}`;
+        // Always use the proxy endpoint — it resolves to the correct versioned CDN thumbnail
+        const src = `/api/videos/${videoId}/thumb`;
+        cur.src = `${src}?_=${ts}`;
         cur.onerror = () => { cur.style.opacity = '0.3'; };
         cur.onload  = () => { cur.style.opacity = '1'; };
       }
@@ -3833,12 +3851,10 @@ function copyLink(id, type) {
         const d = await r.json().catch(() => ({}));
         if (!r.ok) { toast(d.error || 'Error', 'error'); return; }
         toast('Miniatura restaurada');
-        updateEditThumbUI(_editModalVideoId, d.thumbnailUrl);
-        // Update cache so grid card reflects the regenerated thumbnail immediately
-        if (d.thumbnailUrl) {
-          const cached = allVideosCache.find(x => x.id === _editModalVideoId);
-          if (cached) { cached.thumbnailUrl = d.thumbnailUrl; applyLibraryFilters(); }
-        }
+        const proxyUrl = `/api/videos/${_editModalVideoId}/thumb`;
+        updateEditThumbUI(_editModalVideoId, proxyUrl);
+        const cachedDel = allVideosCache.find(x => x.id === _editModalVideoId);
+        if (cachedDel) { cachedDel.thumbnailUrl = proxyUrl; applyLibraryFilters(); }
       } catch { toast('Error de conexión', 'error'); }
       finally { btn.disabled = false; btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg> Eliminar'; }
     }
@@ -3859,11 +3875,15 @@ function copyLink(id, type) {
         const d = await r.json().catch(() => ({}));
         if (!r.ok) { toast(d.error || 'Error al obtener poster', 'error'); return; }
         toast('Poster de TMDB aplicado');
-        updateEditThumbUI(_editModalVideoId, d.thumbnailUrl);
-        // Update cache so grid card reflects the TMDB poster immediately
-        if (d.thumbnailUrl) {
-          const cached = allVideosCache.find(x => x.id === _editModalVideoId);
-          if (cached) { cached.thumbnailUrl = d.thumbnailUrl; applyLibraryFilters(); }
+        // Always bust the proxy cache with a timestamp so the grid card reloads immediately
+        const proxyUrl = `/api/videos/${_editModalVideoId}/thumb`;
+        updateEditThumbUI(_editModalVideoId, proxyUrl);
+        const cached = allVideosCache.find(x => x.id === _editModalVideoId);
+        if (cached) {
+          cached.thumbnailUrl = proxyUrl;
+          cached.tmdb_id   = document.getElementById('edit-tmdb-id')?.value.trim()   || cached.tmdb_id;
+          cached.tmdb_type = document.getElementById('edit-tmdb-type')?.value         || cached.tmdb_type;
+          applyLibraryFilters();
         }
       } catch { toast('Error de conexión', 'error'); }
       finally { btn.disabled = false; btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg> Poster TMDB'; }
@@ -4430,18 +4450,36 @@ function copyLink(id, type) {
           list.innerHTML = '<p style="font-size:13px;color:var(--muted);">No tienes claves de API. Crea una para comenzar.</p>';
           return;
         }
-        list.innerHTML = keys.map(k => `
-          <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface2);border-radius:8px;">
+        const now = Math.floor(Date.now() / 1000);
+        list.innerHTML = keys.map(k => {
+          const expired  = k.expires_at && k.expires_at < now;
+          const disabled = !!k.disabled;
+          const inactive = expired || disabled;
+          const expiryLabel = k.expires_at
+            ? (expired ? `<span style="color:var(--red);font-weight:600;">Expirada</span>` : `Expira ${timeAgo(k.expires_at)}`)
+            : '';
+          return `
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface2);border-radius:8px;opacity:${inactive ? .6 : 1};">
             <div style="flex:1;min-width:0;">
-              <div style="font-size:13px;font-weight:600;color:var(--text);">${esc(k.name)}</div>
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                <span style="font-size:13px;font-weight:600;color:var(--text);">${esc(k.name)}</span>
+                ${disabled ? '<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:99px;background:rgba(248,113,113,.15);color:var(--red);">DESACTIVADA</span>' : ''}
+                ${expired  ? '<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:99px;background:rgba(248,113,113,.15);color:var(--red);">EXPIRADA</span>' : ''}
+              </div>
               <div style="font-size:11px;color:var(--muted);font-family:var(--mono);">${k.prefix}••••••••••••••••••</div>
-              <div style="font-size:11px;color:var(--muted);">Creada ${timeAgo(k.created_at)}${k.last_used_at ? ` · Usada ${timeAgo(k.last_used_at)}` : ' · Nunca usada'}</div>
+              <div style="font-size:11px;color:var(--muted);">Creada ${timeAgo(k.created_at)}${k.last_used_at ? ` · Usada ${timeAgo(k.last_used_at)}` : ' · Nunca usada'}${expiryLabel ? ' · ' + expiryLabel : ''}</div>
             </div>
-            <button class="action-btn del-btn" onclick="revokeApiKey('${k.id}','${escAttr(k.name)}')">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
-              Revocar
-            </button>
-          </div>`).join('');
+            <div style="display:flex;gap:6px;flex-shrink:0;">
+              ${!expired ? `<button class="action-btn" style="padding:5px 10px;font-size:11px;border-color:${disabled ? 'var(--green)' : 'var(--border2)'};color:${disabled ? 'var(--green)' : 'var(--muted)'};" onclick="toggleApiKey('${k.id}',${!disabled})" title="${disabled ? 'Activar' : 'Desactivar'}">
+                ${disabled ? '▶ Activar' : '⏸ Pausar'}
+              </button>` : ''}
+              <button class="action-btn del-btn" onclick="revokeApiKey('${k.id}','${escAttr(k.name)}')">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/></svg>
+                Revocar
+              </button>
+            </div>
+          </div>`;
+        }).join('');
       } catch {
         list.innerHTML = '<p style="font-size:13px;color:var(--red);">Error cargando claves</p>';
       }
@@ -4449,6 +4487,8 @@ function copyLink(id, type) {
 
     function createApiKey() {
       document.getElementById('apikey-create-name').value = '';
+      const expiryEl = document.getElementById('apikey-create-expiry');
+      if (expiryEl) expiryEl.value = '';
       openModal('create-apikey-modal-overlay');
       setTimeout(() => document.getElementById('apikey-create-name').focus(), 80);
     }
@@ -4456,11 +4496,15 @@ function copyLink(id, type) {
     async function submitCreateApiKey() {
       const name = document.getElementById('apikey-create-name').value.trim();
       if (!name) { document.getElementById('apikey-create-name').focus(); return toast('El nombre es requerido', 'error'); }
+      const expiryVal = document.getElementById('apikey-create-expiry')?.value;
+      const expires_at = expiryVal ? new Date(expiryVal).toISOString() : null;
+      if (expiryVal && isNaN(new Date(expiryVal).getTime())) return toast('Fecha de expiración inválida', 'error');
+      if (expires_at && new Date(expiryVal) <= new Date()) return toast('La fecha de expiración debe ser futura', 'error');
       try {
         const r = await apiFetch('/api/apikeys', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name }),
+          body: JSON.stringify({ name, ...(expires_at ? { expires_at } : {}) }),
         });
         if (r.status === 403) return toast('Requiere plan Pro o Enterprise', 'error');
         if (!r.ok) { const e = await r.json().catch(() => {}); return toast(e?.error || 'Error', 'error'); }
@@ -4492,6 +4536,17 @@ function copyLink(id, type) {
 </div>`;
         document.body.appendChild(modal);
       } catch { toast('Error de conexión', 'error'); }
+    }
+
+    async function toggleApiKey(id, enable) {
+      const r = await apiFetch(`/api/apikeys/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ disabled: !enable }),
+      });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); return toast(d.error || 'Error', 'error'); }
+      toast(enable ? 'Clave activada' : 'Clave pausada');
+      loadApiKeys();
     }
 
     async function revokeApiKey(id, name) {
@@ -6157,11 +6212,17 @@ function copyLink(id, type) {
           if (r.ok) {
             toast('Video actualizado');
             closeModal('edit-modal-overlay');
-            // Immediately update cache so the grid card reflects the new thumbnail
-            // without waiting for the loadVideos() network round-trip.
-            if (newThumbUrl) {
-              const cached = allVideosCache.find(x => x.id === id);
-              if (cached) cached.thumbnailUrl = newThumbUrl;
+            // Update cache immediately so the grid reflects changes without waiting for reload
+            const cachedEdit = allVideosCache.find(x => x.id === id);
+            if (cachedEdit) {
+              if (newThumbUrl || thumbFile?.files.length) {
+                cachedEdit.thumbnailUrl = `/api/videos/${id}/thumb`;
+              }
+              // Persist TMDB fields in cache so the grid shows updated metadata
+              const tmdbIdVal = document.getElementById('edit-tmdb-id')?.value.trim();
+              if (tmdbIdVal !== undefined) cachedEdit.tmdb_id = tmdbIdVal;
+              const tmdbTypeVal = document.getElementById('edit-tmdb-type')?.value;
+              if (tmdbTypeVal) cachedEdit.tmdb_type = tmdbTypeVal;
             }
             loadVideos();
           }
@@ -6728,8 +6789,12 @@ function copyLink(id, type) {
           body: JSON.stringify({ settings }),
         });
         if (!r.ok) return toast('Error al guardar', 'error');
+        const tmdbEl3 = document.getElementById('cfg-tmdb-key');
+        if (tmdbEl3?.value.trim()) { tmdbEl3.value = ''; tmdbEl3.placeholder = 'Configurada — escribe para cambiar'; }
+        const openaiEl3 = document.getElementById('cfg-openai-key');
+        if (openaiEl3?.value.trim()) { openaiEl3.value = ''; openaiEl3.placeholder = 'Configurada — escribe para cambiar'; }
         const el = document.getElementById('save-status');
-        el.classList.add('visible'); setTimeout(() => el.classList.remove('visible'), 2500);
+        if (el) { el.classList.add('visible'); setTimeout(() => el.classList.remove('visible'), 2500); }
         toast('Configuración guardada');
       } catch { toast('Error de conexión', 'error'); }
     };
@@ -7414,7 +7479,7 @@ function copyLink(id, type) {
           sel.innerHTML = '<option value="">No hay métodos de pago disponibles</option>';
           if (info) {
             info.style.display = 'block';
-            info.innerHTML = '<span style="color:var(--red);">⚠️ No hay métodos de pago configurados. Contacta al administrador.</span>';
+            info.innerHTML = '<span style="color:var(--red);display:flex;align-items:center;gap:5px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> No hay métodos de pago configurados. Contacta al administrador.</span>';
           }
           return;
         }
@@ -7448,7 +7513,7 @@ function copyLink(id, type) {
         sel.innerHTML = '<option value="stripe">Stripe (Por defecto)</option>';
         if (info) {
           info.style.display = 'block';
-          info.innerHTML = '<span style="color:var(--amber);">⚠️ Error al cargar métodos de pago. Se usará Stripe por defecto.</span>';
+          info.innerHTML = '<span style="color:var(--amber);display:flex;align-items:center;gap:5px;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Error al cargar métodos de pago. Se usará Stripe por defecto.</span>';
         }
       }
     }
