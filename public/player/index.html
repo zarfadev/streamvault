@@ -6,7 +6,7 @@
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Reproductor</title>
-<link rel="stylesheet" href="/css/player-ott.css?v=2026.05.29j">
+<link rel="stylesheet" href="/css/player-ott.css?v=2026.05.29k">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet">
 <!-- HLS.js versión actualizada para reproducción HLS -->
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.3/dist/hls.min.js"
@@ -24,11 +24,15 @@
 body.player-standalone {
   background: #000;
   overflow: hidden;
+  /* Prevenir scroll en móvil Safari — 100dvh respeta la barra del browser */
+  height: 100dvh;
+  height: 100vh; /* fallback */
 }
 body.player-standalone .player-container {
   max-width: 100%;
   padding: 0;
-  height: 100vh;
+  height: 100dvh;
+  height: 100vh; /* fallback */
   display: flex;
   flex-direction: column;
 }
@@ -37,8 +41,20 @@ body.player-standalone .player-wrap {
   border-radius: 0 !important;
   box-shadow: none !important;
   aspect-ratio: unset !important;
+  /* evitar overflow en iOS que genera scroll */
+  overflow: hidden !important;
+}
+body.player-standalone .player-inner {
+  overflow: hidden !important;
 }
 body.player-standalone .video-info { display: none !important; }
+
+/* Touch overscroll prevention */
+body.player-standalone {
+  touch-action: none;
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: auto;
+}
 </style>
 <script>fetch('/api/settings').then(r=>r.json()).then(s=>{if(s.siteName)document.title=s.siteName+' — Reproductor';}).catch(()=>{});</script>
 </head>
