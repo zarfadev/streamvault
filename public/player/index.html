@@ -20,25 +20,23 @@
   crossorigin="anonymous"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-/* Fullscreen mode when accessed via /player/:id */
-body.player-standalone {
-  background: #000;
+
+/* ── Standalone player: ocupa 100% de la pantalla en todos los dispositivos ── */
+/* Se aplica desde el primer frame, antes de que JS añada .player-standalone    */
+html, body {
+  width: 100%;
+  height: 100dvh;
+  height: 100vh;
   overflow: hidden;
-  /* Prevenir scroll en móvil Safari — 100dvh respeta la barra del browser */
-  height: 100dvh;
-  height: 100vh; /* fallback */
+  background: #000;
+  touch-action: none;
+  overscroll-behavior: none;
 }
-body.player-standalone .player-container {
-  max-width: 100%;
-  padding: 0;
-  height: 100dvh;
-  height: 100vh; /* fallback */
-  display: flex;
-  flex-direction: column;
-}
-body.player-standalone .player-container,
-body.player-standalone .player-wrap,
-body.player-standalone .player-inner {
+
+/* Forzar que el player llene toda la pantalla — overrides de máxima prioridad */
+.player-container,
+.player-wrap,
+.player-inner {
   width: 100% !important;
   height: 100% !important;
   max-width: 100% !important;
@@ -49,21 +47,24 @@ body.player-standalone .player-inner {
   overflow: hidden !important;
   padding: 0 !important;
   margin: 0 !important;
-  flex: 1;
+  flex: 1 !important;
 }
-body.player-standalone .player-wrap video {
+
+/* El contenedor ya tiene display:flex del CSS global — solo resetear padding */
+.player-container {
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+/* Video: contain para mantener proporciones sin distorsionar */
+video {
   width: 100% !important;
   height: 100% !important;
   object-fit: contain !important;
 }
-body.player-standalone .video-info { display: none !important; }
 
-/* Touch overscroll prevention */
-body.player-standalone {
-  touch-action: none;
-  overscroll-behavior: none;
-  -webkit-overflow-scrolling: auto;
-}
+/* Ocultar info del video (solo visible en /watch/) */
+.video-info { display: none !important; }
 </style>
 <script>fetch('/api/settings').then(r=>r.json()).then(s=>{if(s.siteName)document.title=s.siteName+' — Reproductor';}).catch(()=>{});</script>
 </head>
