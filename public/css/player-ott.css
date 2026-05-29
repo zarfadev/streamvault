@@ -150,13 +150,7 @@ html.embed-root, html.embed-root body {
   z-index: 12;
   display: flex; flex-direction: column; gap: 0;
   padding: 0 20px calc(12px + env(safe-area-inset-bottom, 0px));
-  /* Richer gradient so white controls contrast */
-  background: linear-gradient(
-    0deg,
-    rgba(0,0,0,0.96)  0%,
-    rgba(0,0,0,0.65)  50%,
-    transparent       100%
-  );
+  background: transparent;
   pointer-events: none;
   transition: opacity var(--ui-dur) var(--pv-ease);
 }
@@ -174,7 +168,7 @@ html.embed-root, html.embed-root body {
   top: 0; left: 0; right: 0;
   display: flex; align-items: center; justify-content: center;
   padding: clamp(14px, 3.5vh, 28px) clamp(14px, 3.5vw, 36px);
-  background: linear-gradient(to bottom, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.2) 70%, transparent 100%);
+  background: transparent;
   pointer-events: auto;
   z-index: 20;
 }
@@ -183,7 +177,7 @@ html.embed-root, html.embed-root body {
   font-size: 15px; font-weight: 600;
   color: #fff;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  text-shadow: 0 1px 12px rgba(0,0,0,0.9);
+  text-shadow: 0 1px 8px rgba(0,0,0,1), 0 0 16px rgba(0,0,0,0.9);
   letter-spacing: 0.01em;
   text-align: center;
   max-width: 70%;
@@ -303,26 +297,27 @@ html.embed-root, html.embed-root body {
   flex: 0 0 auto; min-width: 2.8em;
   font-size: 13px; font-weight: 700; font-family: var(--pv-mono);
   color: #fff;
-  text-shadow: 0 1px 6px rgba(0,0,0,0.8);
+  text-shadow: 0 1px 8px rgba(0,0,0,1), 0 0 2px rgba(0,0,0,0.9);
   letter-spacing: 0.02em;
 }
 .progress-line-row .time-remain {
   flex: 0 0 auto; min-width: 2.8em;
   text-align: right; font-size: 13px; font-family: var(--pv-mono);
-  color: rgba(255,255,255,0.45); font-weight: 500;
-  text-shadow: 0 1px 6px rgba(0,0,0,0.8);
+  color: rgba(255,255,255,0.75); font-weight: 500;
+  text-shadow: 0 1px 8px rgba(0,0,0,1), 0 0 2px rgba(0,0,0,0.9);
 }
 .progress-line-row .progress-track { flex: 1 1 auto; min-width: 48px; }
 
 /* Track */
 .progress-track {
   width: 100%; height: 3px;
-  background: rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.35);
   border-radius: 99px;
   cursor: pointer;
   position: relative;
   transition: height 0.08s ease-out, background 0.08s;
   touch-action: none;
+  filter: drop-shadow(0 1px 4px rgba(0,0,0,0.8));
 }
 .progress-stack:hover .progress-track,
 .progress-track:hover { height: 5px !important; background: rgba(255,255,255,0.25); }
@@ -456,6 +451,8 @@ html.embed-root, html.embed-root body {
   transition: background 0.15s var(--pv-ease), color 0.12s, transform 0.12s;
   outline: none;
   position: relative;
+  /* Shadow so icons are legible over any video background without the dock gradient */
+  filter: drop-shadow(0 1px 4px rgba(0,0,0,0.9));
 }
 @media (hover: hover) {
   .ctrl-btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
@@ -674,6 +671,7 @@ html.embed-root, html.embed-root body {
   display: inline-flex; align-items: center; justify-content: center;
   cursor: pointer; flex-shrink: 0;
   transition: background 0.15s var(--pv-ease);
+  filter: drop-shadow(0 1px 4px rgba(0,0,0,0.9));
 }
 .cc-indicator-btn:hover  { background: rgba(255,255,255,0.12) !important; }
 .cc-indicator-btn:active { transform: scale(0.88); }
@@ -1503,6 +1501,7 @@ video::cue {
   cursor: pointer;
   flex-shrink: 0;
   transition: background 0.15s var(--pv-ease);
+  filter: drop-shadow(0 1px 4px rgba(0,0,0,0.9));
 }
 .quality-indicator-btn:hover  { background: rgba(255,255,255,0.12) !important; }
 .quality-indicator-btn:active { transform: scale(0.88); }
