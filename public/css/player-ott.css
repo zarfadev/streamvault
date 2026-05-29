@@ -150,7 +150,13 @@ html.embed-root, html.embed-root body {
   z-index: 12;
   display: flex; flex-direction: column; gap: 0;
   padding: 0 20px calc(12px + env(safe-area-inset-bottom, 0px));
-  background: transparent;
+  /* Degradado mínimo — solo para que íconos blancos sean legibles sobre
+     video muy claro. Apenas perceptible (18% negro en la base). */
+  background: linear-gradient(
+    0deg,
+    rgba(0,0,0,0.18) 0%,
+    transparent      70%
+  );
   pointer-events: none;
   transition: opacity var(--ui-dur) var(--pv-ease);
 }
@@ -208,7 +214,6 @@ html.embed-root, html.embed-root body {
   color: rgba(255,255,255,0.88); cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center;
   transition: transform 0.18s var(--pv-ease), color 0.12s, background 0.12s;
-  filter: drop-shadow(0 2px 12px rgba(0,0,0,0.6));
 }
 /* Hover solo en dispositivos con mouse real — evita el "sticky hover" bug en iOS/touch */
 @media (hover: hover) {
@@ -216,7 +221,6 @@ html.embed-root, html.embed-root body {
     color: #fff;
     transform: scale(1.12);
     background: rgba(255,255,255,0.1);
-    filter: drop-shadow(0 4px 20px rgba(0,0,0,0.75));
   }
 }
 .center-skip-btn:active { transform: scale(0.91); }
@@ -311,13 +315,12 @@ html.embed-root, html.embed-root body {
 /* Track */
 .progress-track {
   width: 100%; height: 3px;
-  background: rgba(255,255,255,0.35);
+  background: rgba(255,255,255,0.28);
   border-radius: 99px;
   cursor: pointer;
   position: relative;
   transition: height 0.08s ease-out, background 0.08s;
   touch-action: none;
-  filter: drop-shadow(0 1px 4px rgba(0,0,0,0.8));
 }
 .progress-stack:hover .progress-track,
 .progress-track:hover { height: 5px !important; background: rgba(255,255,255,0.25); }
@@ -451,8 +454,6 @@ html.embed-root, html.embed-root body {
   transition: background 0.15s var(--pv-ease), color 0.12s, transform 0.12s;
   outline: none;
   position: relative;
-  /* Shadow so icons are legible over any video background without the dock gradient */
-  filter: drop-shadow(0 1px 4px rgba(0,0,0,0.9));
 }
 @media (hover: hover) {
   .ctrl-btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
@@ -671,7 +672,6 @@ html.embed-root, html.embed-root body {
   display: inline-flex; align-items: center; justify-content: center;
   cursor: pointer; flex-shrink: 0;
   transition: background 0.15s var(--pv-ease);
-  filter: drop-shadow(0 1px 4px rgba(0,0,0,0.9));
 }
 .cc-indicator-btn:hover  { background: rgba(255,255,255,0.12) !important; }
 .cc-indicator-btn:active { transform: scale(0.88); }
@@ -1501,7 +1501,6 @@ video::cue {
   cursor: pointer;
   flex-shrink: 0;
   transition: background 0.15s var(--pv-ease);
-  filter: drop-shadow(0 1px 4px rgba(0,0,0,0.9));
 }
 .quality-indicator-btn:hover  { background: rgba(255,255,255,0.12) !important; }
 .quality-indicator-btn:active { transform: scale(0.88); }
