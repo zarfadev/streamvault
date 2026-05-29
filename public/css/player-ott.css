@@ -210,21 +210,29 @@ html.embed-root, html.embed-root body {
   width:  clamp(56px, 8vw, 88px);
   height: clamp(56px, 8vw, 88px);
   border-radius: 50%; border: none;
-  background: transparent;
+  background: transparent !important;
+  -webkit-tap-highlight-color: transparent;
   color: rgba(255,255,255,0.88); cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center;
-  transition: transform 0.18s var(--pv-ease), color 0.12s, background 0.12s;
+  transition: transform 0.18s var(--pv-ease), color 0.12s;
+  box-shadow: none !important;
+  outline: none;
 }
 /* Hover solo en dispositivos con mouse real — evita el "sticky hover" bug en iOS/touch */
 @media (hover: hover) {
   .center-skip-btn:hover {
     color: #fff;
     transform: scale(1.12);
-    background: rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.08) !important;
   }
 }
+/* En touch: nunca fondo — ni en active ni en focus */
+@media (hover: none) {
+  .center-skip-btn:active,
+  .center-skip-btn:focus { background: transparent !important; box-shadow: none !important; }
+}
 .center-skip-btn:active { transform: scale(0.91); }
-.center-skip-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px #000, 0 0 0 4px rgba(255,255,255,0.4); }
+.center-skip-btn:focus-visible { outline: none; }
 .center-skip-btn svg {
   width:  clamp(30px, 4.2vw, 46px);
   height: clamp(30px, 4.2vw, 46px);
