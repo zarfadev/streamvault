@@ -149,20 +149,60 @@ router.get('/:id/manifest', rateLimit(30, 60_000), async (req, res) => {
       // segment URLs so any HLS player (no cookies needed) can play directly.
       const subBase   = `/api/videos/${req.params.id}/manifest-sub`;
       const tokenPart = req.query.token ? `?token=${req.query.token}` : '';
+      const vidBase   = `/api/videos/${req.params.id}`;
 
+      // 1. Relative quality playlist lines (non-# lines ending in .m3u8)
       let rewritten = body.replace(/^((?!#)(?!https?:\/\/)(?!\/\/).+\.m3u8)$/gm,
         match => `${subBase}/${match.trim()}${tokenPart}`);
+
+      // 2. Relative URI= attributes (e.g. tracks/audio_0/index.m3u8 without leading http)
       rewritten = rewritten.replace(
         /URI="((?!https?:\/\/)(?!\/)[^"]+\.m3u8)"/g,
         (_, relPath) => `URI="${subBase}/${relPath.trim()}${tokenPart}"`
       );
+
+      // 3. Absolute CDN audio/track URI= — same treatment as relative ones above.
+      //    These are written by rebuild-playlist when S3 is enabled; iOS/AirPlay native
+      //    HLS players fetch them directly and get 403 without CloudFront signing.
+      const cdnEsc = cdnBase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      rewritten = rewritten.replace(
+        new RegExp(`URI="${cdnEsc}/([a-zA-Z0-9_/-]+\\.m3u8)"`, 'g'),
+        (_, trackPath) => `URI="${subBase}/${trackPath}${tokenPart}"`
+      );
+
+      // 4. Absolute server-URL subtitle URI= pointing directly to .vtt files.
+      //    iOS native HLS requires a proper HLS WebVTT playlist, not a bare VTT.
+      //    Route through /tracks/hls-sub/:file which wraps the VTT in a playlist.
+      rewritten = rewritten.replace(
+        /URI="https?:\/\/[^"]+\/api\/videos\/[^/]+\/tracks\/serve\/([^"]+\.vtt)"/g,
+        (_, filename) => `URI="${vidBase}/tracks/hls-sub/${filename}${tokenPart ? tokenPart : ''}"`
+      );
+
       return res.send(rewritten);
     }
 
-    // Local storage — read master.m3u8 from disk
+    // Local storage — read master.m3u8 from disk and rewrite absolute track URIs.
     const masterPath = path.join(__dirname, '..', 'videos', req.params.id, 'master.m3u8');
     try {
-      const content = await fs.promises.readFile(masterPath, 'utf8');
+      let content = await fs.promises.readFile(masterPath, 'utf8');
+      const vidBase   = `/api/videos/${req.params.id}`;
+      const tokenPart = req.query.token ? `?token=${req.query.token}` : '';
+      const cfg       = require('../config');
+
+      // Rewrite absolute server-URL audio track URIs to include video token so
+      // iOS/AirPlay native HLS can fetch them (hlsXhrSetup only works in HLS.js, not Safari).
+      const appUrlEsc = cfg.appUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      content = content.replace(
+        new RegExp(`URI="${appUrlEsc}/videos/${req.params.id}/([a-zA-Z0-9_/-]+\\.m3u8)"`, 'g'),
+        (_, trackPath) => `URI="${cfg.appUrl}/videos/${req.params.id}/${trackPath}${tokenPart}"`
+      );
+
+      // Rewrite absolute server-URL subtitle VTT URIs to HLS WebVTT playlist wrapper
+      content = content.replace(
+        /URI="https?:\/\/[^"]+\/api\/videos\/[^/]+\/tracks\/serve\/([^"]+\.vtt)"/g,
+        (_, filename) => `URI="${vidBase}/tracks/hls-sub/${filename}${tokenPart ? tokenPart : ''}"`
+      );
+
       return res.send(content);
     } catch {
       return res.status(404).end();
@@ -1880,7 +1920,7 @@ router.options('/:id/cast-manifest', (req, res) => {
   res.setHeader('Access-Control-Max-Age', '86400');
   res.status(204).end();
 });
-router.options('/:id/cast-manifest-sub/:qualityDir/:file', (req, res) => {
+router.options('/:id/cast-manifest-sub/*', (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type');
@@ -1909,6 +1949,10 @@ router.get('/:id/cast-manifest', async (req, res) => {
     // hotlink and token enforcement without having a browser session.
     const castToken = signCastToken(videoId);
 
+    // Optional preferred audio language — when the user switches audio track on the sender,
+    // we reload the manifest with ?lang=xxx so the receiver picks the right DEFAULT track.
+    const preferredLang = req.query.lang || null;
+
     // Load master.m3u8 — try local first, fall back to CDN for S3-hosted videos
     let content;
     const masterPath = path.join(__dirname, '..', 'videos', videoId, 'master.m3u8');
@@ -1925,6 +1969,28 @@ router.get('/:id/cast-manifest', async (req, res) => {
       const cdnRes = await fetch(cdnFetchUrl);
       if (!cdnRes.ok) return res.status(404).end();
       content = await cdnRes.text();
+    }
+
+    // When a preferred audio language is requested:
+    // 1. Set DEFAULT=YES / AUTOSELECT=YES only for the preferred track.
+    // 2. Move the preferred track line to be listed FIRST — some receivers pick the first
+    //    DEFAULT=YES entry, others simply pick the first listed audio track.
+    if (preferredLang) {
+      const audioLineRe = /^(#EXT-X-MEDIA:TYPE=AUDIO,[^\n]+)$/gm;
+      const audioLines = [];
+      content = content.replace(audioLineRe, (line) => {
+        const lang = /LANGUAGE="([^"]+)"/.exec(line)?.[1] || '';
+        const isPreferred = lang === preferredLang;
+        const rewritten = line
+          .replace(/\bDEFAULT=(YES|NO)\b/i, `DEFAULT=${isPreferred ? 'YES' : 'NO'}`)
+          .replace(/\bAUTOSELECT=(YES|NO)\b/i, `AUTOSELECT=${isPreferred ? 'YES' : 'NO'}`);
+        audioLines.push({ line: rewritten, isPreferred });
+        return '\x00AUDIO_PLACEHOLDER\x00'; // temporary marker
+      });
+      // Re-insert in preferred-first order
+      const sorted = [...audioLines.filter(x => x.isPreferred), ...audioLines.filter(x => !x.isPreferred)];
+      let idx = 0;
+      content = content.replace(/\x00AUDIO_PLACEHOLDER\x00/g, () => sorted[idx++]?.line || '');
     }
 
     // Rewrite AES-128 key URIs (relative OR absolute) → absolute with cast token.
@@ -1949,13 +2015,44 @@ router.get('/:id/cast-manifest', async (req, res) => {
     // Also rewrite any absolute CDN quality playlist URLs that may appear in CDN-hosted manifests
     if (video.hls_cdn_url) {
       const cdnBase = video.hls_cdn_url.replace(/\/master\.m3u8(\?.*)?$/i, '');
-      // Escape cdnBase for use in regex
       const escaped = cdnBase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       content = content.replace(
-        new RegExp(`${escaped}/([a-zA-Z0-9_-]+/index\\.m3u8)`, 'g'),
+        new RegExp(`${escaped}/([a-zA-Z0-9_/-]+/index\\.m3u8)`, 'g'),
         (_, qualityPath) => `${baseUrl}/api/videos/${videoId}/cast-manifest-sub/${qualityPath}?cast_token=${castToken}`
       );
     }
+
+    // Rewrite EXT-X-MEDIA audio track URIs (.m3u8 playlists) → cast-manifest-sub so the
+    // Chromecast receiver fetches CloudFront-signed playlists and segments (not 403).
+    // Subtitle URIs (.vtt) are left unchanged — the player sideloads them directly, and
+    // the /api/videos/:id/tracks/serve/ endpoint is already publicly accessible.
+    const cdnBase = video.hls_cdn_url ? video.hls_cdn_url.replace(/\/master\.m3u8(\?.*)?$/i, '') : null;
+    content = content.replace(
+      /(#EXT-X-MEDIA:[^\n]*)URI="([^"]+)"/g,
+      (match, prefix, uri) => {
+        const cleanUri = uri.split('?')[0];
+        if (!cleanUri.endsWith('.m3u8')) return match; // leave .vtt subtitle URIs as-is
+        // Skip URIs already rewritten to cast-manifest-sub by the CDN quality rewrite above
+        if (uri.includes('/cast-manifest-sub/')) return match;
+        let trackPath = null;
+        if (/^https?:\/\//i.test(uri)) {
+          if (cdnBase && uri.startsWith(cdnBase + '/')) {
+            trackPath = uri.slice(cdnBase.length + 1).split('?')[0];
+          }
+          if (!trackPath) {
+            try {
+              const u = new URL(uri);
+              const m = u.pathname.match(/\/videos\/[^/]+\/(.+)/);
+              if (m) trackPath = m[1];
+            } catch {}
+          }
+        } else {
+          trackPath = uri.split('?')[0];
+        }
+        if (!trackPath) return match;
+        return `${prefix}URI="${baseUrl}/api/videos/${videoId}/cast-manifest-sub/${trackPath}?cast_token=${castToken}"`;
+      }
+    );
 
     res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -1967,30 +2064,32 @@ router.get('/:id/cast-manifest', async (req, res) => {
   }
 });
 
-// GET /api/videos/:id/cast-manifest-sub/:qualityDir/:file — serve quality sub-playlist with absolute URLs.
+// GET /api/videos/:id/cast-manifest-sub/* — serve quality/track sub-playlist with absolute URLs.
 // Receives the cast_token from the master manifest and propagates it to every key URI and
 // segment URI so the Chromecast can load them without a browser auth token.
-// NOTE: The quality path is split into :qualityDir and :file because Express single params
-// do not match across "/" separators (e.g. "360p/index.m3u8" would fail as a single param).
+// Wildcard (*) supports both quality paths ("360p/index.m3u8") and multi-level audio/subtitle
+// track paths ("tracks/audio_0/index.m3u8") that a fixed :qualityDir/:file param cannot match.
 // Supports S3/CDN videos: fetches from CDN if local file was deleted after S3 upload.
-router.get('/:id/cast-manifest-sub/:qualityDir/:file', async (req, res) => {
+router.get('/:id/cast-manifest-sub/*', async (req, res) => {
   try {
-    const videoId    = req.params.id;
-    const qualityDir = req.params.qualityDir; // e.g. "360p"
-    const file       = req.params.file;       // e.g. "index.m3u8"
-    const quality    = `${qualityDir}/${file}`;
-    const castToken  = req.query.cast_token || '';
+    const videoId   = req.params.id;
+    const trackPath = req.params[0]; // e.g. "360p/index.m3u8" or "tracks/audio_0/index.m3u8"
+    const castToken = req.query.cast_token || '';
 
     const proto = (req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0].trim();
     const host  = req.headers['x-forwarded-host'] || req.headers.host || 'localhost:3000';
     const baseUrl = `${proto}://${host}`;
 
-    // Validate quality param — only allow safe filenames
-    if (!/^[a-zA-Z0-9_-]+$/.test(qualityDir) || !/^index\.m3u8$/.test(file)) return res.status(400).end();
+    // Validate path — allow word chars, hyphens, and "/" between segments, must end in /index.m3u8
+    if (!trackPath || !/^[\w-]+(\/[\w-]+)*\/index\.m3u8$/.test(trackPath)) return res.status(400).end();
 
-    const subPath = path.join(__dirname, '..', 'videos', videoId, quality);
+    // Directory portion for building segment base URLs (everything before /index.m3u8)
+    const qualityDir = trackPath.split('/').slice(0, -1).join('/');
+
+    const subPath = path.join(__dirname, '..', 'videos', videoId, trackPath);
     let content;
     let cdnSegmentBase = null; // if set, rewrite segments to CDN URLs instead of local
+    let cdnS3Prefix    = null; // s3_object_prefix for CloudFront wildcard signing
 
     try { content = await fs.promises.readFile(subPath, 'utf8'); } catch { content = null; }
     if (!content) {
@@ -1999,12 +2098,13 @@ router.get('/:id/cast-manifest-sub/:qualityDir/:file', async (req, res) => {
       if (!videoRow?.hls_cdn_url) return res.status(404).end();
       const cfSigned = require('../services/cfSigned');
       const cdnBase  = videoRow.hls_cdn_url.replace(/\/master\.m3u8(\?.*)?$/i, '');
-      const rawSubUrl = `${cdnBase}/${quality}`;
+      const rawSubUrl = `${cdnBase}/${trackPath}`;
       const cdnUrl  = cfSigned.isSigningEnabled() ? cfSigned.generateSignedUrl(rawSubUrl, 1) : rawSubUrl;
       const cdnRes  = await fetch(cdnUrl);
       if (!cdnRes.ok) return res.status(404).end();
       content = await cdnRes.text();
       cdnSegmentBase = `${cdnBase}/${qualityDir}`;
+      cdnS3Prefix    = videoRow.s3_object_prefix;
     }
 
     const tokenSuffix = castToken ? `?cast_token=${encodeURIComponent(castToken)}` : '';
@@ -2019,17 +2119,27 @@ router.get('/:id/cast-manifest-sub/:qualityDir/:file', async (req, res) => {
       }
     );
 
-    // Rewrite relative segment filenames.
-    // CDN: point to CDN (segments are public, no auth needed).
+    // Rewrite relative segment filenames (.ts for video, .aac for audio tracks).
+    // CDN: append CloudFront signed query so segments pass CloudFront auth.
     // Local: point to server with cast token.
+    const segPattern = /^(seg\d+\.(ts|aac))$/gm;
     if (cdnSegmentBase) {
+      const cfSigned = require('../services/cfSigned');
+      let cfQuery = null;
+      if (cfSigned.isSigningEnabled() && cdnS3Prefix) {
+        const wildcardPattern = `${require('../config').cdnBaseUrl}/${cdnS3Prefix}/*`;
+        cfQuery = cfSigned.generateWildcardQuery(wildcardPattern, 4);
+      }
       content = content.replace(
-        /^(seg\d+\.ts)$/gm,
-        (match) => `${cdnSegmentBase}/${match}`
+        segPattern,
+        (match) => {
+          const segUrl = `${cdnSegmentBase}/${match}`;
+          return cfQuery ? `${segUrl}?${cfQuery}` : segUrl;
+        }
       );
     } else {
       content = content.replace(
-        /^(seg\d+\.ts)$/gm,
+        segPattern,
         (match) => `${baseUrl}/videos/${videoId}/${qualityDir}/${match}${tokenSuffix}`
       );
     }

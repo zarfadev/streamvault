@@ -40,6 +40,7 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
 
 const hlsKeyPath = /^\/api\/videos\/[^/]+\/hlskey\//;
 const castManifestPath = /^\/api\/videos\/[^/]+\/cast-manifest/;
+const subtitleVttPath = /^\/api\/videos\/[^/]+\/transcriptions\/[^/]+\/subtitles\.vtt/;
 app.use((req, res, next) => {
   cors({
     origin: async (origin, callback) => {
@@ -50,6 +51,8 @@ app.use((req, res, next) => {
       // Cast manifest endpoints must be open to the Chromecast receiver's origin
       // (Default Media Receiver runs at a Google domain like www.gstatic.com)
       if (castManifestPath.test(req.path)) return callback(null, true);
+      // Subtitle VTT files must be fetchable by the Chromecast receiver for sideloaded tracks
+      if (subtitleVttPath.test(req.path)) return callback(null, true);
       // Any request carrying a valid cast_token is from the Chromecast receiver —
       // bypass CORS so the TV can fetch segments, sub-playlists, and AES keys.
       if (req.query && req.query.cast_token) return callback(null, true);

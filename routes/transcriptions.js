@@ -152,6 +152,7 @@ router.get('/:lang/subtitles.vtt', optionalAuth, async (req, res) => {
 
     res.setHeader('Content-Type', 'text/vtt');
     res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.setHeader('Access-Control-Allow-Origin', '*');
     res.send(vttContent);
   } catch (err) {
     res.status(500).send('WEBVTT\n\n/* Error loading subtitles */');

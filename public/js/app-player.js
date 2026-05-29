@@ -172,9 +172,23 @@ function updatePlayIcon(playing) {
   const btn = document.getElementById('play-btn');
   if (btn) btn.dataset.tooltip = playing ? 'Pausar' : 'Reproducir';
 }
+let _castReloading = false; // true while loadMedia is in flight — prevents SESSION_ENDED race
+
 function togglePlay() {
-  if (_castSession) { _castIsPlaying() ? _castSendPause() : _castSendPlay(); freezeChrome(); return; }
-  video.paused ? video.play() : video.pause(); freezeChrome();
+  if (_castSession) {
+    if (_castReloading) return; // ignore taps during media reload to prevent double-load
+    const ms = _castGetMs();
+    const isIdle = !ms || ms.playerState === chrome.cast.media.PlayerState.IDLE;
+    if (isIdle) {
+      _loadMediaOnCast(_castSession, 0, _currentCastLang());
+    } else {
+      _castIsPlaying() ? _castSendPause() : _castSendPlay();
+    }
+    freezeChrome();
+    return;
+  }
+  (video.paused ? video.play() : (video.pause(), Promise.resolve())).catch(() => {});
+  freezeChrome();
 }
 
 function skip(secs, opts) {
@@ -455,6 +469,14 @@ function _castAbsoluteUrl(relOrAbs) {
   return location.origin + (relOrAbs.startsWith('/') ? '' : '/') + relOrAbs;
 }
 
+// Returns the audio language to bake into the cast manifest URL, or null.
+// Excludes "und" (undifferentiated/embedded track) — that has no separate playlist.
+function _currentCastLang() {
+  const idx  = currentAudioTrack >= 0 ? currentAudioTrack : 0;
+  const lang = hls?.audioTracks?.[idx]?.lang;
+  return (lang && lang !== 'und') ? lang : null;
+}
+
 let _castSession   = null;
 let _castSyncTimer = null;
 
@@ -505,8 +527,17 @@ function _onCastSessionState(e) {
     if (!video.paused) video.pause();
     _startCastSync();
 
+    // On resume (browser navigated to a new video page while cast was active), auto-load
+    // the new video on the receiver if it's not already playing it.
+    if (e.sessionState === SS.SESSION_RESUMED) {
+      const currentContentId = _castGetMs()?.media?.contentId || '';
+      if (!currentContentId.includes(`/${videoId}/cast-manifest`)) {
+        setTimeout(() => _loadMediaOnCast(_castSession, undefined, _currentCastLang()), 400);
+      }
+    }
+
   } else if (e.sessionState === SS.SESSION_ENDED || e.sessionState === SS.SESSION_ENDED_WITH_ERROR) {
-    // Seek local player to where the Chromecast left off
+    if (_castReloading) return; // loadMedia triggered a state blip — not a real disconnect
     if (_castSession) {
       try {
         const pos = _castSession.getMediaSession()?.getEstimatedTime?.();
@@ -526,7 +557,11 @@ function _castCurrentTime() { return _castGetMs()?.getEstimatedTime?.() ?? 0; }
 function _castDuration()    { return _castGetMs()?.media?.duration || video.duration || 0; }
 function _castIsPlaying()   {
   const state = _castGetMs()?.playerState;
-  return state === chrome.cast.media.PlayerState.PLAYING || state === chrome.cast.media.PlayerState.BUFFERING;
+  // Include LOADING so the play-icon doesn't flip to "play" during a loadMedia reload,
+  // which would confuse users into thinking they need to press play manually.
+  return state === chrome.cast.media.PlayerState.PLAYING
+      || state === chrome.cast.media.PlayerState.BUFFERING
+      || _castReloading;
 }
 function _castSendSeek(time) {
   const ms = _castGetMs();
@@ -543,6 +578,16 @@ function _castSendPause() {
   const ms = _castGetMs();
   if (ms) ms.pause(new chrome.cast.media.PauseRequest(), () => {}, () => {});
 }
+// Normalize ISO 639-1 ↔ ISO 639-2/T so "en"/"eng", "es"/"spa" etc. match each other.
+// The Cast default receiver sometimes normalises 3-letter codes to 2-letter on its side.
+const _iso2to3 = { en:'eng', es:'spa', fr:'fra', de:'deu', it:'ita', pt:'por', ja:'jpn', ko:'kor', zh:'zho', ru:'rus', ar:'ara' };
+const _iso3to2 = Object.fromEntries(Object.entries(_iso2to3).map(([k,v])=>[v,k]));
+function _langMatches(a, b) {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  return a === (_iso2to3[b] || _iso3to2[b]) || b === (_iso2to3[a] || _iso3to2[a]);
+}
+
 // Switch audio and/or subtitle tracks on the receiver.
 // Pass null for either arg to keep the current selection for that type.
 function _castEditTracks(desiredAudioLang, desiredSubLang) {
@@ -550,29 +595,51 @@ function _castEditTracks(desiredAudioLang, desiredSubLang) {
   if (!ms?.media?.tracks?.length) return;
   const tracks = ms.media.tracks;
   const activeIds = [];
-  // Audio: keep active track if desiredAudioLang is null, else pick by language
+
   const castAudioTracks = tracks.filter(t => t.type === chrome.cast.media.TrackType.AUDIO);
   if (castAudioTracks.length) {
-    const wanted = desiredAudioLang !== null
-      ? (castAudioTracks.find(t => t.language === desiredAudioLang) || castAudioTracks[0])
-      : (ms.activeTrackIds?.length
-          ? castAudioTracks.find(t => ms.activeTrackIds.includes(t.trackId)) || castAudioTracks[0]
-          : castAudioTracks[0]);
-    if (wanted) activeIds.push(wanted.trackId);
+    if (desiredAudioLang !== null) {
+      // Explicit audio change — use _langMatches to handle "eng"/"en" etc.
+      const wanted = castAudioTracks.find(t => _langMatches(t.language, desiredAudioLang))
+                  || castAudioTracks[0];
+      if (wanted) activeIds.push(wanted.trackId);
+    } else {
+      // Keep current audio. activeTrackIds is only populated after an explicit editTracksInfo;
+      // on first load the receiver auto-selects via DEFAULT=YES without updating activeTrackIds.
+      // Fall back to the HLS.js current track language so we never accidentally switch to "und".
+      const fromActive = castAudioTracks.find(t => ms.activeTrackIds?.includes(t.trackId));
+      if (fromActive) {
+        activeIds.push(fromActive.trackId);
+      } else {
+        const hlsLang = hls?.audioTracks?.[currentAudioTrack >= 0 ? currentAudioTrack : 0]?.lang;
+        const fromHls = hlsLang ? castAudioTracks.find(t => _langMatches(t.language, hlsLang)) : null;
+        activeIds.push((fromHls || castAudioTracks[0]).trackId);
+      }
+    }
   }
-  // Subtitles: keep active track if desiredSubLang is null, else pick by language (undefined = off)
+
   const castSubTracks = tracks.filter(t => t.type === chrome.cast.media.TrackType.TEXT);
   if (castSubTracks.length && desiredSubLang !== null) {
     if (desiredSubLang !== undefined) {
-      const wanted = castSubTracks.find(t => t.language === desiredSubLang);
+      const wanted = castSubTracks.find(t => _langMatches(t.language, desiredSubLang));
       if (wanted) activeIds.push(wanted.trackId);
     }
-    // else: desiredSubLang === undefined means turn subs off — don't push any TEXT track
+    // else desiredSubLang === undefined → turn subs off, push nothing
   } else if (castSubTracks.length && desiredSubLang === null) {
-    // Keep whatever sub was active
-    const activeSub = castSubTracks.find(t => ms.activeTrackIds?.includes(t.trackId));
-    if (activeSub) activeIds.push(activeSub.trackId);
+    // Keep current subtitle. activeTrackIds may not reflect sideloaded tracks on first load —
+    // fall back to local ccKey so we don't accidentally disable a running subtitle.
+    const fromActive = castSubTracks.find(t => ms.activeTrackIds?.includes(t.trackId));
+    if (fromActive) {
+      activeIds.push(fromActive.trackId);
+    } else if (ccKey) {
+      const subEntry = subtitlesList.find(t => subKey(t) === ccKey);
+      const fromLocal = subEntry
+        ? castSubTracks.find(t => _langMatches(t.language, subEntry.language))
+        : null;
+      if (fromLocal) activeIds.push(fromLocal.trackId);
+    }
   }
+
   const req = new chrome.cast.media.EditTracksInfoRequest(activeIds);
   ms.editTracksInfo(req, () => {}, e => console.warn('[cast] editTracks error', e));
 }
@@ -618,72 +685,116 @@ function _castConnect() {
   _doCastConnect();
 }
 
+// Build a MediaInfo + LoadRequest and send it to an active cast session.
+// startTime defaults to the current local player position; pass 0 to restart.
+// preferredLang: ISO language code (e.g. "eng") to request as DEFAULT audio track.
+function _loadMediaOnCast(session, startTime, preferredLang) {
+  if (!session) return Promise.resolve();
+  _castReloading = true;
+
+  const langParam = preferredLang ? `?lang=${encodeURIComponent(preferredLang)}` : '';
+  const castManifestUrl = `${location.origin}/api/videos/${videoId}/cast-manifest${langParam}`;
+  const mi = new chrome.cast.media.MediaInfo(castManifestUrl, 'application/vnd.apple.mpegurl');
+  mi.streamType = chrome.cast.media.StreamType.BUFFERED;
+  mi.hlsSegmentFormat = chrome.cast.media.HlsSegmentFormat?.TS || 'ts';
+  mi.hlsVideoSegmentFormat = chrome.cast.media.HlsVideoSegmentFormat?.MPEG2_TS || 'mpeg2_ts';
+
+  const meta = new chrome.cast.media.GenericMediaMetadata();
+  meta.title = videoData?.title || document.title;
+  if (videoData?.thumbnailUrl) {
+    const thumbAbs = _castAbsoluteUrl(videoData.thumbnailUrl);
+    if (!/^\/\/(localhost|127\.)/.test(thumbAbs.replace(/^https?:/, ''))) {
+      meta.images = [{ url: thumbAbs }];
+    }
+  }
+  mi.metadata = meta;
+
+  // Sideload subtitle tracks so the default receiver can display VTT subtitles.
+  // IDs start at 200 to avoid colliding with HLS EXT-X-MEDIA track IDs (1-based).
+  const castTextTracks = subtitlesList.map((t, i) => {
+    const tr = new chrome.cast.media.Track(200 + i, chrome.cast.media.TrackType.TEXT);
+    tr.trackContentType = 'text/vtt';
+    tr.trackContentId   = _castAbsoluteUrl(t.src);
+    tr.subtype          = 'SUBTITLES';
+    tr.language         = t.language;
+    tr.name             = t.label || (t.language || '').toUpperCase();
+    return tr;
+  });
+  if (castTextTracks.length) mi.tracks = castTextTracks;
+
+  const req = new chrome.cast.media.LoadRequest(mi);
+  req.currentTime = startTime !== undefined ? startTime : (video.currentTime || 0);
+  req.autoplay    = true;
+
+  // Hint the receiver to use the preferred audio language.
+  // req.language is a BCP-47 tag; use 2-letter codes since the default receiver
+  // may not match ISO 639-2 ("eng") to its internal audio-language selection.
+  if (preferredLang) {
+    req.language = _iso3to2[preferredLang] || preferredLang; // "eng"→"en", "spa"→"es", etc.
+  }
+
+  // Pre-activate the subtitle track the user has selected (if any)
+  if (castTextTracks.length && ccKey) {
+    const subEntry = subtitlesList.find(t => subKey(t) === ccKey);
+    if (subEntry) {
+      const activeTrack = castTextTracks.find(t => t.language === subEntry.language);
+      if (activeTrack) req.activeTrackIds = [activeTrack.trackId];
+    }
+  }
+
+  return session.loadMedia(req).then(() => {
+    _castReloading = false;
+    toast('Transmitiendo en TV');
+
+    // After the receiver finishes loading, try editTracksInfo to force the audio track.
+    // This is a belt-and-suspenders fix: req.language + DEFAULT=YES should handle it, but
+    // some receivers honour activeTrackIds set via editTracksInfo more reliably.
+    // We retry up to 3 times because the first attempt can time out while the receiver
+    // is still buffering the new audio stream.
+    if (preferredLang) {
+      let _audioRetries = 3;
+      const _tryForceAudio = () => {
+        if (!_castSession || _audioRetries-- <= 0) return;
+        const castMs = _castSession.getMediaSession?.();
+        if (!castMs) { setTimeout(_tryForceAudio, 800); return; }
+        const allTracks = castMs.media?.tracks || [];
+        const audioTracks = allTracks.filter(t => t.type === 'AUDIO');
+        const target = audioTracks.find(t => _langMatches(t.language, preferredLang));
+        if (!target) { setTimeout(_tryForceAudio, 800); return; }
+        // Keep current subtitle in the activeIds
+        const subId = allTracks.filter(t => t.type === 'TEXT')
+          .find(t => castMs.activeTrackIds?.includes(t.trackId))?.trackId;
+        const ids = [target.trackId];
+        if (subId) ids.push(subId);
+        const er = new chrome.cast.media.EditTracksInfoRequest(ids);
+        castMs.editTracksInfo(er, () => {}, () => setTimeout(_tryForceAudio, 1200));
+      };
+      setTimeout(_tryForceAudio, 1500);
+    }
+
+    const ms = session.getMediaSession();
+    if (ms) {
+      ms.addUpdateListener((isAlive) => {
+        if (!isAlive) return;
+        if (ms.playerState === chrome.cast.media.PlayerState.IDLE &&
+            ms.idleReason === chrome.cast.media.IdleReason.ERROR) {
+          toast('Error de reproducción en el TV — verifica la conexión');
+        }
+      });
+    }
+  }).catch(e => {
+    _castReloading = false;
+    const desc = e?.description || e?.message || e?.code || 'desconocido';
+    toast('Error al transmitir: ' + desc);
+  });
+}
+
 function _doCastConnect() {
   const ctx = cast.framework.CastContext.getInstance();
   ctx.requestSession().then(() => {
     const s = ctx.getCurrentSession();
     if (!s) return;
-
-    // cast-manifest rewrites all URLs to absolute (Cloudflare tunnel / reverse-proxy aware)
-    // and embeds a signed cast_token so the TV can fetch segments and AES keys regardless
-    // of whether hotlink protection or video-token enforcement is active.
-    const castManifestUrl = `${location.origin}/api/videos/${videoId}/cast-manifest`;
-
-    const mi = new chrome.cast.media.MediaInfo(castManifestUrl, 'application/vnd.apple.mpegurl');
-    mi.streamType = chrome.cast.media.StreamType.BUFFERED;
-
-    // HLS content type hint for the default media receiver
-    mi.hlsSegmentFormat = chrome.cast.media.HlsSegmentFormat?.TS || 'ts';
-    mi.hlsVideoSegmentFormat = chrome.cast.media.HlsVideoSegmentFormat?.MPEG2_TS || 'mpeg2_ts';
-
-    const meta = new chrome.cast.media.GenericMediaMetadata();
-    meta.title = videoData?.title || document.title;
-    if (videoData?.thumbnailUrl) {
-      const thumbAbs = _castAbsoluteUrl(videoData.thumbnailUrl);
-      if (!/^\/\/(localhost|127\.)/.test(thumbAbs.replace(/^https?:/, ''))) {
-        meta.images = [{ url: thumbAbs }];
-      }
-    }
-    mi.metadata = meta;
-
-    const req = new chrome.cast.media.LoadRequest(mi);
-    req.currentTime = video.currentTime || 0;
-    req.autoplay = true;
-    s.loadMedia(req).then(() => {
-      toast('Transmitiendo en TV');
-      // Aplicar pistas de audio y subtítulo activas al receptor Chromecast.
-      // Se lanza con delay de 900 ms para dar tiempo al receptor a inicializar su lista de pistas.
-      const audioLang  = hls?.audioTracks?.[currentAudioTrack >= 0 ? currentAudioTrack : 0]?.lang || null;
-      const subEntry   = ccKey ? subtitlesList.find(t => subKey(t) === ccKey) : null;
-      const desiredSub = subEntry ? (subEntry.language || null) : undefined; // undefined = apagar subs
-      if (audioLang !== null || ccKey !== null) {
-        setTimeout(() => _castEditTracks(audioLang, desiredSub), 900);
-      }
-      // Listen for media status updates to catch playback errors on the receiver
-      const ms = s.getMediaSession();
-      if (ms) {
-        ms.addUpdateListener((isAlive) => {
-          if (!isAlive) {
-            console.warn('[cast] Media session ended on receiver');
-            return;
-          }
-          if (ms.playerState === chrome.cast.media.PlayerState.IDLE && ms.idleReason) {
-            if (ms.idleReason === chrome.cast.media.IdleReason.ERROR) {
-              console.error('[cast] Receiver reported playback error');
-              toast('Error de reproducción en el TV — verifica la conexión');
-            }
-          }
-        });
-      }
-    }).catch(e => {
-      console.error('[cast] loadMedia error:', e);
-      const desc = e?.description || e?.message || e?.code || 'desconocido';
-      toast('Error al transmitir: ' + desc);
-      // If the error is a CORS/network issue, provide a more helpful message
-      if (String(desc).toLowerCase().includes('load') || String(desc).toLowerCase().includes('network')) {
-        toast('Verifica que el servidor sea accesible desde la red del Chromecast');
-      }
-    });
+    _loadMediaOnCast(s, undefined, _currentCastLang());
   }).catch(e => {
     if (e?.code !== 'cancel') toast('No se pudo conectar al Chromecast');
   });
@@ -1091,7 +1202,11 @@ function setAudioTrack(index) {
     const lang = hls.audioTracks?.[index]?.lang || hls.audioTracks?.[index]?.name || null;
     if (lang) localStorage.setItem(`sv_audio_${videoId}`, lang);
     else localStorage.removeItem(`sv_audio_${videoId}`);
-    if (_castSession) _castEditTracks(lang, null);
+    if (_castSession && lang) {
+      // The default Chromecast receiver (CC1AD845) silently ignores editTracksInfo for HLS
+      // audio tracks — only loadMedia with DEFAULT=YES in the manifest reliably switches audio.
+      _loadMediaOnCast(_castSession, _castCurrentTime(), lang);
+    }
     // Watchdog: si el video sigue en buffering tras 5s, forzar play desde la posición guardada
     const _wd = setTimeout(() => {
       if (video.readyState < 3 || video.networkState === 2) {

@@ -138,6 +138,36 @@ router.get('/serve/:filename', async (req, res) => {
   res.status(404).end();
 });
 
+// ── HLS WebVTT playlist wrapper ──────────────────────────────────────────────
+// iOS Safari requires #EXT-X-MEDIA:TYPE=SUBTITLES URIs to point to an HLS
+// playlist file, not a bare VTT. This endpoint wraps the served VTT in the
+// minimal HLS WebVTT playlist format iOS expects.
+// Public — needed by iOS native HLS without a browser session.
+router.get('/hls-sub/:filename', async (req, res) => {
+  const { videoId, filename } = req.params;
+  if (!UUID_REGEX.test(videoId)) return res.status(400).end();
+  if (!/^[a-zA-Z0-9_\-]+\.vtt$/i.test(filename)) return res.status(400).end();
+
+  const cfg     = require('../config');
+  const vttUrl  = `${cfg.appUrl}/api/videos/${videoId}/tracks/serve/${filename}`;
+  const playlist = [
+    '#EXTM3U',
+    '#EXT-X-VERSION:7',
+    '#EXT-X-TARGETDURATION:99999',
+    '#EXT-X-PLAYLIST-TYPE:VOD',
+    '#WEBVTT',
+    '',
+    '#EXTINF:99999.0,',
+    vttUrl,
+    '#EXT-X-ENDLIST',
+  ].join('\n');
+
+  res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.send(playlist);
+});
+
 // All write routes require authentication
 router.use(authenticate);
 
