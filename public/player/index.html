@@ -36,16 +36,25 @@ body.player-standalone .player-container {
   display: flex;
   flex-direction: column;
 }
-body.player-standalone .player-wrap {
-  flex: 1;
+body.player-standalone .player-container,
+body.player-standalone .player-wrap,
+body.player-standalone .player-inner {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  aspect-ratio: unset !important;
   border-radius: 0 !important;
   box-shadow: none !important;
-  aspect-ratio: unset !important;
-  /* evitar overflow en iOS que genera scroll */
   overflow: hidden !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  flex: 1;
 }
-body.player-standalone .player-inner {
-  overflow: hidden !important;
+body.player-standalone .player-wrap video {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
 }
 body.player-standalone .video-info { display: none !important; }
 
