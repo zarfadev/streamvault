@@ -192,8 +192,8 @@ html.embed-root, html.embed-root body {
 /* ─── Center cluster ────────────────────────────────────────── */
 .controls-middle {
   position: absolute;
-  /* Centrado entre el título (top-bar ~60px) y el dock (~80px) */
-  top: 0; bottom: 0; left: 0; right: 0;
+  /* Perfectamente centrado en el player — igual en todos los tamaños */
+  inset: 0;
   display: flex; align-items: center; justify-content: center;
   z-index: 15;
   pointer-events: none;
@@ -1782,11 +1782,6 @@ video::cue {
   }
   .player-page .video-title-main { font-size: 16px; }
 
-  /* En portrait 16:9 el player es ~220px en un iPhone estándar.
-     El centro cluster quedaría cerca del dock — subirlo para que no choquen */
-  .controls-middle {
-    bottom: 72px;
-  }
   /* Center buttons más pequeños para que quepan en el espacio disponible */
   .center-skip-btn {
     width: clamp(44px, 11vw, 64px) !important;
