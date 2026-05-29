@@ -278,7 +278,7 @@ html.embed-root, html.embed-root body {
   .center-main-btn svg       { width: 48px; height: 48px; }
 }
 
-.ctrl-svg { display: block; flex-shrink: 0; pointer-events: none; filter: none; }
+.ctrl-svg { display: block; flex-shrink: 0; pointer-events: none; filter: none !important; -webkit-filter: none !important; }
 .ctrl-svg use { pointer-events: none; }
 
 .player-wrap.ui-idle .controls-middle,
@@ -454,7 +454,8 @@ html.embed-root, html.embed-root body {
   transition: background 0.15s var(--pv-ease), color 0.12s, transform 0.12s;
   outline: none;
   position: relative;
-  filter: none;
+  filter: none !important;
+  -webkit-filter: none !important;
 }
 @media (hover: hover) {
   .ctrl-btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
@@ -1407,7 +1408,7 @@ html.embed-root, html.embed-root body {
   font-size: 12px; font-weight: 700; white-space: nowrap;
   pointer-events: none; opacity: 0;
   transition: all 0.18s var(--pv-ease-std);
-  box-shadow: 0 8px 28px rgba(0,0,0,0.65); z-index: 2000;
+  box-shadow: none; z-index: 2000;
   border: 1px solid rgba(255,255,255,0.12);
 }
 [data-tooltip]:hover::after { opacity: 1; transform: translateX(-50%) translateY(0); }
