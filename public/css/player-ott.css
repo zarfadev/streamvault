@@ -226,9 +226,12 @@ html.embed-root, html.embed-root body {
     background: rgba(255,255,255,0.08) !important;
   }
 }
-/* En touch: nunca fondo — ni en active ni en focus */
+/* En touch: feedback visual breve al tocar — igual que desktop hover */
 @media (hover: none) {
-  .center-skip-btn:active,
+  .center-skip-btn:active {
+    background: rgba(255,255,255,0.12) !important;
+    transform: scale(0.91);
+  }
   .center-skip-btn:focus { background: transparent !important; box-shadow: none !important; }
 }
 .center-skip-btn:active { transform: scale(0.91); }
