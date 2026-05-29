@@ -31,10 +31,9 @@ router.get('/:id/embed', async (req, res) => {
       WHERE pv.playlist_id = ? AND v.status = 'ready' AND (v.dmca_suspended IS NULL OR v.dmca_suspended = FALSE) ORDER BY pv.position ASC
     `).all(req.params.id);
     const videos = rawVideos.map(v => {
-      const base = v.hls_cdn_url ? v.hls_cdn_url.replace(/\/master\.m3u8$/i, '') : null;
       return {
         ...v,
-        thumbnailUrl: v.thumbnail_url || (base ? `${base}/thumb.jpg` : `/videos/${v.id}/thumb.jpg`),
+        thumbnailUrl: v.thumbnail_url || `/api/videos/${v.id}/thumb`,
       };
     });
     res.json({ ...pl, videos });
@@ -179,12 +178,11 @@ router.get('/:id/videos', ws, async (req, res) => {
       JOIN videos v ON v.id = pv.video_id
       WHERE pv.playlist_id = ? ORDER BY pv.position ASC
     `).all(req.params.id);
-    // Compute thumbnailUrl for each video (same logic as routes/videos.js playbackUrls)
+    // Compute thumbnailUrl for each video
     const mapped = videos.map(v => {
-      const base = v.hls_cdn_url ? v.hls_cdn_url.replace(/\/master\.m3u8$/i, '') : null;
       return {
         ...v,
-        thumbnailUrl: v.thumbnail_url || (base ? `${base}/thumb.jpg` : `/videos/${v.id}/thumb.jpg`),
+        thumbnailUrl: v.thumbnail_url || `/api/videos/${v.id}/thumb`,
       };
     });
     res.json(mapped);
